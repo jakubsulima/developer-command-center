@@ -1,0 +1,192 @@
+export type ProjectStatus = "W trakcie" | "Zagrożony" | "Gotowy do decyzji";
+export type ProjectDomainStatus = "draft" | "shaped" | "validating" | "completed" | "abandoned";
+export type CommitmentStatus = "active" | "paused" | "released" | "fulfilled";
+export type WorkItemStatus = "open" | "in_progress" | "blocked" | "completed" | "cancelled";
+export type FocusEndReason = "paused" | "work_item_completed" | "stopped" | "interrupted";
+export type InboxKind = "text" | "link" | "file" | "voice";
+export type InboxStatus = "unprocessed" | "snoozed" | "resolved" | "discarded";
+export type KnowledgeKind = "note" | "resource" | "decision" | "artifact" | "investigation";
+
+export interface NewProjectInput {
+  title: string;
+  outcome: string;
+  technology: string;
+  firstWorkItemTitle: string;
+  firstWorkItemDescription: string;
+  effortBudgetMinutes?: number;
+  wipOverrideReason?: string;
+}
+
+export interface WorkItem {
+  id: string;
+  title: string;
+  detail: string;
+  completed: boolean;
+  status?: WorkItemStatus;
+  blocker?: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  initials: string;
+  color: "violet" | "orange" | "amber";
+  technology: string;
+  outcome: string;
+  status: ProjectStatus;
+  domainStatus?: ProjectDomainStatus;
+  commitmentStatus?: CommitmentStatus;
+  commitmentOverrideReason?: string;
+  nextStep: string;
+  blocker?: string;
+  primary: boolean;
+  effortBudgetMinutes?: number;
+  usedMinutes: number;
+  archivedAt?: string;
+  trashedAt?: string;
+  requirements: Array<{ id: string; title: string; status: "accepted" | "validated" | "proposed" }>;
+  workItems: WorkItem[];
+}
+
+export interface Checkpoint {
+  id: string;
+  projectId: string;
+  workItemId?: string;
+  sessionId?: string;
+  title: string;
+  currentState: string;
+  nextAction: string;
+  branch?: string;
+  file?: string;
+  sourceUrl?: string;
+  blocker?: string;
+  artifactId?: string;
+  note?: string;
+  lockedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface FocusSessionRecord {
+  id: string;
+  projectId: string;
+  workItemId: string;
+  startedAt: string;
+  endedAt?: string;
+  endReason?: FocusEndReason;
+  scratchpad: string;
+  invalidatedAt?: string;
+}
+
+export interface InboxItem {
+  id: string;
+  kind: InboxKind;
+  content: string;
+  createdAt: string;
+  status: InboxStatus;
+  source?: string;
+  resolvedToIds?: string[];
+  snoozedUntil?: string;
+  discardedAt?: string;
+}
+
+export interface LearningEvidence {
+  id: string;
+  learningGoalId?: string;
+  title: string;
+  detail: string;
+  result: "supports" | "reveals_gap" | "inconclusive";
+  assessmentMethod?: "self_review" | "automated_test" | "human_feedback" | "ai_review";
+  accepted?: boolean;
+  artifactId?: string;
+  createdAt: string;
+}
+
+export interface LearningGoal {
+  id: string;
+  title: string;
+  criterion: string;
+  status: "draft" | "shaped" | "achieved" | "abandoned";
+  skills: string[];
+  abandonedReason?: string;
+  achievedAt?: string;
+}
+
+export interface NewLearningGoalInput { title: string; criterion: string; skill: string }
+
+export interface KnowledgeItem {
+  id: string;
+  type: KnowledgeKind;
+  title: string;
+  detail: string;
+  sourceInboxItemId?: string;
+  sourceSessionId?: string;
+  sourceUrl?: string;
+  projectId?: string;
+  status?: "draft" | "shaped" | "concluded" | "abandoned";
+  question?: string;
+  conclusion?: string;
+  confidence?: "low" | "medium" | "high";
+  archivedAt?: string;
+  trashedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ReviewRecord {
+  id: string;
+  type: "daily" | "weekly";
+  templateVersion: number;
+  answers: Record<string, string>;
+  summary: string;
+  completedAt: string;
+}
+
+export interface AIProposalRecord {
+  id: string;
+  command: string;
+  preview: string;
+  sources: string[];
+  risk: "low" | "medium" | "high";
+  expectedVersions: Record<string, number>;
+  expiresAt: string;
+  status: "pending" | "approved" | "rejected" | "expired" | "superseded";
+  decidedAt?: string;
+}
+
+export interface AIExecutionRecord {
+  id: string;
+  proposalId: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface FocusState {
+  sessionId?: string;
+  running: boolean;
+  startedAt?: number;
+  elapsedBeforeStart: number;
+  projectId: string;
+  workItemId: string;
+  scratchpad: string;
+}
+
+export interface AppState {
+  workspaceId?: string;
+  projects: Project[];
+  checkpoints: Checkpoint[];
+  inbox: InboxItem[];
+  evidence: LearningEvidence[];
+  learningGoals: LearningGoal[];
+  knowledge: KnowledgeItem[];
+  reviews: ReviewRecord[];
+  aiProposals: AIProposalRecord[];
+  aiExecutions: AIExecutionRecord[];
+  focusSessions: FocusSessionRecord[];
+  focus: FocusState;
+  aiProposal: "pending" | "approved" | "rejected";
+  aiProposalId?: string;
+  reviewCompletedAt?: string;
+}

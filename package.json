@@ -1,0 +1,19 @@
+{
+  "name": "developer-command-center",
+  "private": true,
+  "packageManager": "pnpm@10.30.1",
+  "scripts": {
+    "dev": "pnpm --filter @command/web dev",
+    "build": "pnpm --filter @command/web build",
+    "test": "pnpm --filter @command/web test",
+    "test:coverage": "pnpm --filter @command/web test:coverage",
+    "typecheck": "pnpm --filter @command/web typecheck",
+    "lint": "pnpm --filter @command/web lint",
+    "supabase:link": "pnpm --filter @command/web exec supabase link --workdir ../..",
+    "supabase:plan": "pnpm --filter @command/web exec supabase db push --linked --dry-run --workdir ../..",
+    "supabase:deploy": "pnpm --filter @command/web exec supabase db push --linked --workdir ../..",
+    "supabase:migrations": "pnpm --filter @command/web exec supabase migration list --linked --workdir ../..",
+    "supabase:lint:remote": "pnpm --filter @command/web exec supabase db lint --linked --level warning --fail-on error --workdir ../..",
+    "supabase:types": "pnpm --filter @command/web exec supabase gen types --linked --lang typescript --schema public --workdir ../.."
+  }
+}

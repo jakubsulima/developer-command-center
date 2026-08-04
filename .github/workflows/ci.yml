@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, testy i build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v6
+
+      - name: Skonfiguruj pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Skonfiguruj Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Zainstaluj zależności
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Testy z progami coverage
+        run: pnpm test:coverage
+
+      - name: Build
+        run: pnpm build
+        env:
+          # CI sprawdza statyczny frontend bez dostępu do danych. Build wdrażany
+          # użytkownikom musi otrzymać VITE_DATA_BACKEND=supabase i publiczną konfigurację.
+          VITE_DATA_BACKEND: demo
+
+  dependency-audit:
+    name: Audyt zależności
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v6
+
+      - name: Skonfiguruj pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Zablokuj podatności wysokie i krytyczne
+        run: pnpm audit --audit-level high
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v6
+
+      - name: Zainicjalizuj CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Przeanalizuj kod
+        uses: github/codeql-action/analyze@v4

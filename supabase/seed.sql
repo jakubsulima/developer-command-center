@@ -1,0 +1,2 @@
+-- Intentionally empty. Demo data lives in the browser; authenticated users start
+-- with a clean private Workspace created by the auth.users trigger.
