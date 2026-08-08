@@ -36,11 +36,11 @@ export function AuthPage() {
         <div>
           <span className="auth-kicker"><Sparkles />Developer Command Center</span>
           <h1>Odzyskaj kontekst.<br />Doprowadzaj rzeczy do wyniku.</h1>
-          <p>Jedno spokojne centrum dla projektów, nauki i decyzji — bez konkurujących list i produktywnościowej grywalizacji.</p>
+          <p>Jedno spokojne centrum dla Celów, Działań i Wiedzy — bez konkurujących list i produktywnościowej grywalizacji.</p>
           <ol>
             <li><Check />Przechwyć bez klasyfikowania</li>
             <li><Check />Wybierz jeden konkretny krok</li>
-            <li><Check />Zatrzymaj pracę z użytecznym checkpointem</li>
+            <li><Check />Zapisuj postęp i wiedzę przy swoich Celach</li>
           </ol>
         </div>
         <small>Dane każdego Workspace są odizolowane przez PostgreSQL RLS.</small>

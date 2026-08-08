@@ -1,20 +1,21 @@
-# Plan dojścia do aplikacji opartej na celach
+# Plan rozwoju aplikacji opartej na Projektach i Celach
 
 ## Aktywny kierunek
 
-Sprint 1 został ukończony jako fundament bezpieczeństwa zapisu, draftów, undo i
-potwierdzania ryzykownych operacji. Dalszy rozwój nie kontynuuje modelu
+Fundament bezpieczeństwa zapisu, draftów, undo i potwierdzania ryzykownych
+operacji jest już obecny. Dalszy rozwój nie kontynuuje modelu
 `Commitment → Focus Session → Checkpoint`.
 
-Źródłem decyzji produktowych jest dokument
-[Cele, działania cykliczne i wiedza](./goal-centric-redesign.md).
+Aktualnym źródłem decyzji produktowych jest dokument
+[Trwałe Projekty i proste Cele](./project-centered-hierarchy.md). Wcześniejszy
+dokument [Cele, działania cykliczne i wiedza](./goal-centric-redesign.md)
+pozostaje zapisem etapu przejściowego.
 
 ## Kolejność realizacji
 
-1. [Sprint 1 — pierwsza wartość i bezpieczeństwo](./sprint-1-first-value-and-safety.md) — ukończony.
-2. [Sprint 2 — wspólny rdzeń Celów](./sprint-2-goals-foundation.md).
-3. [Sprint 3 — Dzisiaj i działania cykliczne](./sprint-3-today-recurring-actions.md).
-4. [Sprint 4 — Wiedza, Inbox i domknięcie redesignu](./sprint-4-knowledge-inbox-redesign.md).
+Wszystkie aktywne poprawki wynikające z audytu interfejsu są rozpisane w
+[backlogu technicznym UI/UX](./ui-ux-remediation-backlog.md). Backlog obejmuje
+15 sprawdzonych kroków, zależności, kryteria akceptacji oraz podział AFK/HITL.
 
 Każdy nowy sprint musi zakończyć się działającym pionowym przepływem w trybie
 demo i Supabase. Nie wolno rozpoczynać kolejnego sprintu, dopóki migracja,
@@ -28,12 +29,13 @@ testy regresji i checkpointy HITL bieżącego sprintu nie są zamknięte.
 
 ## Stałe zasady nowego produktu
 
-- Cel jest wspólnym modelem dla projektu, nauki i własnych zastosowań.
+- Projekt jest trwałym kontenerem dla Celów, Zadań i Wiedzy.
+- Cel jest prostym, możliwym do zamknięcia rezultatem i może należeć do Projektu.
 - Działanie może być pojedyncze albo pochodzić z szablonu cyklicznego.
 - Wykonanie działania nie wymaga timera ani Focus Session.
-- Obszary, szablony celów i szablony cykliczne mogą być tworzone przez
+- Projekty, szablony celów i szablony cykliczne mogą być tworzone przez
   użytkownika.
-- Wiedza działa globalnie i może być łączona z wieloma Celami i Działaniami.
+- Wiedza działa globalnie i może być łączona z Projektami, Celami i Działaniami.
 - Inbox zachowuje oryginalny capture niezależnie od wyniku triage.
 - Historycznych Focus Sessions i Checkpointów nie usuwamy; pozostają do odczytu
   i w eksporcie, ale nowe nie są tworzone.
@@ -64,10 +66,9 @@ Ticket jest zakończony, gdy:
 - zwykłe Działanie można ukończyć jednym kliknięciem, bez rozpoczynania sesji;
 - działanie cykliczne można utworzyć w mniej niż minutę;
 - powrót po dłuższej przerwie nie tworzy lawiny zaległych wystąpień;
-- własny Obszar i szablon nie wymagają zmiany kodu;
+- własny Projekt i szablon nie wymagają zmiany kodu;
 - capture tekstu lub linku trwa mniej niż 15 sekund;
 - każdy historyczny Project, Learning Goal i Work Item jest dostępny po
   migracji jako Cel albo Działanie;
 - aktywny interfejs nie używa pojęć Focus Session, Commitment, Work Item,
   Checkpoint ani Learning Evidence.
-

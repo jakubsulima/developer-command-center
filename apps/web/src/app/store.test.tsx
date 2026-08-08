@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { AuthContext, type AuthContextValue } from "../auth/auth-context";
 import { demoState } from "../data/demo";
+import { emptyState } from "../data/empty";
 import { useStore } from "./useStore";
 import { StoreProvider } from "./store";
 
@@ -12,8 +13,8 @@ const repository = vi.hoisted(() => ({
   loadSupabaseState: vi.fn(), captureRemote: vi.fn(), resolveInboxRemote: vi.fn(), startFocusRemote: vi.fn(),
   endFocusRemote: vi.fn(), recordLearningEvidenceRemote: vi.fn(), updateScratchpadRemote: vi.fn(),
   decideAIProposalRemote: vi.fn(), completeReviewRemote: vi.fn(), createProjectRemote: vi.fn(),
-  createLearningGoalRemote: vi.fn(), exportWorkspaceRemote: vi.fn(), setEntityVisibilityRemote: vi.fn(),
-  setInboxStatusRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn()
+  createGoalRemote: vi.fn(), createLearningGoalRemote: vi.fn(), exportWorkspaceRemote: vi.fn(), setEntityVisibilityRemote: vi.fn(),
+  setInboxStatusRemote: vi.fn(), releaseDueInboxItemsRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn()
 }));
 vi.mock("../data/supabaseRepository", () => repository);
 
@@ -24,8 +25,7 @@ const auth: AuthContextValue = {
   signIn: vi.fn(), signUp: vi.fn(), signOut: vi.fn(), continueInDemo: vi.fn()
 };
 
-function renderStore(child: ReactNode, authValue = auth) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderStore(child: ReactNode, authValue = auth, queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(<QueryClientProvider client={queryClient}><AuthContext.Provider value={authValue}><StoreProvider>{child}</StoreProvider></AuthContext.Provider></QueryClientProvider>);
 }
 
@@ -40,13 +40,14 @@ function Probe() {
     <span data-testid="commitment-status">{state.projects.find((item) => item.id === "portfolio-v2")?.commitmentStatus}</span>
     <span data-testid="goal-status">{state.learningGoals.find((item) => item.id === "goal-ts-modeling")?.status}</span>
     <span data-testid="ai-status">{state.aiProposal}</span><span data-testid="review-status">{state.reviewCompletedAt ? "reviewed" : "not-reviewed"}</span><span>{store.error}</span>
-    <button onClick={() => void store.capture("Nowy zdalny capture")}>Capture</button>
+    <button onClick={() => void store.capture("Nowy zdalny capture").catch(() => undefined)}>Capture</button>
     <button onClick={() => void store.resolveInbox("in-1")}>Resolve</button>
     <button onClick={() => void store.setInboxStatus("in-1", "discarded").catch(() => undefined)}>InboxStatus</button>
     <button onClick={() => void store.setVisibility("knowledge", "know-1", "archived").catch(() => undefined)}>Visibility</button>
     <button onClick={() => void store.setCommitmentStatus("portfolio-v2", "released").catch(() => undefined)}>Commitment</button>
     <button onClick={() => void store.setLearningGoalStatus("goal-ts-modeling", "abandoned", "Zmiana kierunku").catch(() => undefined)}>GoalStatus</button>
     <button onClick={() => void store.createProject({ title: "Remote Project", outcome: "Outcome", technology: "React", firstWorkItemTitle: "Work", firstWorkItemDescription: "Detail", wipOverrideReason: "Świadomy wyjątek testowy" }).catch(() => undefined)}>Project</button>
+    <button onClick={() => void store.createGoal({ title: "Early Goal", outcome: "Outcome" }).catch(() => undefined)}>UnifiedGoal</button>
     <button onClick={() => void store.createLearningGoal({ title: "Remote Goal", criterion: "Criterion", skill: "Skill" }).catch(() => undefined)}>Goal</button>
     <button onClick={() => void store.startFocus()}>Start</button>
     <button onClick={() => void store.pauseFocus({ currentState: "State", nextAction: "Next", evidence: { learningGoalId: "goal-ts-modeling", title: "Evidence", result: "supports", feedback: "Good" } })}>Pause</button>
@@ -107,6 +108,25 @@ describe("StoreProvider", () => {
     await user.click(screen.getByRole("button", { name: "Project" }));
     await waitFor(() => expect(screen.getByText("wip_limit_reached")).toBeInTheDocument());
     expect(screen.queryByText(/Remote Project/)).not.toBeInTheDocument();
+  });
+
+  it("odświeża brakujący kontekst Workspace przed utworzeniem Celu", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["workspace-state", "user-1"], structuredClone(emptyState));
+    const user = userEvent.setup();
+    renderStore(<Probe />, auth, queryClient);
+
+    await user.click(screen.getByRole("button", { name: "UnifiedGoal" }));
+
+    await waitFor(() => expect(repository.createGoalRemote).toHaveBeenCalledWith(
+      "workspace-1",
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ title: "Early Goal", outcome: "Outcome" }),
+      [],
+      expect.any(String)
+    ));
+    expect(screen.queryByText("Brak aktywnego Workspace.")).not.toBeInTheDocument();
   });
 
   it("wycofuje optymistyczne zmiany Capture, Inboxu, Focus, AI i Review po błędach synchronizacji", async () => {

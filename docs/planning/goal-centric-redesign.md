@@ -289,15 +289,10 @@ obchodzenia problemów z uprawnieniami.
 
 ## Proponowane etapy wdrożenia
 
-Szczegółowe, pionowe tickety znajdują się w aktywnych planach:
-
-1. [Sprint 2 — wspólny rdzeń Celów](./sprint-2-goals-foundation.md) — model,
-   backfill, lista Celów, własne Obszary i prowadzenie Działań bez Focus.
-2. [Sprint 3 — Dzisiaj i działania cykliczne](./sprint-3-today-recurring-actions.md) —
-   materializacja wystąpień, reguły dat, zaległości, własne szablony i materiały.
-3. [Sprint 4 — Wiedza, Inbox i domknięcie redesignu](./sprint-4-knowledge-inbox-redesign.md) —
-   triage, relacje Wiedzy, wyszukiwanie, opcjonalny przegląd i usunięcie
-   aktywnego Focus z interfejsu.
+Aktualne pionowe zadania, ich zależności i kolejność realizacji znajdują się w
+[backlogu technicznym UI/UX](./ui-ux-remediation-backlog.md). Obejmuje on model
+i interfejs Celów, Działania i serie cykliczne, Inbox, Wiedzę, wyszukiwanie,
+mobile oraz dostępność.
 
 ## Kryteria sukcesu redesignu
 

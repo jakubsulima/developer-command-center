@@ -8,6 +8,7 @@ interface UndoNotice extends UndoNoticeInput {
   expiresAt: number;
   working: boolean;
   error?: string;
+  kind: "undo" | "success" | "error";
 }
 
 export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
@@ -25,7 +26,13 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ActionFeedbackValue>(() => ({
     notifyUndo(input) {
       const durationMs = input.durationMs ?? 8_000;
-      setNotices((current) => [...current, { ...input, id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
+      setNotices((current) => [...current, { ...input, kind: "undo", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
+    },
+    notifySuccess(message) {
+      setNotices((current) => [...current, { message, undo: () => undefined, kind: "success", id: crypto.randomUUID(), expiresAt: Date.now() + 5_000, working: false }]);
+    },
+    notifyError(message) {
+      setNotices((current) => [...current, { message, undo: () => undefined, kind: "error", id: crypto.randomUUID(), expiresAt: Date.now() + 8_000, working: false }]);
     }
   }), []);
 
@@ -46,10 +53,10 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="undo-stack" aria-live="polite" aria-label="Wyniki operacji">
         {notices.map((notice) => (
-          <section className={`undo-notice ${notice.error ? "undo-notice-error" : ""}`} role={notice.error ? "alert" : "status"} key={notice.id}>
-            <span className="undo-notice-icon">{notice.error ? <AlertCircle /> : <CheckCircle2 />}</span>
+          <section className={`undo-notice ${notice.error || notice.kind === "error" ? "undo-notice-error" : ""}`} role={notice.error || notice.kind === "error" ? "alert" : "status"} key={notice.id}>
+            <span className="undo-notice-icon">{notice.error || notice.kind === "error" ? <AlertCircle /> : <CheckCircle2 />}</span>
             <span><strong>{notice.message}</strong>{notice.error && <small>Cofnięcie nie powiodło się: {notice.error}</small>}</span>
-            <Button variant="ghost" loading={notice.working} onClick={() => void undo(notice)}><RotateCcw />Cofnij</Button>
+            {notice.kind === "undo" ? <Button variant="ghost" loading={notice.working} onClick={() => void undo(notice)}><RotateCcw />Cofnij</Button> : null}
             <button className="icon-button" aria-label="Zamknij komunikat" onClick={() => dismiss(notice.id)}><X /></button>
           </section>
         ))}

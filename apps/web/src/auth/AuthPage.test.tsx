@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 import { AuthPage } from "./AuthPage";
 
+vi.mock("../lib/runtime", () => ({ runtimeConfig: { demoEnabled: true } }));
+
 function renderAuth(overrides: Partial<AuthContextValue> = {}) {
   const value: AuthContextValue = {
     mode: "supabase",

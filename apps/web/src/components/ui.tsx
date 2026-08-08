@@ -32,3 +32,7 @@ export function EmptyState({ icon, title, detail, action }: { icon: ReactNode; t
     </div>
   );
 }
+
+export function ListSkeleton({ rows = 3, label = "Ładowanie listy" }: { rows?: number; label?: string }) {
+  return <div className="list-skeleton" role="status" aria-label={label}>{Array.from({ length: rows }, (_, index) => <div key={index}><span /><span /><span /></div>)}</div>;
+}

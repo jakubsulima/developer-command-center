@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "../lib/supabase";
-import { runtimeConfig } from "../lib/runtime";
 import { AuthContext, demoUser, type AuthContextValue, type CurrentUser } from "./auth-context";
 
 function mapUser(user: User): CurrentUser {
@@ -71,7 +70,9 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
       setUser(null);
     },
     continueInDemo() {
-      if (runtimeConfig.demoEnabled) setDemoOverride(true);
+      // AuthPage decides whether this capability is exposed. Keeping the
+      // context action deterministic also makes embedded clients predictable.
+      setDemoOverride(true);
     }
   }), [demoOverride, loading, queryClient, user]);
 

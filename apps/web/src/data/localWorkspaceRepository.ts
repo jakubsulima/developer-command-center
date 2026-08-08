@@ -1,4 +1,5 @@
 import { executeDomainCommand, type DomainCommand } from "../domain/commands";
+import { ensureGoalModel } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { emptyState } from "./empty";
 
@@ -6,7 +7,7 @@ const DATABASE_NAME = "developer-command-center";
 const STORE_NAME = "workspace";
 const STATE_KEY = "active";
 const FALLBACK_KEY = "command-center-local-workspace-v2";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 interface StoredWorkspace {
   version: number;
@@ -76,7 +77,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       ? await readIndexedDb(indexedDb)
       : JSON.parse(storage.getItem(FALLBACK_KEY) ?? "null") as StoredWorkspace | null;
     if (!stored?.state) return null;
-    return structuredClone(stored.state);
+    return ensureGoalModel(structuredClone(stored.state));
   };
 
   const save = async (state: AppState) => {

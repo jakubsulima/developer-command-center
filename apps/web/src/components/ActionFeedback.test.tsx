@@ -5,10 +5,12 @@ import { ActionFeedbackProvider } from "./ActionFeedback";
 import { useActionFeedback } from "./action-feedback-context";
 
 function Probe({ firstUndo, secondUndo }: { firstUndo: () => Promise<void> | void; secondUndo?: () => Promise<void> | void }) {
-  const { notifyUndo } = useActionFeedback();
+  const { notifyUndo, notifySuccess, notifyError } = useActionFeedback();
   return <>
     <button onClick={() => notifyUndo({ message: "Pierwsza operacja zapisana.", undo: firstUndo })}>Pierwsza</button>
     {secondUndo && <button onClick={() => notifyUndo({ message: "Druga operacja zapisana.", undo: secondUndo })}>Druga</button>}
+    <button onClick={() => notifySuccess("Zapisano.")}>Sukces</button>
+    <button onClick={() => notifyError("Brak połączenia.")}>Błąd</button>
   </>;
 }
 
@@ -46,5 +48,23 @@ describe("ActionFeedback", () => {
     await user.click(within(alert).getByRole("button", { name: "Cofnij" }));
     expect(undo).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("ogłasza globalnie błąd operacji bez akcji Cofnij", async () => {
+    const user = userEvent.setup();
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    await user.click(screen.getByRole("button", { name: "Błąd" }));
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Brak połączenia.");
+    expect(within(alert).queryByRole("button", { name: "Cofnij" })).not.toBeInTheDocument();
+  });
+
+  it("ogłasza sukces bez zbędnej akcji", async () => {
+    const user = userEvent.setup();
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    await user.click(screen.getByRole("button", { name: "Sukces" }));
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Zapisano.");
+    expect(within(status).queryByRole("button", { name: "Cofnij" })).not.toBeInTheDocument();
   });
 });

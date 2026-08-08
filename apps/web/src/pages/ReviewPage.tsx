@@ -1,66 +1,87 @@
-import { CalendarCheck, Check, CheckCircle2, Circle, Compass, RefreshCw, Scale, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, BookMarked, CalendarCheck, Check, CheckCircle2, Clock3, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { Badge, Button, Panel } from "../components/ui";
 import { DraftStatus } from "../components/DraftStatus";
+import { Badge, Button, Panel } from "../components/ui";
+import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 
-const weeklyQuestions = [
-  { id: "close", title: "Zamknij otwarte wątki", detail: "Czy każdy aktywny projekt ma konkretny następny krok?", icon: CheckCircle2 },
-  { id: "outcomes", title: "Sprawdź outcomes", detail: "Czy rezultaty nadal opisują zmianę, którą chcesz osiągnąć?", icon: Compass },
-  { id: "wip", title: "Oceń WIP", detail: "Czy trzy aktywne commitments to właściwy limit na kolejny tydzień?", icon: Scale },
-  { id: "risks", title: "Nazwij ryzyka", detail: "Który blocker wymaga decyzji zamiast kolejnego zadania?", icon: ShieldAlert }
-];
-const dailyQuestions = [
-  { id: "focus", title: "Odzyskaj kontekst", detail: "Czy następna fizyczna akcja jest nadal właściwa?", icon: Compass },
-  { id: "inbox", title: "Opróżnij pilne Capture", detail: "Czy w Inboxie zostało coś blokującego jutro?", icon: CheckCircle2 },
-  { id: "blocker", title: "Nazwij blocker", detail: "Czy potrzebujesz decyzji przed kolejną sesją?", icon: ShieldAlert }
-];
 const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
-const emptyReviewDraft: { reviewType: "daily" | "weekly"; checked: string[]; summary: string } = { reviewType: "weekly", checked: [], summary: "" };
+const dayFormatter = new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short" });
 
 export function ReviewPage() {
   const { state, completeReview } = useStore();
-  const draft = usePersistentDraft("review-summary", emptyReviewDraft);
-  const { reviewType, checked, summary } = draft.value;
-  const questions = reviewType === "weekly" ? weeklyQuestions : dailyQuestions;
+  const draft = usePersistentDraft("weekly-review-note", { note: "" });
+  const weekly = useMemo(() => deriveWeeklyReview(state), [state]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const signals = state.projects.filter((project) => project.blocker || project.status !== "W trakcie");
-  const toggle = (id: string) => draft.setValue((current) => ({ ...current, checked: current.checked.includes(id) ? current.checked.filter((item) => item !== id) : [...current.checked, id] }));
+  const rangeEnd = new Date(weekly.end);
+  rangeEnd.setUTCDate(rangeEnd.getUTCDate() - 1);
+  const completedThisWeek = state.reviews.some((review) => review.type === "weekly" && new Date(review.completedAt) >= weekly.start && new Date(review.completedAt) < weekly.end);
+  const recentReviews = [...state.reviews].filter((review) => review.type === "weekly").reverse().slice(0, 4);
+
   const complete = async () => {
-    if (checked.length !== questions.length) return;
+    if (saving) return;
     setSaving(true);
     setError("");
-    const saved = await completeReview(summary, reviewType, Object.fromEntries(questions.map((question) => [question.id, checked.includes(question.id) ? "confirmed" : "skipped"])));
+    const note = draft.value.note.trim();
+    const summary = note ? `${weekly.generatedSummary}\n\nDecyzja na kolejny tydzień: ${note}` : weekly.generatedSummary;
+    const saved = await completeReview(summary, "weekly", {
+      completedActions: String(weekly.completedActions),
+      focusMinutes: String(weekly.focusMinutes),
+      knowledgeAdded: String(weekly.knowledgeAdded),
+      progressUpdates: String(weekly.progressUpdates)
+    });
     if (saved) draft.clear();
-    else setError("Nie udało się zapisać Review. Wersja robocza pozostała zachowana.");
+    else setError("Nie udało się zapisać podsumowania. Twoja notatka pozostała zachowana.");
     setSaving(false);
   };
 
   return (
     <AppShell>
-      <PageHeading title="Przegląd tygodnia" eyebrow="Review prowadzi do decyzji, nie do raportu" action={state.reviewCompletedAt && <Badge tone="success"><Check />Ukończony</Badge>} />
-      <div className="review-layout">
-        <Panel className="review-main">
-          <div className="review-intro"><CalendarCheck /><span><h2>Przygotuj kolejny tydzień</h2><p>Potwierdź kierunek, uwolnij nieaktualne zobowiązania i zapisz decyzje.</p></span></div>
-          <label className="field-label" htmlFor="review-type">Typ przeglądu</label>
-          <select id="review-type" value={reviewType} onChange={(event) => draft.setValue({ reviewType: event.target.value as typeof reviewType, checked: [], summary: "" })}><option value="daily">Daily Review</option><option value="weekly">Weekly Review</option></select>
-          <div className="review-questions">{questions.map(({ id, title, detail, icon: Icon }) => {
-            const isChecked = checked.includes(id);
-            return <button className={isChecked ? "checked" : ""} onClick={() => toggle(id)} key={id}><span className="review-check">{isChecked ? <Check /> : <Circle />}</span><Icon /><span><strong>{title}</strong><small>{detail}</small></span></button>;
-          })}</div>
-          <label className="field-label" htmlFor="review-summary">{reviewType === "weekly" ? "Najważniejsza decyzja na kolejny tydzień" : "Najważniejsza decyzja"}</label>
-          <textarea id="review-summary" rows={5} placeholder="Co zachowujesz, co ograniczasz i co wymaga ponownej oceny?" value={summary} onChange={(event) => draft.setValue((current) => ({ ...current, summary: event.target.value }))} />
-          {error && <p className="auth-message error" role="alert">{error}</p>}
-          <div className="draft-row"><DraftStatus status={draft.status} />{draft.dirty && <Button variant="ghost" onClick={draft.discard}>Odrzuć wersję roboczą</Button>}</div>
-          <div className="review-actions"><span>{checked.length} z {questions.length} kroków</span><Button variant="primary" loading={saving} disabled={checked.length !== questions.length} onClick={() => void complete()}><Check />Zakończ przegląd</Button></div>
-        </Panel>
+      <PageHeading
+        title="Podsumowanie tygodnia"
+        eyebrow={`${dayFormatter.format(weekly.start)}–${dayFormatter.format(rangeEnd)} · aktualizuje się automatycznie`}
+        action={completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}
+      />
+      <div className="review-layout weekly-review-layout">
+        <div className="review-main-column">
+          <Panel className="review-main weekly-summary-card">
+            <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Automatyczne podsumowanie</small><h2>Ten tydzień w skrócie</h2><p>{weekly.generatedSummary}</p></span></div>
+            <div className="weekly-metrics" aria-label="Wyniki tygodnia">
+              <div><CheckCircle2 /><span><strong>{weekly.completedActions}</strong><small>ukończone</small></span></div>
+              <div><Clock3 /><span><strong>{weekly.focusMinutes} min</strong><small>fokusu</small></span></div>
+              <div><BookMarked /><span><strong>{weekly.knowledgeAdded}</strong><small>Wiedza</small></span></div>
+              <div><ListChecks /><span><strong>{weekly.progressUpdates}</strong><small>aktualizacje</small></span></div>
+            </div>
+          </Panel>
+
+          <Panel className="weekly-suggestions">
+            <div className="section-heading"><div><span className="section-kicker"><Lightbulb />Sugestie</span><h2>Co warto zrobić dalej</h2></div><span>{weekly.suggestions.length} priorytety</span></div>
+            <div className="weekly-suggestion-list">
+              {weekly.suggestions.map((suggestion, index) => <Link key={suggestion.id} to={suggestion.to}>
+                <span className="suggestion-number">{index + 1}</span>
+                <span><strong>{suggestion.title}</strong><small>{suggestion.detail}</small></span>
+                <ArrowRight />
+              </Link>)}
+            </div>
+          </Panel>
+
+          <Panel className="weekly-decision">
+            <div className="section-heading"><div><span className="section-kicker"><CalendarCheck />Twoja decyzja</span><h2>Ustaw kierunek na kolejny tydzień</h2></div></div>
+            <p>Podsumowanie jest gotowe. Dopisz tylko jedną decyzję, jeśli chcesz — nie musisz wypełniać checklisty.</p>
+            <label className="field-label" htmlFor="review-note">Najważniejsza decyzja <span className="optional-label">opcjonalnie</span></label>
+            <textarea id="review-note" rows={3} placeholder="Np. Najpierw odblokowuję budżet, pozostałe Cele czekają." value={draft.value.note} onChange={(event) => draft.setValue({ note: event.target.value })} />
+            {error ? <p className="auth-message error" role="alert">{error}</p> : null}
+            <div className="weekly-decision-footer"><div><DraftStatus status={draft.status} />{draft.dirty ? <Button variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div><Button variant="primary" loading={saving} onClick={() => void complete()}><Check />{completedThisWeek ? "Zapisz ponownie" : "Zamknij tydzień"}</Button></div>
+          </Panel>
+        </div>
+
         <aside className="review-side">
-          <Panel><h2>Historia Review</h2>{state.reviews.length ? [...state.reviews].reverse().map((review) => <div className="review-history-item" key={review.id}><strong>{review.type === "daily" ? "Daily Review" : "Weekly Review"} • ukończony</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Jawnie potwierdzono brak zmian."}</p></div>) : <p>Brak ukończonych przeglądów.</p>}</Panel>
-          <Panel><h2>Aktywne commitments</h2>{state.projects.map((project) => <div className="review-project" key={project.id}><span className={`project-avatar ${project.color}`}>{project.initials}</span><span><strong>{project.name}</strong><small>{project.primary ? "Primary" : project.status}</small></span></div>)}</Panel>
-          <Panel><h2><RefreshCw />Sygnały do decyzji</h2>{signals.length ? signals.map((project) => <p key={project.id}><strong>{project.name}</strong> — {project.blocker ?? project.status}.</p>) : <p>Brak blockerów i projektów oczekujących na decyzję.</p>}</Panel>
+          <Panel><h2>Historia tygodni</h2>{recentReviews.length ? recentReviews.map((review) => <div className="review-history-item" key={review.id}><strong>Podsumowanie zapisane</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Bez dodatkowej decyzji."}</p></div>) : <p className="muted-copy">Pierwsze zapisane podsumowanie pojawi się tutaj.</p>}</Panel>
+          <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length}</strong><span>aktywnych Celów</span></p><p><strong>{state.actions.filter((action) => action.status === "blocked").length}</strong><span>blokad</span></p><p><strong>{state.inbox.filter((item) => item.status === "unprocessed").length}</strong><span>w Inboxie</span></p></div></Panel>
         </aside>
       </div>
     </AppShell>

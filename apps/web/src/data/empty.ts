@@ -1,6 +1,15 @@
 import type { AppState } from "../domain/types";
 
 export const emptyState: AppState = {
+  workspaceTimezone: "Europe/Warsaw",
+  areas: [],
+  goalTemplates: [],
+  goals: [],
+  goalCriteria: [],
+  actions: [],
+  progressEntries: [],
+  recurringActionTemplates: [],
+  knowledgeLinks: [],
   projects: [],
   checkpoints: [],
   inbox: [],

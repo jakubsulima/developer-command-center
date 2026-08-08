@@ -3,7 +3,63 @@
 Kontekst osobistego systemu prowadzenia pracy i nauki, który ogranicza koszt
 odzyskiwania kontekstu i pomaga doprowadzać rozpoczęte rzeczy do wyniku.
 
-## Language
+## Current language — Projects as persistent contexts
+
+**Project / Projekt**:
+Trwały, własny kontekst pracy, który grupuje Cele, Zadania i Wiedzę. Projekt
+nie ma jednego warunku ukończenia; można go archiwizować, ale nie „osiąga się”
+go tak jak Celu. W bieżącym modelu danych jest addytywnie oparty na tabeli
+`areas`, aby zachować istniejące rekordy i relacje.
+_Avoid_: Goal, one-off outcome, temporary task list
+
+**Goal / Cel**:
+Prosty, możliwy do zamknięcia rezultat. Cel może należeć do jednego Projektu
+albo pozostać samodzielny; nie jest nadrzędnym kontenerem całej pracy.
+_Avoid_: Project, Area, Workspace, permanent responsibility
+
+**Action / Działanie**:
+Konkretny krok możliwy do utworzenia, zaplanowania, zablokowania, ukończenia,
+pominięcia lub anulowania bez uruchamiania timera.
+_Avoid_: Work Item, Focus target, Session task
+
+**Area / Obszar**:
+Techniczna nazwa rekordu używanego jako trwały Projekt. Nie jest eksponowana
+w aktywnym interfejsie; pozostaje w schemacie dla kompatybilności.
+_Avoid_: user-facing module, Goal
+
+**Goal Template / Szablon Celu**:
+Edytowalna kopia języka rezultatu, kryteriów i proponowanych Działań. Szablon
+systemowy jest wyłącznie propozycją i nigdy nie aktywuje Celu automatycznie.
+
+**Recurring Action / Działanie cykliczne**:
+Szablon serii materializujący zwykłe Działania według jawnej reguły i strefy
+czasowej. Wystąpienie można zmienić lub ukończyć bez zmiany serii.
+
+**Progress Update / Aktualizacja postępu**:
+Krótka notatka, decyzja, rezultat, dowód albo blocker na osi czasu Celu.
+
+**Knowledge / Wiedza**:
+Samodzielna biblioteka Notatek, Materiałów, Decyzji, Rezultatów i Poszukiwań.
+Jeden element może mieć wiele relacji z Celami, Działaniami i seriami.
+
+**Today / Dzisiaj**:
+Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
+planem, sesją pracy, timerem ani osobnym stanem domenowym.
+
+**Inbox Item**:
+Zachowana koperta surowego przechwycenia. Triage zaczyna się od intencji:
+utwórz Cel, dodaj Działanie, zapisz w Wiedzy, odłóż albo odrzuć.
+
+**Archive** i **Trash**:
+Odwracalne stany widoczności niezależne od osiągnięcia, ukończenia lub
+porzucenia obiektu. W bieżącym redesignie nie wykonujemy hard delete.
+
+**Focus Session, Context Checkpoint, Work Item, Commitment, Learning
+Goal, Learning Evidence i Review** są terminami historycznymi. Ich rekordy
+pozostają w eksporcie i widokach tylko do odczytu, ale nowe przepływy ich nie
+tworzą i aktywny UI ich nie używa.
+
+## Historical language — schema compatibility only
 
 **User**:
 Osoba posiadająca tożsamość w systemie i korzystająca z jednej lub wielu
@@ -147,7 +203,29 @@ Trwała zdolność rozwijana przez kolejne cele i dowody, bez definitywnego stan
 ukończenia.
 _Avoid_: Learning Goal, Topic, Progress Bar
 
-## Relationships
+## Current relationships
+
+- Wszystkie rekordy należą do jednego Workspace'u; złożone klucze obce i RLS
+  blokują relacje między Workspace'ami.
+- Projekt jest trwałym kontenerem dla Celów, Działań i Wiedzy.
+- Cel może opcjonalnie należeć do jednego Projektu i powstać z jednego Szablonu.
+- Działanie może wskazywać Cel, Projekt albo pozostać samodzielne.
+- Cel może mieć najwyżej jedno następne, gotowe do pracy Działanie.
+- Ukończenie Działania nie wymaga i nie tworzy Focus Session ani Checkpointu.
+- Działanie cykliczne przechowuje regułę, strefę, politykę zaległości i
+  checklistę; każde wystąpienie jest zwykłym Działaniem.
+- Para `(recurring_template_id, occurrence_date)` jest unikalna.
+- `skip_missed` jest domyślną polityką; `carry_one` tworzy najwyżej jeden zaległy
+  rekord po przerwie.
+- Wiedza może istnieć bez powiązań i łączyć się z Projektami, Celami, Działaniami
+  albo seriami bez zmiany własnej treści.
+- Aktualizacja postępu może wskazać Działanie i Wiedzę.
+- Projecty i Learning Goals są addytywnie backfillowane do Celów z tymi samymi
+  identyfikatorami. Stare tabele nie są usuwane ani nadpisywane.
+- Historyczne Focus Sessions, Checkpointy, Learning Evidence i Reviews są tylko
+  do odczytu i pozostają w eksporcie.
+
+## Historical relationships — superseded active product rules
 
 - W MVP jeden **User** posiada dokładnie jeden prywatny **Workspace**.
 - W MVP prywatny **Workspace** ma dokładnie jeden **Membership** właściciela.

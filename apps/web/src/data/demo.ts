@@ -1,6 +1,19 @@
 import type { AppState } from "../domain/types";
 
 export const demoState: AppState = {
+  workspaceTimezone: "Europe/Warsaw",
+  areas: [{ id: "area-finanse", name: "Finanse", description: "Budżet, rachunki i decyzje finansowe", color: "#60a5fa", visibility: "active", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: "2026-07-01T08:00:00.000Z" }],
+  goalTemplates: [],
+  goals: [{ id: "goal-budget", title: "Zbudować spokojny budżet domowy", outcome: "Co miesiąc wiem, ile mogę bezpiecznie wydać i odłożyć", kind: "personal", status: "active", visibility: "active", priority: "normal", areaId: "area-finanse", createdAt: "2026-07-15T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }],
+  goalCriteria: [{ id: "criterion-budget", goalId: "goal-budget", title: "Budżet obejmuje stałe koszty i oszczędności", completed: false }],
+  actions: [
+    { id: "action-budget-today", version: 1, goalId: "goal-budget", areaId: "area-finanse", title: "Spisać stałe koszty", detail: "Rachunki, subskrypcje i raty", status: "ready", position: 0, isNext: true, pinnedToToday: true, checklist: [], createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+    { id: "action-budget-overdue", version: 1, goalId: "goal-budget", areaId: "area-finanse", title: "Pobrać historię transakcji", detail: "Ostatnie trzy miesiące", status: "ready", position: 1, isNext: false, pinnedToToday: false, scheduledFor: "2026-08-01", checklist: [], createdAt: "2026-07-28T08:00:00.000Z", updatedAt: "2026-07-28T08:00:00.000Z" },
+    { id: "action-budget-upcoming", version: 1, goalId: "goal-budget", areaId: "area-finanse", title: "Ustalić kwotę automatycznego przelewu", detail: "", status: "ready", position: 2, isNext: false, pinnedToToday: false, scheduledFor: "2026-08-10", checklist: [], createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }
+  ],
+  progressEntries: [{ id: "progress-budget-1", goalId: "goal-budget", kind: "decision", content: "Budżet prowadzę miesięcznie, bez dziennych limitów.", createdAt: "2026-08-01T18:00:00.000Z" }],
+  recurringActionTemplates: [{ id: "series-budget", title: "Przegląd budżetu", detail: "Sprawdź wydatki i zaplanuj przelewy", goalId: "goal-budget", areaId: "area-finanse", timezone: "Europe/Warsaw", startsOn: "2026-08-04", rule: { unit: "week", interval: 1, weekdays: [2] }, missedPolicy: "skip_missed", status: "active", checklist: [{ title: "Sprawdź saldo" }, { title: "Zapisz jedną decyzję" }], skippedOccurrenceCount: 0, createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }],
+  knowledgeLinks: [{ id: "link-budget-knowledge", knowledgeItemId: "know-3", goalId: "goal-budget", meaning: "material", createdAt: "2026-08-01T08:00:00.000Z" }],
   projects: [
     {
       id: "fintrack-api",

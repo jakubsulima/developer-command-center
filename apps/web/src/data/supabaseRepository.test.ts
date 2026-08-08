@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  captureRemote, completeReviewRemote, createLearningGoalRemote, createProjectRemote,
+  captureRemote, completeReviewRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
   decideAIProposalRemote, endFocusRemote, exportWorkspaceRemote, loadSupabaseState,
   recordLearningEvidenceRemote, resolveInboxRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
-  setInboxStatusRemote, setLearningGoalStatusRemote, startFocusRemote, updateScratchpadRemote
+  setGoalVisibilityRemote, setInboxStatusRemote, setLearningGoalStatusRemote, setNextActionRemote, setRecurringStatusRemote,
+  startFocusRemote, updateRecurringTemplateRemote, updateScratchpadRemote
 } from "./supabaseRepository";
 
 const { getClient } = vi.hoisted(() => ({ getClient: vi.fn() }));
@@ -129,13 +130,21 @@ describe("repozytorium Supabase", () => {
     await setInboxStatusRemote("captured", "snoozed", "2026-08-02T08:00:00Z");
     await setCommitmentStatusRemote(projectId, "released");
     await setLearningGoalStatusRemote("goal", "abandoned", "Zmiana kierunku");
+    await createActionRemote(workspaceId, "action", { title: "Krok", goalId: "goal" });
+    await setNextActionRemote("goal", "action");
+    await setGoalVisibilityRemote("goal", "archived");
+    await createRecurringTemplateRemote(workspaceId, { id: "series", title: "Przegląd", detail: "", timezone: "Europe/Warsaw", startsOn: "2026-08-05", rule: { unit: "week", interval: 1 }, missedPolicy: "skip_missed", status: "active", checklist: [], skippedOccurrenceCount: 0, createdAt: "2026-08-05T00:00:00Z", updatedAt: "2026-08-05T00:00:00Z" });
+    await updateRecurringTemplateRemote("series", { title: "Nowy przegląd" }, true, "2026-08-05");
+    await setRecurringStatusRemote("series", "paused");
     expect(await createProjectRemote(workspaceId, { title: "P", outcome: "O", technology: "T", firstWorkItemTitle: "W", firstWorkItemDescription: "D" }, "key")).toBe(projectId);
     expect(await createLearningGoalRemote(workspaceId, { title: "G", criterion: "C", skill: "S" }, "key")).toBe("goal");
 
     expect(client.calls.filter((call) => call.kind === "rpc").map((call) => call.name)).toEqual(expect.arrayContaining([
       "capture_item", "start_focus_session", "end_focus_session", "record_learning_evidence", "resolve_inbox_item",
       "approve_ai_proposal", "reject_ai_proposal", "complete_weekly_review", "create_shaped_project", "create_learning_goal",
-      "set_entity_visibility", "set_inbox_item_status", "set_commitment_status", "set_learning_goal_status"
+      "set_entity_visibility", "set_inbox_item_status", "set_commitment_status", "set_learning_goal_status",
+      "create_action_item", "set_next_action_checked", "set_goal_visibility_checked", "create_recurring_action_template",
+      "update_recurring_action_template", "set_recurring_action_template_status"
     ]));
   });
 

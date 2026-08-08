@@ -18,6 +18,6 @@ describe("lokalne repozytorium Workspace", () => {
 
     const restored = await repository.load();
     expect(restored?.projects[0]).toMatchObject({ id: "local-project", domainStatus: "shaped" });
-    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 2 });
+    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 3 });
   });
 });

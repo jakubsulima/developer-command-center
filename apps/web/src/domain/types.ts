@@ -6,6 +6,141 @@ export type FocusEndReason = "paused" | "work_item_completed" | "stopped" | "int
 export type InboxKind = "text" | "link" | "file" | "voice";
 export type InboxStatus = "unprocessed" | "snoozed" | "resolved" | "discarded";
 export type KnowledgeKind = "note" | "resource" | "decision" | "artifact" | "investigation";
+export type GoalKind = "project" | "learning" | "personal" | "maintenance" | "custom";
+export type GoalStatus = "active" | "paused" | "achieved" | "abandoned";
+export type Visibility = "active" | "archived" | "trashed";
+export type GoalPriority = "low" | "normal" | "high";
+export type ActionStatus = "ready" | "in_progress" | "blocked" | "completed" | "skipped" | "cancelled";
+export type ProgressKind = "note" | "decision" | "result" | "evidence" | "blocker";
+export type RecurrenceUnit = "day" | "week" | "month";
+export type MissedOccurrencePolicy = "skip_missed" | "carry_one";
+
+export interface Area {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  visibility: Visibility;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalTemplate {
+  id: string;
+  name: string;
+  kind: GoalKind;
+  outcomePrompt: string;
+  criterionPrompt?: string;
+  defaultActions: Array<{ title: string; detail?: string }>;
+  system: boolean;
+  visibility: Visibility;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Goal {
+  id: string;
+  title: string;
+  outcome: string;
+  kind: GoalKind;
+  status: GoalStatus;
+  visibility: Visibility;
+  priority: GoalPriority;
+  areaId?: string;
+  templateId?: string;
+  targetDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  legacySource?: "project" | "learning_goal";
+}
+
+export interface GoalCriterion {
+  id: string;
+  goalId: string;
+  title: string;
+  completed: boolean;
+  legacySourceId?: string;
+}
+
+export interface ActionChecklistItem {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface GoalAction {
+  id: string;
+  version: number;
+  title: string;
+  detail: string;
+  goalId?: string;
+  areaId?: string;
+  status: ActionStatus;
+  blocker?: string;
+  position: number;
+  isNext: boolean;
+  pinnedToToday: boolean;
+  scheduledFor?: string;
+  completedAt?: string;
+  skippedAt?: string;
+  cancelledAt?: string;
+  recurringTemplateId?: string;
+  occurrenceDate?: string;
+  checklist: ActionChecklistItem[];
+  createdAt?: string;
+  updatedAt?: string;
+  legacySourceId?: string;
+}
+
+export interface ProgressEntry {
+  id: string;
+  goalId: string;
+  kind: ProgressKind;
+  content: string;
+  actionId?: string;
+  knowledgeItemId?: string;
+  createdAt: string;
+  legacySource?: "learning_evidence" | "checkpoint";
+  legacySourceId?: string;
+}
+
+export interface RecurrenceRule {
+  unit: RecurrenceUnit;
+  interval: number;
+  weekdays?: number[];
+  dayOfMonth?: number;
+  endsOn?: string;
+}
+
+export interface RecurringActionTemplate {
+  id: string;
+  title: string;
+  detail: string;
+  goalId?: string;
+  areaId?: string;
+  timezone: string;
+  startsOn: string;
+  rule: RecurrenceRule;
+  missedPolicy: MissedOccurrencePolicy;
+  status: "active" | "paused" | "archived";
+  checklist: Array<{ title: string }>;
+  lastMaterializedOn?: string;
+  skippedOccurrenceCount: number;
+  sourceTemplateId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeLink {
+  id: string;
+  knowledgeItemId: string;
+  areaId?: string;
+  goalId?: string;
+  actionId?: string;
+  recurringTemplateId?: string;
+  meaning: "material" | "result" | "decision" | "reference";
+  createdAt: string;
+}
 
 export interface NewProjectInput {
   title: string;
@@ -175,6 +310,15 @@ export interface FocusState {
 
 export interface AppState {
   workspaceId?: string;
+  workspaceTimezone: string;
+  areas: Area[];
+  goalTemplates: GoalTemplate[];
+  goals: Goal[];
+  goalCriteria: GoalCriterion[];
+  actions: GoalAction[];
+  progressEntries: ProgressEntry[];
+  recurringActionTemplates: RecurringActionTemplate[];
+  knowledgeLinks: KnowledgeLink[];
   projects: Project[];
   checkpoints: Checkpoint[];
   inbox: InboxItem[];

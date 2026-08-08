@@ -10,7 +10,10 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260801074644_add_project_creation_command.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260801075900_harden_focus_commands.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260801080732_add_audited_commands.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260804090000_add_reversible_state_commands.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260804090000_add_reversible_state_commands.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260804124522_goal_centric_model.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260805193000_ui_ux_remediation_commands.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260807120000_projects_as_persistent_contexts.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -32,8 +35,8 @@ describe("migracje Supabase", () => {
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
-    expect(tableCount).toBe(19);
-    expect(rlsCount).toBe(19);
+    expect(tableCount).toBe(28);
+    expect(rlsCount).toBe(28);
   });
 
   it("nie wystawia tabel bez polityk ani uprzywilejowanych funkcji publicznych", async () => {
@@ -176,8 +179,11 @@ describe("migracje Supabase", () => {
     const goalId = await scalar<string>("select public.create_learning_goal($1, 'Cel do porzucenia', 'Demonstracja', 'Bezpieczeństwo', $2)::text", [workspace, "70000000-0000-0000-0000-000000000030"]);
 
     await database.query("select public.set_entity_visibility($1, 'trashed', $2)", [projectId, "70000000-0000-0000-0000-000000000002"]);
+    await database.query("select public.set_entity_visibility($1, 'archived', $2)", [projectId, "70000000-0000-0000-0000-000000000002"]);
     await database.query("select public.set_entity_visibility($1, 'active', $2)", [projectId, "70000000-0000-0000-0000-000000000003"]);
     await database.query("select public.set_inbox_item_status($1, 'discarded', null, $2)", [inboxId, "70000000-0000-0000-0000-000000000004"]);
+    await database.query("select public.set_inbox_item_status($1, 'unprocessed', null, $2)", [inboxId, "70000000-0000-0000-0000-000000000004"]);
+    expect(await scalar<string>("select status::text from public.inbox_items where id = $1", [inboxId])).toBe("discarded");
     await database.query("select public.set_inbox_item_status($1, 'unprocessed', null, $2)", [inboxId, "70000000-0000-0000-0000-000000000005"]);
     await database.query("select public.set_commitment_status($1, 'released', $2)", [projectId, "70000000-0000-0000-0000-000000000006"]);
     await database.query("select public.set_learning_goal_status($1, 'abandoned', 'Zmiana kierunku', $2)", [goalId, "70000000-0000-0000-0000-000000000007"]);
@@ -187,6 +193,110 @@ describe("migracje Supabase", () => {
     expect(await scalar<string>("select status::text from public.commitments where target_entity_id = $1", [projectId])).toBe("released");
     expect(await scalar<string>("select status from public.learning_goals where entity_id = $1", [goalId])).toBe("abandoned");
     expect(await scalar<number>("select count(*)::int from public.activity_events where workspace_id = $1 and command_name like 'set_%'", [workspace])).toBe(6);
+    await database.exec("reset role");
+  });
+
+  it("tworzy Cel z Działaniem idempotentnie i nie duplikuje wystąpienia serii", async () => {
+    const user = "80000000-0000-0000-0000-000000000008";
+    const goalId = "80000000-0000-0000-0000-000000000010";
+    const actionId = "80000000-0000-0000-0000-000000000011";
+    const seriesId = "80000000-0000-0000-0000-000000000012";
+    const occurrenceId = "80000000-0000-0000-0000-000000000013";
+    const commandId = "80000000-0000-0000-0000-000000000099";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Workspace H"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    await database.query("select public.create_goal_with_action($1, $2, $3, 'Budżet', 'Aktualny plan wydatków', 'personal', null, 'Spisz koszty', '', $4)", [workspace, goalId, actionId, commandId]);
+    await database.query("select public.create_goal_with_action($1, $2, $3, 'Budżet', 'Aktualny plan wydatków', 'personal', null, 'Spisz koszty', '', $4)", [workspace, goalId, actionId, commandId]);
+    expect(await scalar<number>("select count(*)::int from public.goals where id = $1", [goalId])).toBe(1);
+    expect(await scalar<number>("select count(*)::int from public.actions where goal_id = $1", [goalId])).toBe(1);
+
+    await database.query("insert into public.recurring_action_templates (id, workspace_id, title, starts_on, recurrence_rule) values ($1, $2, 'Przegląd', '2026-08-04', '{\"unit\":\"week\",\"interval\":1}'::jsonb)", [seriesId, workspace]);
+    await database.query("select public.materialize_recurring_occurrence($1, $2, $3, '2026-08-04', $4)", [workspace, seriesId, occurrenceId, "80000000-0000-0000-0000-000000000097"]);
+    await database.query("select public.materialize_recurring_occurrence($1, $2, $3, '2026-08-04', $4)", [workspace, seriesId, "80000000-0000-0000-0000-000000000014", "80000000-0000-0000-0000-000000000096"]);
+    expect(await scalar<number>("select count(*)::int from public.actions where recurring_template_id = $1 and occurrence_date = '2026-08-04'", [seriesId])).toBe(1);
+    await database.exec("reset role");
+  });
+
+  it("egzekwuje atomowe komendy UI/UX, wersje, RLS i prawdziwe typy capture", async () => {
+    const user = "90000000-0000-0000-0000-000000000009";
+    const otherUser = "91000000-0000-0000-0000-000000000009";
+    const goalId = "90000000-0000-0000-0000-000000000010";
+    const actionId = "90000000-0000-0000-0000-000000000011";
+    const knowledgeId = "90000000-0000-0000-0000-000000000012";
+    const seriesId = "90000000-0000-0000-0000-000000000014";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace I"}', '{"workspace_name":"Workspace J"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Cel', 'Rezultat')", [goalId, workspace]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title) values ($1, $2, $3, 'Krok')", [actionId, workspace, goalId]);
+
+    const createdActionId = "90000000-0000-0000-0000-000000000013";
+    const createActionCommand = "90000000-0000-0000-0000-000000000029";
+    await database.query("select public.create_action_item($1, $2, $3, null, 'Drugi krok', '', null, false, $4)", [workspace, createdActionId, goalId, createActionCommand]);
+    await database.query("select public.create_action_item($1, $2, $3, null, 'Zmieniona próba', '', null, false, $4)", [workspace, createdActionId, goalId, createActionCommand]);
+    expect(await scalar<string>("select title from public.actions where id = $1", [createdActionId])).toBe("Drugi krok");
+    const nextActionCommand = "90000000-0000-0000-0000-000000000030";
+    await database.query("select public.set_next_action_checked($1, $2, $3)", [goalId, createdActionId, nextActionCommand]);
+    await database.query("select public.set_next_action_checked($1, $2, $3)", [goalId, actionId, nextActionCommand]);
+    expect(await scalar<string>("select id::text from public.actions where goal_id = $1 and is_next", [goalId])).toBe(createdActionId);
+    const visibilityCommand = "90000000-0000-0000-0000-000000000031";
+    await database.query("select public.set_goal_visibility_checked($1, 'archived', $2)", [goalId, visibilityCommand]);
+    await database.query("select public.set_goal_visibility_checked($1, 'trashed', $2)", [goalId, visibilityCommand]);
+    expect(await scalar<boolean>("select archived_at is not null and trashed_at is null from public.goals where id = $1", [goalId])).toBe(true);
+
+    const seriesCommand = "90000000-0000-0000-0000-000000000032";
+    const seriesData = JSON.stringify({ title: "Przegląd", detail: "Pierwsza wersja", goalId, timezone: "Europe/Warsaw", startsOn: "2026-08-06", rule: { unit: "week", interval: 1 }, missedPolicy: "skip_missed", checklist: [{ title: "Sprawdź" }] });
+    await database.query("select public.create_recurring_action_template($1, $2, $3::jsonb, $4)", [workspace, seriesId, seriesData, seriesCommand]);
+    await database.query("select public.create_recurring_action_template($1, $2, '{\"title\":\"Nie nadpisuj\",\"startsOn\":\"2026-08-07\",\"rule\":{\"unit\":\"day\",\"interval\":1}}'::jsonb, $3)", [workspace, seriesId, seriesCommand]);
+    expect(await scalar<string>("select title from public.recurring_action_templates where id = $1", [seriesId])).toBe("Przegląd");
+    const futureActionId = "90000000-0000-0000-0000-000000000015";
+    await database.query("insert into public.actions (id, workspace_id, goal_id, recurring_template_id, occurrence_date, title) values ($1, $2, $3, $4, '2026-08-13', 'Stary tytuł')", [futureActionId, workspace, goalId, seriesId]);
+    const updateSeriesCommand = "90000000-0000-0000-0000-000000000033";
+    await database.query("select public.update_recurring_action_template($1, '{\"title\":\"Przegląd tygodnia\"}'::jsonb, true, '2026-08-06', $2)", [seriesId, updateSeriesCommand]);
+    await database.query("select public.update_recurring_action_template($1, '{\"title\":\"Nie nadpisuj\"}'::jsonb, true, '2026-08-06', $2)", [seriesId, updateSeriesCommand]);
+    expect(await scalar<string>("select title from public.actions where id = $1", [futureActionId])).toBe("Przegląd tygodnia");
+    const seriesStatusCommand = "90000000-0000-0000-0000-000000000034";
+    await database.query("select public.set_recurring_action_template_status($1, 'paused', $2)", [seriesId, seriesStatusCommand]);
+    await database.query("select public.set_recurring_action_template_status($1, 'archived', $2)", [seriesId, seriesStatusCommand]);
+    expect(await scalar<string>("select status from public.recurring_action_templates where id = $1", [seriesId])).toBe("paused");
+
+    const actionCommand = "90000000-0000-0000-0000-000000000020";
+    const checklist = JSON.stringify({ checklist: [{ id: "check-1", title: "Dowód", completed: true }] });
+    await database.query("select public.update_action_checked($1, 1, $2::jsonb, $3)", [actionId, checklist, actionCommand]);
+    await database.query("select public.update_action_checked($1, 1, $2::jsonb, $3)", [actionId, checklist, actionCommand]);
+    expect(await scalar<number>("select version from public.actions where id = $1", [actionId])).toBe(2);
+    await expect(database.query("select public.update_action_checked($1, 1, '{}'::jsonb, $2)", [actionId, "90000000-0000-0000-0000-000000000021"])).rejects.toThrow("action_version_conflict");
+    const statusCommand = "90000000-0000-0000-0000-000000000028";
+    await database.query("select public.set_action_status_checked($1, 'blocked', 'Czekam na dane', $2)", [actionId, statusCommand]);
+    await database.query("select public.set_action_status_checked($1, 'completed', null, $2)", [actionId, statusCommand]);
+    expect(await scalar<string>("select status from public.actions where id = $1", [actionId])).toBe("blocked");
+    expect(await scalar<number>("select count(*)::int from public.progress_entries where action_id = $1", [actionId])).toBe(1);
+
+    await database.query("select public.set_goal_outcome_status($1, 'achieved', null, $2, 'Cel osiągnięty.', $3)", [goalId, "90000000-0000-0000-0000-000000000022", "90000000-0000-0000-0000-000000000023"]);
+    expect(await scalar<number>("select count(*)::int from public.progress_entries where goal_id = $1 and kind = 'decision'", [goalId])).toBe(1);
+
+    const links = JSON.stringify([{ id: "90000000-0000-0000-0000-000000000024", goalId }]);
+    const knowledgeCommand = "90000000-0000-0000-0000-000000000025";
+    await expect(database.query("select public.create_knowledge_with_goal_links($1, $2, 'resource', 'Niebezpieczne źródło', 'Treść', 'javascript:alert(1)', $3::jsonb, 'reference', $4)", [workspace, knowledgeId, links, knowledgeCommand])).rejects.toThrow("invalid_knowledge_source_url");
+    await database.query("select public.create_knowledge_with_goal_links($1, $2, 'note', 'Notatka', 'Treść', null, $3::jsonb, 'reference', $4)", [workspace, knowledgeId, links, knowledgeCommand]);
+    await database.query("select public.create_knowledge_with_goal_links($1, $2, 'note', 'Inna nazwa', 'Treść', null, $3::jsonb, 'reference', $4)", [workspace, knowledgeId, links, knowledgeCommand]);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1", [knowledgeId])).toBe(1);
+    const replacementLinks = JSON.stringify([]);
+    const updateKnowledgeCommand = "90000000-0000-0000-0000-000000000027";
+    await database.query("select public.update_knowledge_item($1, '{\"title\":\"Nowa notatka\"}'::jsonb, $2::jsonb, $3)", [knowledgeId, replacementLinks, updateKnowledgeCommand]);
+    await database.query("select public.update_knowledge_item($1, '{\"title\":\"Powtórzona próba\"}'::jsonb, $2::jsonb, $3)", [knowledgeId, replacementLinks, updateKnowledgeCommand]);
+    expect(await scalar<string>("select title from public.entities where id = $1", [knowledgeId])).toBe("Nowa notatka");
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and goal_id is not null", [knowledgeId])).toBe(0);
+
+    await expect(database.query("insert into public.inbox_items (workspace_id, kind, raw_content) values ($1, 'voice', 'fałszywe nagranie')", [workspace])).rejects.toThrow("capture_asset_required");
+    await expect(database.query("insert into public.inbox_items (workspace_id, kind, raw_content) values ($1, 'link', 'javascript:alert(1)')", [workspace])).rejects.toThrow("invalid_capture_url");
+
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [otherUser]);
+    await expect(database.query("select public.update_action_checked($1, 2, '{}'::jsonb, $2)", [actionId, "90000000-0000-0000-0000-000000000026"])).rejects.toThrow(/action_not_found|workspace_access_denied/);
     await database.exec("reset role");
   });
 });

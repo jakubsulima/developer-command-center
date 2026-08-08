@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 import { AuthGate } from "./AuthGate";
-import { AuthRoot } from "./AuthRoot";
 import { useAuth } from "./useAuth";
 
 const base: AuthContextValue = {
@@ -16,7 +15,7 @@ describe("infrastruktura Auth", () => {
     vi.unstubAllEnvs();
   });
 
-  it("pokazuje loading, formularz i aplikację zgodnie ze stanem sesji", () => {
+  it("pokazuje loading, formularz i aplikację zgodnie ze stanem sesji", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrap = (value: AuthContextValue) => <QueryClientProvider client={queryClient}><AuthContext.Provider value={value}><AuthGate><div>Private app</div></AuthGate></AuthContext.Provider></QueryClientProvider>;
     const { rerender } = render(wrap({ ...base, loading: true }));
@@ -24,12 +23,16 @@ describe("infrastruktura Auth", () => {
     rerender(wrap(base));
     expect(screen.getByRole("heading", { name: "Witaj ponownie" })).toBeInTheDocument();
     rerender(wrap({ ...base, mode: "demo", user: { id: "user", email: "dev@example.com", name: "Dev" } }));
-    expect(screen.getByText("Private app")).toBeInTheDocument();
+    expect(await screen.findByText("Private app")).toBeInTheDocument();
   });
 
-  it("bez konfiguracji Supabase uruchamia bezpieczny tryb demo", () => {
-    function Consumer() { const auth = useAuth(); return <span>{auth.mode}:{auth.user?.name}</span>; }
-    render(<AuthRoot><Consumer /></AuthRoot>);
+  it("bez konfiguracji Supabase uruchamia bezpieczny tryb demo", async () => {
+    vi.stubEnv("VITE_DATA_BACKEND", "demo");
+    vi.resetModules();
+    const { AuthRoot: DemoAuthRoot } = await import("./AuthRoot");
+    const { useAuth: useDemoAuth } = await import("./useAuth");
+    function Consumer() { const auth = useDemoAuth(); return <span>{auth.mode}:{auth.user?.name}</span>; }
+    render(<DemoAuthRoot><Consumer /></DemoAuthRoot>);
     expect(screen.getByText("demo:Jakub Kowalski")).toBeInTheDocument();
   });
 
