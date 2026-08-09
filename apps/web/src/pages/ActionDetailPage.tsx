@@ -29,5 +29,30 @@ export function ActionDetailPage() {
     });
   };
   const key = `action-detail:${action.id}`;
-  return <AppShell><Link className="back-link" to="/"><ArrowLeft />Dzisiaj</Link><PageHeading title={action.title} eyebrow="Samodzielne Działanie" /><Panel className="detail-section" aria-busy={mutation.isBusy(key)}><div className="section-heading"><h2>Szczegóły</h2><Badge tone={action.status === "completed" ? "success" : action.status === "blocked" ? "danger" : "info"}>{actionStatusLabels[action.status]}</Badge></div><p>{action.detail || "Bez dodatkowego opisu."}</p>{action.scheduledFor ? <p><strong>Termin:</strong> {new Date(`${action.scheduledFor}T12:00:00Z`).toLocaleDateString("pl-PL")}</p> : null}<div className="modal-actions"><Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Dzisiaj" : "Przypnij do Dzisiaj"}</Button>{action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}</div>{mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}</Panel></AppShell>;
+  const scheduledFor = action.scheduledFor
+    ? new Date(`${action.scheduledFor}T12:00:00Z`).toLocaleDateString("pl-PL")
+    : null;
+
+  return <AppShell><div className="action-detail-page">
+    <Link className="back-link" to="/"><ArrowLeft />Dzisiaj</Link>
+    <PageHeading title={action.title} eyebrow="Samodzielne Działanie" />
+    <Panel className="detail-section" aria-busy={mutation.isBusy(key)}>
+      <div className="section-heading">
+        <h2>Szczegóły</h2>
+        <Badge tone={action.status === "completed" ? "success" : action.status === "blocked" ? "danger" : "info"}>{actionStatusLabels[action.status]}</Badge>
+      </div>
+      <div className="action-detail-content">
+        <div>
+          <span className="action-detail-label">Opis</span>
+          <p className={action.detail ? "" : "action-detail-empty"}>{action.detail || "Bez dodatkowego opisu."}</p>
+        </div>
+        {scheduledFor ? <div className="action-detail-date"><CalendarDays /><span><small>Termin</small><strong>{scheduledFor}</strong></span></div> : null}
+      </div>
+      {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
+      <div className="action-detail-actions">
+        <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Dzisiaj" : "Przypnij do Dzisiaj"}</Button>
+        {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}
+      </div>
+    </Panel>
+  </div></AppShell>;
 }

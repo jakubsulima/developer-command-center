@@ -174,7 +174,7 @@ export function TodayPage() {
         {sections.overdue.length > 0 && <Panel><div className="section-heading"><h2>Zaległe</h2><span>Wymagają świadomej decyzji</span></div><div className="today-list">{sections.overdue.map((action) => <div key={action.id}>{renderTodayAction(action)}</div>)}</div></Panel>}
       </div>
       <aside className="today-aside">
-        <Panel><h2>Nadchodzące</h2>{sections.upcoming.map((action) => <div className="upcoming-row" key={action.id}><time>{action.scheduledFor}</time><span>{action.title}</span></div>)}{!sections.upcoming.length && <p className="muted-copy">Brak zaplanowanych Działań.</p>}</Panel>
+        <Panel><h2>Nadchodzące</h2>{sections.upcoming.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><span>{action.title}</span></div>)}{!sections.upcoming.length && <p className="muted-copy">Brak zaplanowanych Działań.</p>}</Panel>
         <Panel className="series-panel"><div className="section-heading"><h2>Serie</h2><span>{state.recurringActionTemplates.filter((item) => item.status !== "archived").length}</span></div>
           {state.recurringActionTemplates.filter((item) => item.status !== "archived").map((item) => {
             const links = state.knowledgeLinks.filter((link) => link.recurringTemplateId === item.id);

@@ -94,6 +94,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       </aside>
 
       <header className="topbar">
+        <span className="mobile-brand" aria-hidden="true"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></span>
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <button className="icon-button mobile-menu-trigger" aria-label="Menu Workspace" onClick={() => setMobileMenuOpen(true)}><Menu /></button>
@@ -109,7 +110,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Dzisiaj</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className="capture-fab" onClick={() => setQuickAddOpen(true)} aria-label="Dodaj Działanie, Cel, Wiedzę lub wpis do Inboxu"><Plus /></button>
+        <button className="capture-fab" onClick={() => setQuickAddOpen(true)} aria-label="Dodaj Działanie, Cel, Wiedzę lub wpis do Inboxu"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
         <NavLink to="/knowledge"><Archive /><span>Wiedza</span></NavLink>
         <button className="mobile-more-trigger" onClick={() => setMobileMenuOpen(true)} aria-label="Otwórz więcej opcji"><span className="mobile-nav-icon"><Menu />{pending > 0 ? <span className="nav-badge">{pending}</span> : null}</span><span>Więcej</span></button>
       </nav>
