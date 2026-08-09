@@ -14,7 +14,8 @@ describe("konfiguracja zarządzanego Supabase", () => {
   it("pozwala jawnie uruchomić odseparowane demo", () => {
     expect(resolveRuntimeConfig({ PROD: true, VITE_DATA_BACKEND: "demo" })).toEqual({
       backend: "demo",
-      demoEnabled: true
+      demoEnabled: true,
+      signupEnabled: false
     });
   });
 
@@ -30,6 +31,16 @@ describe("konfiguracja zarządzanego Supabase", () => {
       VITE_SUPABASE_URL: "https://example.supabase.co",
       VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
     })).toMatchObject({ backend: "supabase", demoEnabled: true });
+  });
+
+  it("domyślnie ukrywa rejestrację i wymaga jej jawnego włączenia", () => {
+    const base = {
+      VITE_DATA_BACKEND: "supabase",
+      VITE_SUPABASE_URL: "https://example.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
+    };
+    expect(resolveRuntimeConfig(base).signupEnabled).toBe(false);
+    expect(resolveRuntimeConfig({ ...base, VITE_ENABLE_SIGNUP: "true" }).signupEnabled).toBe(true);
   });
 
   it("odrzuca HTTP i klucze o podwyższonych uprawnieniach", () => {

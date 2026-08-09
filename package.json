@@ -1,7 +1,15 @@
 {
   "name": "developer-command-center",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "packageManager": "pnpm@10.30.1",
+  "pnpm": {
+    "overrides": {
+      "nanoid@<3.3.17": "3.3.17"
+    }
+  },
   "scripts": {
     "dev": "pnpm --filter @command/web dev",
     "build": "pnpm --filter @command/web build",

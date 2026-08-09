@@ -48,10 +48,10 @@ export function AuthPage() {
 
       <section className="auth-form-wrap">
         <form className="auth-form" onSubmit={submit}>
-          <div className="auth-tabs" role="tablist" aria-label="Sposób uwierzytelnienia">
+          {runtimeConfig.signupEnabled && <div className="auth-tabs" role="tablist" aria-label="Sposób uwierzytelnienia">
             <button type="button" role="tab" aria-selected={mode === "sign-in"} className={mode === "sign-in" ? "active" : ""} onClick={() => { setMode("sign-in"); setError(""); }}>Logowanie</button>
             <button type="button" role="tab" aria-selected={mode === "sign-up"} className={mode === "sign-up" ? "active" : ""} onClick={() => { setMode("sign-up"); setError(""); }}>Nowe konto</button>
-          </div>
+          </div>}
           <div className="auth-heading"><h2>{mode === "sign-in" ? "Witaj ponownie" : "Utwórz prywatny Workspace"}</h2><p>{mode === "sign-in" ? "Wróć dokładnie tam, gdzie przerwałeś." : "Zacznij od jednego odizolowanego miejsca na własną pracę."}</p></div>
 
           {mode === "sign-up" && <>

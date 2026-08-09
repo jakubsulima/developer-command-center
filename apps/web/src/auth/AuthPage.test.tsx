@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext, type AuthContextValue } from "./auth-context";
 import { AuthPage } from "./AuthPage";
 
-vi.mock("../lib/runtime", () => ({ runtimeConfig: { demoEnabled: true } }));
+const runtimeConfig = vi.hoisted(() => ({ demoEnabled: true, signupEnabled: true }));
+vi.mock("../lib/runtime", () => ({ runtimeConfig }));
 
 function renderAuth(overrides: Partial<AuthContextValue> = {}) {
   const value: AuthContextValue = {
@@ -36,6 +37,14 @@ describe("AuthPage", () => {
     const auth = renderAuth();
     await user.click(screen.getByRole("button", { name: "Otwórz wersję demonstracyjną" }));
     expect(auth.continueInDemo).toHaveBeenCalledOnce();
+  });
+
+  it("w prywatnym wdrożeniu pokazuje wyłącznie logowanie", () => {
+    runtimeConfig.signupEnabled = false;
+    renderAuth();
+    expect(screen.queryByRole("tab", { name: "Nowe konto" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zaloguj się" })).toBeInTheDocument();
+    runtimeConfig.signupEnabled = true;
   });
 
   it("rejestruje użytkownika, Workspace i pokazuje wymóg potwierdzenia", async () => {

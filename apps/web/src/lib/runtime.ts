@@ -4,6 +4,7 @@ type RuntimeEnvironment = {
   PROD?: boolean;
   VITE_DATA_BACKEND?: string;
   VITE_ENABLE_DEMO_MODE?: string;
+  VITE_ENABLE_SIGNUP?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 };
@@ -11,6 +12,7 @@ type RuntimeEnvironment = {
 export type RuntimeConfig = {
   backend: DataBackend;
   demoEnabled: boolean;
+  signupEnabled: boolean;
   configurationError?: string;
   supabase?: {
     url: string;
@@ -30,11 +32,14 @@ export function resolveRuntimeConfig(environment: RuntimeEnvironment): RuntimeCo
     return {
       backend: "supabase",
       demoEnabled: false,
+      signupEnabled: false,
       configurationError: "VITE_DATA_BACKEND musi mieć wartość „supabase” albo „demo”."
     };
   }
 
-  if (backend === "demo") return { backend, demoEnabled: true };
+  const signupEnabled = enabled(environment.VITE_ENABLE_SIGNUP);
+
+  if (backend === "demo") return { backend, demoEnabled: true, signupEnabled };
 
   const url = environment.VITE_SUPABASE_URL?.trim();
   const publishableKey = environment.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
@@ -42,6 +47,7 @@ export function resolveRuntimeConfig(environment: RuntimeEnvironment): RuntimeCo
     return {
       backend,
       demoEnabled,
+      signupEnabled,
       configurationError: "Brakuje VITE_SUPABASE_URL lub VITE_SUPABASE_PUBLISHABLE_KEY."
     };
   }
@@ -53,6 +59,7 @@ export function resolveRuntimeConfig(environment: RuntimeEnvironment): RuntimeCo
     return {
       backend,
       demoEnabled,
+      signupEnabled,
       configurationError: "VITE_SUPABASE_URL musi być poprawnym adresem HTTPS zarządzanego projektu Supabase."
     };
   }
@@ -61,11 +68,12 @@ export function resolveRuntimeConfig(environment: RuntimeEnvironment): RuntimeCo
     return {
       backend,
       demoEnabled,
+      signupEnabled,
       configurationError: "Użyj nowego klucza publishable (sb_publishable_…), nigdy secret ani service_role."
     };
   }
 
-  return { backend, demoEnabled, supabase: { url, publishableKey } };
+  return { backend, demoEnabled, signupEnabled, supabase: { url, publishableKey } };
 }
 
 export const runtimeConfig = resolveRuntimeConfig(import.meta.env);

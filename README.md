@@ -58,6 +58,10 @@ Pierwsze trzy komendy przed wdrożeniem są obowiązkową kontrolą. Produkcję 
 wdrażać ręcznie przez workflow `Wdrożenie migracji Supabase`, po wcześniejszym
 sprawdzeniu tych samych migracji na `staging`.
 
+Frontend PWA można wdrażać automatycznie na Vercel po każdym pushu do `main`.
+Konfigurację prywatnego, jednoosobowego wdrożenia opisuje
+[`docs/deployment/vercel.md`](docs/deployment/vercel.md).
+
 ## Kontrole jakości
 
 ```bash
