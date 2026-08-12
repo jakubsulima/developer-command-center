@@ -3,13 +3,14 @@ import { Archive, Flag, FolderKanban, Inbox, Keyboard, ListChecks, Search, X } f
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { routeForEntity } from "../domain/routes";
+import { GLOBAL_SEARCH_STORAGE_KEY } from "../auth/private-browser-state";
 
 interface SearchResult { id: string; title: string; detail: string; to: string; group: "Projekty" | "Cele" | "Zadania" | "Wiedza" | "Inbox"; icon: typeof Flag }
 
 export function GlobalSearch({ id = "global-search", onNavigate }: { id?: string; onNavigate?: () => void }) {
   const { state } = useStore();
   const navigate = useNavigate();
-  const [query, setQuery] = useState(() => sessionStorage.getItem("command-global-search") ?? "");
+  const [query, setQuery] = useState(() => sessionStorage.getItem(GLOBAL_SEARCH_STORAGE_KEY) ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const normalized = query.trim().toLocaleLowerCase("pl");
@@ -28,7 +29,7 @@ export function GlobalSearch({ id = "global-search", onNavigate }: { id?: string
   const choose = (result: SearchResult) => { setOpen(false); navigate(result.to); onNavigate?.(); };
 
   useEffect(() => { setActive(0); }, [query]);
-  useEffect(() => { if (query) sessionStorage.setItem("command-global-search", query); else sessionStorage.removeItem("command-global-search"); }, [query]);
+  useEffect(() => { if (query) sessionStorage.setItem(GLOBAL_SEARCH_STORAGE_KEY, query); else sessionStorage.removeItem(GLOBAL_SEARCH_STORAGE_KEY); }, [query]);
   return <div className="global-search">
     <div className="search-wrap"><Search /><input id={id} role="combobox" aria-label="Szukaj w Projektach, Celach, Zadaniach i Wiedzy" aria-expanded={open} aria-controls={resultsId} aria-activedescendant={open && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj w Projektach, Celach, Zadaniach i Wiedzy…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => Math.min(results.length - 1, value + 1)); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setQuery("")}><X /></button> : <kbd><Keyboard /> K</kbd>}</div>
     {open && <div id={resultsId} className="search-results" role="listbox" aria-label="Wyniki wyszukiwania">{results.length ? results.map(({ icon: Icon, ...result }, index) => <button id={`${id}-${result.id}`} key={result.id} role="option" aria-selected={index === active} onMouseEnter={() => setActive(index)} onClick={() => choose({ ...result, icon: Icon })}><Icon /><span><small>{result.group}</small><strong>{result.title}</strong><small>{result.detail}</small></span></button>) : <p>Brak wyników. Możesz utworzyć nowy Projekt, Cel, Zadanie albo element Wiedzy.</p>}</div>}

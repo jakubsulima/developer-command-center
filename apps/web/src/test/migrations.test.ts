@@ -13,7 +13,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260804090000_add_reversible_state_commands.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260804124522_goal_centric_model.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260805193000_ui_ux_remediation_commands.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260807120000_projects_as_persistent_contexts.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260807120000_projects_as_persistent_contexts.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260809130312_harden_public_release_boundaries.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -44,6 +45,8 @@ describe("migracje Supabase", () => {
     expect(await scalar<number>("select count(*)::int from information_schema.role_table_grants where table_schema = 'public' and grantee = 'anon'")).toBe(0);
     expect(await scalar<number>("select count(*)::int from pg_proc function_row join pg_namespace namespace on namespace.oid = function_row.pronamespace where namespace.nspname = 'public' and function_row.prosecdef")).toBe(0);
     expect(await scalar<number>("select count(*)::int from information_schema.routine_privileges where routine_schema = 'public' and grantee in ('PUBLIC', 'anon') and privilege_type = 'EXECUTE'")).toBe(0);
+    expect((await database.query("select routine_name, grantee from information_schema.routine_privileges where routine_schema = 'private' and grantee in ('PUBLIC', 'anon') and privilege_type = 'EXECUTE' order by routine_name, grantee")).rows).toEqual([]);
+    expect(await scalar<number>("select count(*)::int from pg_proc function_row join pg_namespace namespace on namespace.oid = function_row.pronamespace where namespace.nspname = 'public' and function_row.prosrc ilike '%insert into public.activity_events%'")).toBe(0);
   });
 
   it("izoluje dwa Workspace dla SELECT, INSERT, UPDATE i DELETE", async () => {
@@ -298,5 +301,37 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [otherUser]);
     await expect(database.query("select public.update_action_checked($1, 2, '{}'::jsonb, $2)", [actionId, "90000000-0000-0000-0000-000000000026"])).rejects.toThrow(/action_not_found|workspace_access_denied/);
     await database.exec("reset role");
+  });
+
+  it("zamyka bezpośredni zapis audytu i kolejki AI oraz waliduje trwałe URL-e", async () => {
+    const user = "a1000000-0000-0000-0000-000000000001";
+    const otherUser = "a2000000-0000-0000-0000-000000000002";
+    const proposalId = "a1000000-0000-0000-0000-000000000010";
+    const knowledgeId = "a1000000-0000-0000-0000-000000000011";
+    const commandId = "a1000000-0000-0000-0000-000000000012";
+    const approvalId = "a1000000-0000-0000-0000-000000000013";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace Security"}', '{"workspace_name":"Other Security"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    const otherWorkspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [otherUser]);
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    await database.query("insert into public.ai_proposals (id, workspace_id, command_name, command_args, preview_diff, risk, expires_at) values ($1, $2, 'create_work_item', '{}', '{}', 'low', now() + interval '1 hour')", [proposalId, workspace]);
+    await expect(database.query("update public.ai_proposals set status = 'approved' where id = $1", [proposalId])).rejects.toThrow();
+    await expect(database.query("insert into public.ai_proposals (workspace_id, command_name, command_args, preview_diff, risk, status, expires_at) values ($1, 'create_work_item', '{}', '{}', 'low', 'approved', now() + interval '1 hour')", [workspace])).rejects.toThrow();
+    await expect(database.query("insert into public.ai_executions (workspace_id, proposal_id, requested_by, idempotency_key) values ($1, $2, $3, $4)", [workspace, proposalId, user, commandId])).rejects.toThrow();
+    await expect(database.query("insert into public.activity_events (workspace_id, actor_user_id, source, command_name, correlation_id) values ($1, $2, 'system', 'forged', $3)", [workspace, user, commandId])).rejects.toThrow();
+
+    const executionId = await scalar<string>("select (public.approve_ai_proposal($1, $2)).id::text", [proposalId, approvalId]);
+    expect(await scalar<string>("select status::text from public.ai_executions where id = $1", [executionId])).toBe("queued");
+    expect(await scalar<string>("select status::text from public.ai_proposals where id = $1", [proposalId])).toBe("approved");
+
+    await database.query("select public.create_knowledge_with_goal_links($1, $2, 'resource', 'Bezpieczne źródło', '', 'https://example.com', '[]'::jsonb, 'reference', $3)", [workspace, knowledgeId, commandId]);
+    await expect(database.query("update public.knowledge_items set source_url = 'javascript:alert(1)' where entity_id = $1", [knowledgeId])).rejects.toThrow("knowledge_items_source_url_http_check");
+    expect((await database.query("update public.knowledge_items set source_url = 'https://example.com/updated' where entity_id = $1 returning entity_id", [knowledgeId])).rows).toHaveLength(1);
+    await database.exec("reset role");
+
+    await expect(database.query("insert into public.ai_executions (workspace_id, proposal_id, requested_by, idempotency_key) values ($1, $2, $3, $4)", [otherWorkspace, proposalId, otherUser, "a2000000-0000-0000-0000-000000000099"])).rejects.toThrow("ai_executions_proposal_workspace_fkey");
   });
 });

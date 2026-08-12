@@ -82,9 +82,11 @@ sekrety o tych samych nazwach, ale z wartościami właściwego projektu:
 - `SUPABASE_PROJECT_ID` — Project Ref;
 - `SUPABASE_DB_PASSWORD` — hasło bazy.
 
-Workflow `.github/workflows/supabase-deploy.yml` jest uruchamiany ręcznie,
-wyświetla historię, wykonuje dry-run, wdraża migracje i uruchamia zdalny lint.
-Dla environment `production` skonfiguruj wymagane zatwierdzenie. Kolejność
+Workflow `.github/workflows/supabase-deploy.yml` jest uruchamiany ręcznie
+wyłącznie z chronionej gałęzi `main`, wyświetla historię, wykonuje dry-run,
+wdraża migracje i uruchamia zdalny lint. Dla environment `staging` i
+`production` ogranicz deployment do `main`, skonfiguruj wymagane zatwierdzenie
+z wyłączonym self-review i nie udostępniaj sekretów innym gałęziom. Kolejność
 wydania: migracja na `staging` → test aplikacji → zatwierdzenie → ta sama
 migracja na `production`.
 
