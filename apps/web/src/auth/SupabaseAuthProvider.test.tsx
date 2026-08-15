@@ -62,6 +62,7 @@ describe("SupabaseAuthProvider", () => {
 
   it("czyści prywatny cache podczas lokalnego wylogowania", async () => {
     localStorage.setItem("command-center-state-v1", "private");
+    sessionStorage.setItem("command-global-search", "tajny projekt");
     const user = userEvent.setup();
     const harness = setup();
     await screen.findByText("supabase:Dev User");
@@ -69,6 +70,7 @@ describe("SupabaseAuthProvider", () => {
     await waitFor(() => expect(harness.auth.signOut).toHaveBeenCalledWith({ scope: "local" }));
     expect(harness.queryClient.getQueryData(["workspace-state", "user-1"])).toBeUndefined();
     expect(localStorage.getItem("command-center-state-v1")).toBeNull();
+    expect(sessionStorage.getItem("command-global-search")).toBeNull();
   });
 
   it("pozwala wejść do demo bez wywoływania zdalnego signOut", async () => {

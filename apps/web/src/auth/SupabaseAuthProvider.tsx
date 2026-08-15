@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "../lib/supabase";
 import { AuthContext, demoUser, type AuthContextValue, type CurrentUser } from "./auth-context";
+import { clearUnscopedPrivateBrowserState } from "./private-browser-state";
 
 function mapUser(user: User): CurrentUser {
   const fullName = typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name.trim() : "";
@@ -31,7 +32,11 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
 
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (event === "SIGNED_OUT") setUser(null);
+      if (event === "SIGNED_OUT") {
+        queryClient.removeQueries({ queryKey: ["workspace-state"] });
+        clearUnscopedPrivateBrowserState();
+        setUser(null);
+      }
       else if (session?.user) setUser(mapUser(session.user));
       setLoading(false);
     });
@@ -40,7 +45,7 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(() => ({
     mode: demoOverride ? "demo" : "supabase",
@@ -61,12 +66,13 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
     },
     async signOut() {
       if (demoOverride) {
+        clearUnscopedPrivateBrowserState();
         setDemoOverride(false);
         return;
       }
       await getSupabase().auth.signOut({ scope: "local" });
       queryClient.removeQueries({ queryKey: ["workspace-state"] });
-      localStorage.removeItem("command-center-state-v1");
+      clearUnscopedPrivateBrowserState();
       setUser(null);
     },
     continueInDemo() {

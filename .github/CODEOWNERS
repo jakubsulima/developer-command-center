@@ -1,0 +1,5 @@
+# Default owner and mandatory reviewer for security-sensitive boundaries.
+* @jakubsulima
+/.github/workflows/ @jakubsulima
+/supabase/ @jakubsulima
+/apps/web/src/auth/ @jakubsulima

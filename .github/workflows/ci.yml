@@ -23,13 +23,13 @@ jobs:
 
     steps:
       - name: Pobierz repozytorium
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Skonfiguruj pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Skonfiguruj Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -60,10 +60,10 @@ jobs:
 
     steps:
       - name: Pobierz repozytorium
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Skonfiguruj pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Zablokuj podatności wysokie i krytyczne
         run: pnpm audit --audit-level high
@@ -79,13 +79,13 @@ jobs:
 
     steps:
       - name: Pobierz repozytorium
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Zainicjalizuj CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           languages: javascript-typescript
           queries: security-extended
 
       - name: Przeanalizuj kod
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6

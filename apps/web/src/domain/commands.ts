@@ -1,16 +1,5 @@
 import type { ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, Project, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
-
-function normalizeKnowledgeSourceUrl(value: string | undefined) {
-  const normalized = value?.trim();
-  if (!normalized) return undefined;
-  try {
-    const url = new URL(normalized);
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
-  } catch {
-    throw new Error("invalid_knowledge_source_url");
-  }
-  return normalized;
-}
+import { normalizeHttpUrl } from "./http-url";
 
 export type InboxTriageIntent =
   | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string }
@@ -651,7 +640,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   if (command.type === "create_knowledge") {
     const title = command.title.trim();
     if (!title) throw new Error("knowledge_title_required");
-    const sourceUrl = normalizeKnowledgeSourceUrl(command.sourceUrl);
+    const sourceUrl = normalizeHttpUrl(command.sourceUrl);
     return {
       ...state,
       knowledge: [{
@@ -679,7 +668,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       type: command.kind ?? candidate.type,
       title: command.title?.trim() ?? candidate.title,
       detail: command.detail?.trim() ?? candidate.detail,
-      sourceUrl: command.sourceUrl === null ? undefined : command.sourceUrl !== undefined ? normalizeKnowledgeSourceUrl(command.sourceUrl) : candidate.sourceUrl,
+      sourceUrl: command.sourceUrl === null ? undefined : command.sourceUrl !== undefined ? normalizeHttpUrl(command.sourceUrl) : candidate.sourceUrl,
       updatedAt: command.changedAt
     } : candidate);
     const knowledgeLinks = command.goalLinks === undefined ? state.knowledgeLinks : [
