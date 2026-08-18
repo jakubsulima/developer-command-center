@@ -1,4 +1,4 @@
-import { BookMarked, CalendarClock, ChevronDown, Flag, Inbox, ListPlus, Plus, Repeat2, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, BookMarked, CalendarClock, ChevronDown, Flag, Inbox, ListPlus, Plus, Repeat2, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -43,6 +43,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
   const draft = usePersistentDraft("global-quick-add", emptyDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const modeCopy = copy[draft.value.mode];
   const knowledgeKind = draft.value.knowledgeKind ?? "note";
@@ -54,8 +55,15 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
 
   const setMode = (mode: QuickAddMode) => {
     setError("");
+    setMobileExpanded(true);
     draft.setValue((current) => ({ ...current, mode, context: mode === "inbox" ? "" : current.context }));
     window.requestAnimationFrame(() => contentRef.current?.focus());
+  };
+
+  const close = () => {
+    setError("");
+    setMobileExpanded(false);
+    onClose();
   };
 
   const updateContent = (value: string) => {
@@ -92,7 +100,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
         notifySuccess("Zapisano do Inboxu.");
       }
       draft.clear();
-      onClose();
+      close();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Nie udało się zapisać. Spróbuj ponownie.");
     } finally {
@@ -101,13 +109,15 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
   };
 
   return (
-    <Modal open={open} title="Dodaj" className="creation-hub-modal" onClose={() => { setError(""); onClose(); }} closeDisabled={saving}>
-      <form className="quick-add" onSubmit={(event) => void submit(event)}>
+    <Modal open={open} title="Dodaj" className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving}>
+      <form className={`quick-add ${mobileExpanded ? "mobile-expanded" : "mobile-chooser"}`} onSubmit={(event) => void submit(event)}>
         <div className="create-hub-intro"><span><Sparkles /></span><div><strong>Jedno miejsce do tworzenia</strong><p>Wybierz typ. Najważniejsze pola zobaczysz od razu, reszta pozostanie pod ręką.</p></div></div>
+        <div className="quick-add-choice-heading"><strong>Co chcesz dodać?</strong><small>Wybierz typ, a pokażę odpowiednie pola.</small></div>
         <div className="quick-add-modes" role="group" aria-label="Co chcesz dodać?">
           {modes.map(({ id, label, icon: Icon }) => <button type="button" aria-pressed={draft.value.mode === id} key={id} onClick={() => setMode(id)}><span><Icon /></span><small>{label}</small></button>)}
         </div>
 
+        <div className="quick-add-stage-header"><button type="button" aria-label="Wróć do wyboru typu" onClick={() => setMobileExpanded(false)}><ArrowLeft /></button><span><small>Wybrany typ</small><strong>{modes.find((mode) => mode.id === draft.value.mode)?.label}</strong></span></div>
         <div className="quick-add-mode-panel" key={draft.value.mode}>
           <div className="quick-add-mode-heading"><span>{modeCopy.label}</span><small>{modeCopy.detail}</small></div>
           <div className="quick-add-composer"><textarea ref={contentRef} id="quick-add-content" aria-label={modeCopy.label} rows={3} autoFocus required placeholder={modeCopy.placeholder} value={draft.value.content} onChange={(event) => updateContent(event.target.value)} onKeyDown={(event) => {
@@ -156,7 +166,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
         <div className="quick-add-hint" aria-label="Dostępne komendy">
           <span>Możesz też zacząć od</span>{modes.map(({ id, command }) => <button type="button" key={command} onClick={() => setMode(id)}><kbd>{command}</kbd></button>)}
         </div>
-        <button className="quick-add-recurring" type="button" onClick={() => { onClose(); navigate("/?newRecurring=1"); }}><span><Repeat2 /></span><span><strong>Działanie cykliczne</strong><small>Utwórz nawyk, rutynę albo regularne przypomnienie</small></span><Plus /></button>
+        <button className="quick-add-recurring" type="button" onClick={() => { close(); navigate("/?newRecurring=1"); }}><span><Repeat2 /></span><span><strong>Działanie cykliczne</strong><small>Utwórz nawyk, rutynę albo regularne przypomnienie</small></span><Plus /></button>
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}
         <div className="quick-add-footer">
           <div className="quick-add-draft"><DraftStatus status={draft.status} />{draft.dirty ? <Button type="button" variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div>

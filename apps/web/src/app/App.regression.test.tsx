@@ -52,8 +52,13 @@ describe("regresje nowego modelu Celów", () => {
     expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Otwórz centrum dodawania" }));
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
+    const quickAdd = createCenter.querySelector(".quick-add");
+    expect(quickAdd).toHaveClass("mobile-chooser");
     for (const mode of ["Działanie", "Cel", "Wiedza", "Inbox"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
+    await user.click(within(createCenter).getByRole("button", { name: "Działanie" }));
+    expect(quickAdd).toHaveClass("mobile-expanded");
+    expect(within(createCenter).getByRole("button", { name: "Wróć do wyboru typu" })).toBeInTheDocument();
     await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
     const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
     await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));

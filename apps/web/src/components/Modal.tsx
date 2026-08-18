@@ -1,12 +1,32 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 
-export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, initialFocus = "first" }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; initialFocus?: "first" | "input" }) {
+export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0 }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: "first" | "input"; exitDurationMs?: number }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const [present, setPresent] = useState(open);
+  const [closing, setClosing] = useState(false);
   const titleId = useId();
   onCloseRef.current = onClose;
+  useEffect(() => {
+    if (open) {
+      setPresent(true);
+      setClosing(false);
+      return;
+    }
+    if (!present || exitDurationMs <= 0) {
+      setPresent(false);
+      setClosing(false);
+      return;
+    }
+    setClosing(true);
+    const timeout = window.setTimeout(() => {
+      setPresent(false);
+      setClosing(false);
+    }, exitDurationMs);
+    return () => window.clearTimeout(timeout);
+  }, [exitDurationMs, open, present]);
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
@@ -39,9 +59,9 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
     };
   }, [closeDisabled, closeOnBackdrop, initialFocus, open]);
 
-  if (!open) return null;
+  if (exitDurationMs > 0 ? !present : !open) return null;
   return (
-    <div className="modal-backdrop" role="presentation" onFocusCapture={(event) => {
+    <div className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
       <div ref={dialogRef} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" aria-labelledby={titleId}>
