@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
-export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean }) {
+export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, initialFocus = "first" }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; initialFocus?: "first" | "input" }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -27,7 +27,8 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
     const frame = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
       if (!dialog || dialog.contains(document.activeElement)) return;
-      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')?.focus();
+      const preferred = initialFocus === "input" ? dialog.querySelector<HTMLElement>('input:not([disabled])') : null;
+      (preferred ?? dialog.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])'))?.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);
@@ -36,14 +37,14 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
       previousFocusRef.current = null;
       previousFocus?.focus();
     };
-  }, [closeDisabled, closeOnBackdrop, open]);
+  }, [closeDisabled, closeOnBackdrop, initialFocus, open]);
 
   if (!open) return null;
   return (
     <div className="modal-backdrop" role="presentation" onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
-      <div ref={dialogRef} className="modal" role={role} aria-modal="true" aria-labelledby={titleId}>
+      <div ref={dialogRef} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" aria-labelledby={titleId}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           <button className="icon-button" disabled={closeDisabled} onClick={onClose} aria-label="Zamknij okno"><X /></button>
