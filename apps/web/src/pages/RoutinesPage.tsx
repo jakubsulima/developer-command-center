@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { CalendarClock, CalendarDays, Layers3, ListChecks, Pause, Play, Plus, Repeat2, Settings2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
+import { routeForEntity } from "../domain/routes";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
@@ -51,7 +52,7 @@ export function RoutinesPage() {
         <div className="routine-card-head"><span className="routine-card-icon"><Repeat2 /></span><div><h2>{routine.title}</h2><p>{describeRecurringSchedule(routine)}</p></div><Badge tone={routine.status === "active" ? "success" : "warning"}>{routine.status === "active" ? "Aktywna" : "Wstrzymana"}</Badge></div>
         <div className="routine-next"><span><CalendarClock />Najbliższe wykonania</span>{occurrences.length ? <div>{occurrences.map((date, index) => <time key={date} dateTime={date} className={index === 0 ? "next" : ""}>{formatDate(date, state.workspaceTimezone, true)}</time>)}</div> : <p>Rutyna nie tworzy nowych wystąpień do czasu wznowienia.</p>}</div>
         <dl className="routine-details">
-          <div><dt><Layers3 />Przypisanie</dt><dd>{goal ? <Link to={`/goals/${goal.id}`}>{goal.title}</Link> : area?.name ?? "Samodzielna rutyna"}</dd></div>
+          <div><dt><Layers3 />Przypisanie</dt><dd>{goal ? <Link to={routeForEntity({ type: "goal", id: goal.id })}>{goal.title}</Link> : area?.name ?? "Samodzielna rutyna"}</dd></div>
           <div><dt><CalendarDays />Zakres</dt><dd>Od {formatDate(routine.startsOn, state.workspaceTimezone)}{routine.rule.endsOn ? ` do ${formatDate(routine.rule.endsOn, state.workspaceTimezone)}` : " · bez daty końcowej"}</dd></div>
           <div><dt><ShieldCheck />Po przerwie</dt><dd>{routine.missedPolicy === "skip_missed" ? "Pomiń stare terminy" : "Zachowaj jedno zaległe"}</dd></div>
         </dl>

@@ -5,6 +5,7 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
+import { entityCardVariants } from "../components/ui-variants";
 
 const colors = ["violet", "orange", "amber"] as const;
 
@@ -58,16 +59,16 @@ export function ProjectsPage() {
     </div>
     {projects.length ? <div className="project-card-grid">{projects.map((project, index) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
-      return <Panel className="project-card project-context-card" key={project.id}>
+      return <Panel className={`${entityCardVariants()} project-card project-context-card entity-card`} key={project.id}>
         <div className="project-card-head"><span className={`project-avatar ${colors[index % colors.length]}`}>{initials(project.name)}</span><Badge tone="info">Stały kontekst</Badge></div>
-        <h2>{project.name}</h2>
-        <p>{project.description || "Miejsce dla powiązanych celów, zadań i wiedzy."}</p>
+        <h2 className="line-clamp-2">{project.name}</h2>
+        <p className="line-clamp-2">{project.description || "Miejsce dla powiązanych celów, zadań i wiedzy."}</p>
         <div className="project-context-metrics">
           <span><strong>{counts.goals}</strong><small>Cele</small></span>
           <span><strong>{counts.actions}</strong><small>Otwarte zadania</small></span>
           <span><strong>{counts.knowledge}</strong><small>Wiedza</small></span>
         </div>
-        {view === "active" ? <Link className="button button-secondary" to={`/projects/${project.id}`}>Otwórz projekt <ArrowRight /></Link> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
+        {view === "active" ? <Link className="button button-secondary entity-card-open" to={`/projects/${project.id}`}>Otwórz projekt <ArrowRight /></Link> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
       </Panel>;
     })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Utwórz trwałe miejsce, w którym połączysz Cele, Zadania i Wiedzę." : "Nie ma tutaj żadnych Projektów."} action={view === "active" ? <Button variant="primary" onClick={() => setOpen(true)}><Plus />Utwórz pierwszy Projekt</Button> : undefined} />}
 

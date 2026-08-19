@@ -5,10 +5,12 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import type { KnowledgeItem, KnowledgeKind } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { MultiCombobox } from "../components/MultiCombobox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
+import { routeForEntity } from "../domain/routes";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -84,11 +86,13 @@ export function KnowledgePage() {
         <select id="knowledge-kind" value={kind} onChange={(event) => { if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{Object.entries(kinds).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select>
       </div>
       <div className="knowledge-filter-row"><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><select aria-label="Filtr Obszaru" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Obszar</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
-      <div className="knowledge-views" role="group" aria-label="Widoczność obiektów">
-        <Button aria-pressed={view === "active"} variant={view === "active" ? "primary" : "ghost"} onClick={() => setView("active")}>Aktywne</Button>
-        <Button aria-pressed={view === "archived"} variant={view === "archived" ? "primary" : "ghost"} onClick={() => setView("archived")}><Archive />Archiwum</Button>
-        <Button aria-pressed={view === "trashed"} variant={view === "trashed" ? "primary" : "ghost"} onClick={() => setView("trashed")}><Trash2 />Kosz</Button>
-      </div>
+      <Tabs value={view} onValueChange={(value) => setView(value as View)} className="knowledge-views" aria-label="Widoczność obiektów">
+        <TabsList className="h-auto border-0 bg-transparent p-0">
+          <TabsTrigger className="min-h-10" value="active">Aktywne</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="archived"><Archive />Archiwum</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="trashed"><Trash2 />Kosz</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <p className="results-summary" aria-live="polite">{results.length} wyników{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
       {loading ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (
@@ -97,9 +101,9 @@ export function KnowledgePage() {
             const { icon: Icon, label } = kinds[item.type];
             const mutationKey = `visibility:${item.id}`;
             return (
-              <Panel key={item.id}>
+              <Panel className="entity-card" key={item.id}>
                 <Icon />
-                <span><Link className="knowledge-title-link" to={`/knowledge/${item.id}`}><strong>{item.title}</strong></Link><small>{item.detail}</small>{item.sourceUrl && <small>Źródło URL: {item.sourceUrl}</small>}{item.sourceInboxItemId && <small>Źródło: Inbox · zachowano oryginał</small>}<small>Powiązania: {state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title).filter(Boolean).join(" · ") || "brak"}</small>{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
+                <span><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail}</small>{item.sourceUrl && <small className="line-clamp-2">Źródło URL: {item.sourceUrl}</small>}{item.sourceInboxItemId && <small>Źródło: Inbox · zachowano oryginał</small>}<small className="line-clamp-2">Powiązania: {state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title).filter(Boolean).join(" · ") || "brak"}</small>{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <Badge tone="neutral">{label}</Badge>
                 <div className="knowledge-actions">
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} onClick={() => setActionsItemId(item.id)}><MoreHorizontal />Więcej</Button>

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare, UserRound } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare, UserRound } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
+import { Avatar, AvatarFallback } from "./ui/avatar";
 import { QuickAdd } from "./QuickAdd";
+import { Sheet } from "./ui/sheet";
 
 const navigation = [
   { to: "/", label: "Dzisiaj", icon: CalendarDays },
@@ -21,6 +23,7 @@ const navigation = [
 export function AppShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   const { state, mode, syncing, error, resetDemo, exportData, reload } = useStore();
   const { user, signOut } = useAuth();
+  const location = useLocation();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -28,12 +31,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
-  const profileStats = [
-    { label: "Aktywne cele", value: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length, icon: Flag },
-    { label: "Ukończone", value: state.actions.filter((action) => action.status === "completed").length, icon: CheckCircle2 },
-    { label: "Wiedza", value: state.knowledge.filter((item) => !item.trashedAt).length, icon: Archive },
-    { label: "Inbox", value: pending, icon: Inbox }
-  ];
+  const moreActive = ["/goals", "/routines", "/knowledge", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   const downloadExport = async () => {
     const data = await exportData();
@@ -95,7 +93,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
             <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>Eksportuj dane</span></button>
             {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
           </div> : null}
-          <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><span className="avatar">{initials}</span><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
+          <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
         </div>
       </aside>
 
@@ -116,22 +114,26 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
         <NavLink to="/" end><CalendarDays /><span>Dzisiaj</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
         <button className={`capture-fab ${quickAddOpen ? "active" : ""}`} aria-expanded={quickAddOpen} onClick={() => setQuickAddOpen(true)} aria-label="Otwórz centrum dodawania"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
-        <NavLink to="/knowledge"><Archive /><span>Wiedza</span></NavLink>
-        <button className="mobile-more-trigger" onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz centrum profilu"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
+        <NavLink to="/inbox" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Inbox />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Inbox</span></NavLink>
+        <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz centrum profilu"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
-      <Modal open={profileCenterOpen} title="Twoje centrum" className="profile-center-modal" onClose={() => setProfileCenterOpen(false)}><div className="mobile-profile-center">
-        <section className="mobile-profile-card" aria-label="Profil użytkownika"><span className="avatar profile-center-avatar">{initials}</span><span><small>Profil</small><strong>{user?.name}</strong><span>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</span></span><UserRound /></section>
-        <section aria-labelledby="profile-stats-heading"><div className="mobile-center-heading"><h3 id="profile-stats-heading">Twój workspace</h3><span>krótkie podsumowanie</span></div><div className="profile-stats-grid">{profileStats.map(({ label, value, icon: Icon }) => <div key={label}><Icon /><strong>{value}</strong><small>{label}</small></div>)}</div></section>
-        <section aria-labelledby="profile-settings-heading"><div className="mobile-center-heading"><h3 id="profile-settings-heading">Profil i dane</h3><span>ustawienia workspace</span></div><div className="profile-settings-list">
-          <div className={`profile-sync-card ${error ? "error" : ""}`}>{error ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Dane są bezpieczne"}</strong><small>{error ? error : mode === "demo" ? "Zapisane w tej przeglądarce" : user?.email}</small></span>{error ? <button type="button" onClick={() => void reload()} aria-label="Spróbuj ponownie"><RotateCcw /></button> : null}</div>
-          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><CalendarCheck /><span><strong>Statystyki i podsumowanie</strong><small>Zobacz postęp z ostatniego tygodnia</small></span><ChevronRight /></NavLink>
-          <button type="button" onClick={() => void downloadExport()}><Download /><span><strong>Eksport danych</strong><small>Pobierz kopię swojego workspace</small></span><ChevronRight /></button>
-          {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span><strong>Przywróć dane demo</strong><small>Rozpocznij ponownie z przykładową zawartością</small></span><ChevronRight /></button> : null}
-          {mode === "supabase" ? <button className="danger" type="button" onClick={() => void signOut()}><LogOut /><span><strong>Wyloguj się</strong><small>Zakończ bieżącą sesję</small></span><ChevronRight /></button> : null}
-        </div></section>
-      </div></Modal>
+      <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
+        <section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{error ? "Błąd synchronizacji" : mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><UserRound /></section>
+        <nav className="mobile-more-links" aria-label="Więcej nawigacji">
+          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><Flag /><span><strong>Cele</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><Repeat2 /><span><strong>Rutyny</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><Archive /><span><strong aria-label="Wiedza">Wiedza</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><CalendarCheck /><span><strong>Podsumowanie</strong></span><ChevronRight /></NavLink>
+        </nav>
+        <div className="mobile-more-actions" aria-label="Akcje konta">
+          {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+          <button type="button" onClick={() => void downloadExport()}><Download /><span>Eksport danych</span></button>
+          {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
+          {mode === "supabase" ? <button className="danger" type="button" onClick={() => void signOut()}><LogOut /><span>Wyloguj się</span></button> : null}
+        </div>
+      </div></Sheet>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { DialogContent } from "./ui/dialog";
 
 export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0 }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: "first" | "input"; exitDurationMs?: number }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -64,13 +65,13 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
     <div className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
-      <div ref={dialogRef} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" aria-labelledby={titleId}>
+      <DialogContent ref={dialogRef} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" aria-labelledby={titleId} showClose={false}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           <button className="icon-button" disabled={closeDisabled} onClick={onClose} aria-label="Zamknij okno"><X /></button>
         </div>
         {children}
-      </div>
+      </DialogContent>
     </div>
   );
 }

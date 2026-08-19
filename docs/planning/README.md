@@ -6,6 +6,12 @@ Fundament bezpieczeństwa zapisu, draftów, undo i potwierdzania ryzykownych
 operacji jest już obecny. Dalszy rozwój nie kontynuuje modelu
 `Commitment → Focus Session → Checkpoint`.
 
+Aktualny plan poprawy użyteczności mobilnej znajduje się w dokumencie
+[Plan poprawek mobilnych i produktywności](./mobile-productivity-remediation-2026-08-19.md).
+Najpierw domyka on dostęp do wszystkich sekcji, poprawne deep linki i reset
+przewinięcia, a dopiero później skraca formularze i porządkuje warstwę
+Tailwind/shadcn.
+
 Aktualnym źródłem decyzji produktowych jest dokument
 [Trwałe Projekty i proste Cele](./project-centered-hierarchy.md). Wcześniejszy
 dokument [Cele, działania cykliczne i wiedza](./goal-centric-redesign.md)

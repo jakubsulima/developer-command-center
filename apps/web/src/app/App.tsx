@@ -12,10 +12,12 @@ import { RoutinesPage } from "../pages/RoutinesPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ProjectDetailPage } from "../pages/ProjectDetailPage";
 import { ReviewPage } from "../pages/ReviewPage";
+import { ScrollToTop } from "../components/ScrollToTop";
 
 export function App() {
   return (
     <ActionFeedbackProvider>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<TodayPage />} />
         <Route path="/routines" element={<RoutinesPage />} />

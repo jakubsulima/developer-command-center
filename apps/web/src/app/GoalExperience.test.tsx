@@ -33,4 +33,13 @@ describe("goal-centric experience", () => {
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /fokus/i })).not.toBeInTheDocument();
   });
+
+  it("opens a Project action inside its Goal context", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects/fintrack-api");
+    const action = await screen.findByRole("link", { name: "Otwórz Zadanie: Zaprojektuj encje i relacje dla transakcji" });
+    await user.click(action);
+    expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
+    expect(screen.getAllByText("Zaprojektuj encje i relacje dla transakcji").length).toBeGreaterThan(0);
+  });
 });
