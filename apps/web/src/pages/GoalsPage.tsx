@@ -5,6 +5,9 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { entityCardVariants, stickyFormActionsVariants } from "../components/ui-variants";
+import { routeForEntity } from "../domain/routes";
 import type { GoalKind, GoalStatus } from "../domain/types";
 import { goalKindLabels as kindLabels, goalStatusLabels as statusLabels } from "../domain/labels";
 
@@ -15,6 +18,13 @@ const systemTemplates = [
   { id: "personal", name: "Osobisty", kind: "personal" as const, outcomePrompt: "Jaka zmiana ma być widoczna?", description: "Wprowadź ważną zmianę", icon: Heart },
   { id: "maintenance", name: "Utrzymanie", kind: "maintenance" as const, outcomePrompt: "Jaki stan chcesz regularnie utrzymywać?", description: "Dbaj o pożądany stan", icon: RefreshCw }
 ];
+
+function goalCountLabel(count: number) {
+  if (count === 1) return "1 Cel";
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  return mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? `${count} Cele` : `${count} Celów`;
+}
 
 export function GoalsPage() {
   const { state, loading: storeLoading, createGoal, createGoalTemplate, updateGoalTemplate, setGoalVisibility, setGoalTemplateVisibility } = useStore();
@@ -32,6 +42,13 @@ export function GoalsPage() {
   const status = (params.get("status") ?? "active") as GoalStatus | "archived" | "trashed" | "all";
   const kind = params.get("kind") as GoalKind | null;
   const activeFilterCount = Number(status !== "active") + Number(Boolean(kind));
+  const statusTabs = (mobile = false) => <Tabs value={status} onValueChange={(value) => { const next = new URLSearchParams(params); next.set("status", value); setParams(next); if (mobile) setFiltersOpen(false); }} className="filter-pills">
+    <TabsList className={mobile ? "grid h-auto w-full grid-cols-2 items-stretch border-0 bg-transparent p-0" : "h-auto flex-wrap border-0 bg-transparent p-0"}>
+      {(["active", "paused", "achieved", "abandoned", "all"] as const).map((value) => <TabsTrigger className="min-h-10 justify-start" role="button" value={value} key={value}>{value === "all" ? "Wszystkie" : statusLabels[value]}</TabsTrigger>)}
+      <TabsTrigger className="min-h-10 justify-start" role="button" value="archived"><Archive />Archiwum</TabsTrigger>
+      <TabsTrigger className="min-h-10 justify-start" role="button" value="trashed"><Trash2 />Kosz</TabsTrigger>
+    </TabsList>
+  </Tabs>;
   useEffect(() => {
     const next = new URLSearchParams(params);
     let changed = false;
@@ -86,11 +103,7 @@ export function GoalsPage() {
       <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" action={<Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Nowy cel</Button>} />
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
-        <div className="filter-pills" role="group" aria-label="Stan Celów">
-          {(["active", "paused", "achieved", "abandoned", "all"] as const).map((value) => <Button aria-pressed={status === value} key={value} variant={status === value ? "primary" : "ghost"} onClick={() => { params.set("status", value); setParams(params); }}>{value === "all" ? "Wszystkie" : statusLabels[value]}</Button>)}
-          <Button aria-pressed={status === "archived"} variant={status === "archived" ? "primary" : "ghost"} onClick={() => { params.set("status", "archived"); setParams(params); }}><Archive />Archiwum</Button>
-          <Button aria-pressed={status === "trashed"} variant={status === "trashed" ? "primary" : "ghost"} onClick={() => { params.set("status", "trashed"); setParams(params); }}><Trash2 />Kosz</Button>
-        </div>
+        {statusTabs()}
         <div className="goal-toolbar-side">
           <select aria-label="Typ Celu" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <Button onClick={() => setSettingsOpen(true)}><Settings2 />Szablony Celów</Button>
@@ -99,17 +112,13 @@ export function GoalsPage() {
       </div>
       <Modal open={filtersOpen} title={`Filtry Celów (${activeFilterCount})`} onClose={() => setFiltersOpen(false)}>
         <div className="mobile-filter-sheet">
-          <div className="filter-pills" role="group" aria-label="Stan Celów">
-            {(["active", "paused", "achieved", "abandoned", "all"] as const).map((value) => <Button aria-pressed={status === value} key={value} variant={status === value ? "primary" : "ghost"} onClick={() => { params.set("status", value); setParams(params); }}>{value === "all" ? "Wszystkie" : statusLabels[value]}</Button>)}
-            <Button aria-pressed={status === "archived"} variant={status === "archived" ? "primary" : "ghost"} onClick={() => { params.set("status", "archived"); setParams(params); }}><Archive />Archiwum</Button>
-            <Button aria-pressed={status === "trashed"} variant={status === "trashed" ? "primary" : "ghost"} onClick={() => { params.set("status", "trashed"); setParams(params); }}><Trash2 />Kosz</Button>
-          </div>
+          {statusTabs(true)}
           <label className="field-label" htmlFor="mobile-goal-kind">Typ Celu</label>
           <select id="mobile-goal-kind" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <div className="modal-actions"><Button variant="ghost" disabled={!activeFilterCount} onClick={() => setParams({})}>Wyczyść filtry</Button><Button variant="primary" onClick={() => setFiltersOpen(false)}>Pokaż {goals.length} Celów</Button></div>
         </div>
       </Modal>
-      <p className="results-summary">{goals.length} Celów{kind ? ` · typ: ${kindLabels[kind]}` : ""}</p>
+      <p className="results-summary">{goalCountLabel(goals.length)}{kind ? ` · typ: ${kindLabels[kind]}` : ""}</p>
       {storeLoading ? <ListSkeleton label="Ładowanie Celów" /> : null}
 
       {goals.length ? <div className="goal-grid">{goals.map((goal) => {
@@ -118,22 +127,24 @@ export function GoalsPage() {
         const blocked = state.actions.some((action) => action.goalId === goal.id && action.status === "blocked");
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
         const overdue = state.actions.some((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status));
-        return <Panel className="goal-card" key={goal.id}>
+        return <Panel className={`${entityCardVariants()} goal-card entity-card`} key={goal.id}>
           <div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{kindLabels[goal.kind]}</Badge><span>{statusLabels[goal.status]}</span></div>
-          <h2>{goal.title}</h2><p>{goal.outcome}</p>
+          <h2 className="line-clamp-2">{goal.title}</h2><p className="line-clamp-2">{goal.outcome}</p>
           <div className="goal-card-context"><span><Layers3 />{areaName ?? "Bez Projektu"}</span><span><Flag />{next?.title ?? "Brak następnego Zadania"}</span></div>
           <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
-          {status === "archived" || status === "trashed" ? <Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button> : <Link className="button button-secondary goal-card-open" to={`/goals/${goal.id}`}>Otwórz cel <ArrowRight /></Link>}
+          {status === "archived" || status === "trashed" ? <Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button> : <Link className="button button-secondary goal-card-open entity-card-open" to={routeForEntity({ type: "goal", id: goal.id })}>Otwórz cel <ArrowRight /></Link>}
         </Panel>;
       })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Zacznij od rezultatu, który jest dla Ciebie ważny. Pierwszy krok możesz dodać od razu albo później." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? <Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Utwórz pierwszy cel</Button> : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>
           <p className="modal-intro">Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.</p>
-          <details className="advanced-options"><summary>Rodzaj i szablon <span className="optional-label">opcjonalnie</span></summary><section className="guided-section"><div className="guided-section-title"><div><strong>Jaki to rodzaj Celu?</strong><small>Wybór zmienia tylko podpowiedzi.</small></div></div>
+          <details className="advanced-options"><summary>Więcej opcji <span className="optional-label">szablon, pierwszy krok i kryteria</span></summary><section className="guided-section"><div className="guided-section-title"><div><strong>Jaki to rodzaj Celu?</strong><small>Wybór zmienia tylko podpowiedzi.</small></div></div>
             <fieldset className="template-choice-grid"><legend className="sr-only">Rodzaj Celu</legend>{systemTemplates.map((item) => { const Icon = item.icon; return <button type="button" aria-pressed={form.templateId === item.id} key={item.id} onClick={() => setForm((current) => ({ ...current, templateId: item.id }))}><Icon /><span><strong>{item.name}</strong><small>{item.description}</small></span></button>; })}</fieldset>
             {state.goalTemplates.some((item) => item.visibility === "active") ? <><label className="field-label" htmlFor="goal-template">Własny szablon <span className="optional-label">opcjonalnie</span></label><select id="goal-template" value={state.goalTemplates.some((item) => item.id === form.templateId) ? form.templateId : ""} onChange={(event) => { const templateId = event.target.value || "blank"; const suggested = state.goalTemplates.find((item) => item.id === templateId)?.defaultActions[0]?.title; setForm((current) => ({ ...current, templateId, firstAction: current.firstAction || suggested || "" })); }}><option value="">Nie używaj własnego szablonu</option>{state.goalTemplates.filter((item) => item.visibility === "active").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></> : null}
             {selectedSystemTemplate && selectedSystemTemplate.id !== "blank" ? <Button type="button" variant="ghost" onClick={() => void createGoalTemplate(`${selectedSystemTemplate.name} — własny`, selectedSystemTemplate.kind, form.firstAction ? [{ title: form.firstAction }] : []).then((id) => setForm((current) => ({ ...current, templateId: id })))}>Zapisz ten układ jako własny szablon</Button> : null}
+            <label className="field-label" htmlFor="goal-first-action">Jaki jest pierwszy krok? <span className="optional-label">opcjonalnie</span></label><input id="goal-first-action" placeholder="Najmniejszy konkretny krok" value={form.firstAction} onChange={(event) => setForm((current) => ({ ...current, firstAction: event.target.value }))} />
+            <label className="field-label" htmlFor="goal-criteria">Kryteria sukcesu <span className="optional-label">jedno w linii</span></label><textarea id="goal-criteria" placeholder={"Np. Stałe koszty są spisane\nLimit wydatków jest ustalony"} rows={3} value={form.criteria} onChange={(event) => setForm((current) => ({ ...current, criteria: event.target.value }))} />
           </section></details>
           <section className="guided-section"><div className="guided-section-title"><span>1</span><div><strong>Nazwij Cel</strong><small>Krótko i konkretnie — jak rezultat, który można zamknąć.</small></div></div>
             <label className="field-label" htmlFor="goal-title">Nazwa Celu</label>
@@ -143,14 +154,12 @@ export function GoalsPage() {
             <textarea id="goal-outcome" placeholder="Np. budżet na kolejny miesiąc jest zatwierdzony" rows={3} aria-invalid={Boolean(fieldErrors.outcome)} aria-describedby={fieldErrors.outcome ? "goal-outcome-error" : undefined} value={form.outcome} onChange={(event) => { setFieldErrors((current) => ({ ...current, outcome: undefined })); setForm((current) => ({ ...current, outcome: event.target.value })); }} />
             {fieldErrors.outcome ? <p id="goal-outcome-error" className="field-error" role="alert">{fieldErrors.outcome}</p> : null}
           </section>
-          <section className="guided-section"><div className="guided-section-title"><span>2</span><div><strong>Dodaj kontekst</strong><small>Projekt i pierwsze Zadanie pomagają od razu umieścić Cel we właściwym miejscu.</small></div></div>
-            <label className="field-label" htmlFor="goal-first-action">Jaki jest pierwszy krok? <span className="optional-label">opcjonalnie</span></label><input id="goal-first-action" placeholder="Najmniejszy konkretny krok" value={form.firstAction} onChange={(event) => setForm((current) => ({ ...current, firstAction: event.target.value }))} />
+          <section className="guided-section"><div className="guided-section-title"><span>2</span><div><strong>Dodaj kontekst</strong><small>Projekt pomaga od razu umieścić Cel we właściwym miejscu.</small></div></div>
             <label className="field-label" htmlFor="goal-area">Projekt <span className="optional-label">opcjonalnie</span></label><select id="goal-area" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((item) => item.visibility === "active").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-            <details className="advanced-fields"><summary>Kryteria sukcesu <span className="optional-label">opcjonalnie</span></summary><div><label className="field-label" htmlFor="goal-criteria">Jedno kryterium w linii</label><textarea id="goal-criteria" placeholder={"Np. Stałe koszty są spisane\nLimit wydatków jest ustalony"} rows={3} value={form.criteria} onChange={(event) => setForm((current) => ({ ...current, criteria: event.target.value }))} /></div></details>
           </section>
           <div className="creation-summary goal-summary" aria-live="polite"><span className="creation-summary-icon"><Sparkles /></span><div><small>Nowy Cel</small><strong>{form.title.trim() || "Nazwij rezultat"}</strong><p>{form.outcome.trim() || "Szczegół wyniku możesz dopisać później."}</p><div className="summary-chips"><span><Layers3 />{selectedProject}</span>{criteriaCount ? <span>{criteriaCount} {criteriaCount === 1 ? "kryterium" : "kryteria"}</span> : null}</div>{form.firstAction.trim() ? <p className="summary-next"><ArrowRight />Pierwsze Zadanie: {form.firstAction}</p> : null}</div></div>
           {error && <p className="auth-message error" role="alert">{error}</p>}
-          <div className="modal-actions"><Button type="button" onClick={() => setNewOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={loading}>Utwórz cel</Button></div>
+          <div className={`modal-actions ${stickyFormActionsVariants({ align: "stretch" })}`}><Button type="button" onClick={() => setNewOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={loading} disabled={!form.title}>Utwórz cel</Button></div>
         </form>
       </Modal>
 

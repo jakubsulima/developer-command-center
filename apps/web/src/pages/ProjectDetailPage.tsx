@@ -7,6 +7,8 @@ import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import type { KnowledgeKind } from "../domain/types";
 import { goalStatusLabels, knowledgeKindLabels } from "../domain/labels";
+import { routeForEntity } from "../domain/routes";
+import { compactTabsVariants, entityCardVariants } from "../components/ui-variants";
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 
@@ -69,21 +71,21 @@ export function ProjectDetailPage() {
       <span><ListChecks /><strong>{openActions.length}</strong><small>Otwarte Zadania</small></span>
       <span><BookOpen /><strong>{knowledge.length}</strong><small>Wiedza</small></span>
     </div>
-    <div className="project-tabs" role="tablist" aria-label="Zawartość Projektu">
+    <div className={`project-tabs ${compactTabsVariants()}`} role="tablist" aria-label="Zawartość Projektu">
       {(["overview", "goals", "actions", "knowledge"] as const).map((value) => <button key={value} role="tab" aria-selected={view === value} onClick={() => setView(value)}>{value === "overview" ? "Przegląd" : value === "goals" ? "Cele" : value === "actions" ? "Zadania" : "Wiedza"}</button>)}
     </div>
 
     <div className="project-sections">
       {visibleSections.includes("goals") ? <section><div className="section-heading"><div><h2>Cele</h2><span>Proste rezultaty do wykonania w tym Projekcie</span></div><Button onClick={() => setDialog("goal")}><Plus />Dodaj Cel</Button></div>
-        {goals.length ? <div className="project-entity-list">{goals.map((goal) => <Panel key={goal.id}><Flag /><span><strong>{goal.title}</strong><small>{goal.outcome}</small></span><Badge>{goalStatusLabels[goal.status]}</Badge><Link className="button button-ghost" to={`/goals/${goal.id}`} aria-label={`Otwórz Cel: ${goal.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<Flag />} title="Brak Celów" detail="Dodaj pierwszy, konkretny rezultat w ramach tego Projektu." action={<Button onClick={() => setDialog("goal")}><Plus />Dodaj Cel</Button>} />}
+        {goals.length ? <div className="project-entity-list">{goals.map((goal) => <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={goal.id}><Flag /><span><strong className="line-clamp-2">{goal.title}</strong><small className="line-clamp-2">{goal.outcome}</small></span><Badge>{goalStatusLabels[goal.status]}</Badge><Link className="button button-ghost entity-card-open" to={routeForEntity({ type: "goal", id: goal.id })} aria-label={`Otwórz Cel: ${goal.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<Flag />} title="Brak Celów" detail="Dodaj pierwszy, konkretny rezultat w ramach tego Projektu." action={<Button onClick={() => setDialog("goal")}><Plus />Dodaj Cel</Button>} />}
       </section> : null}
 
       {visibleSections.includes("actions") ? <section><div className="section-heading"><div><h2>Zadania</h2><span>Konkretne kroki — z Celu albo bezpośrednio z Projektu</span></div><Button onClick={() => setDialog("action")}><Plus />Dodaj Zadanie</Button></div>
-        {actions.length ? <div className="project-entity-list">{actions.map((action) => <Panel key={action.id}>{action.status === "completed" ? <CheckCircle2 /> : <Circle />}<span><strong>{action.title}</strong><small>{action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title : "Zadanie Projektu"}{action.scheduledFor ? ` · ${action.scheduledFor}` : ""}</small></span><Badge tone={action.status === "blocked" ? "danger" : "neutral"}>{action.status === "ready" ? "Do zrobienia" : action.status === "in_progress" ? "W toku" : action.status === "completed" ? "Gotowe" : action.status}</Badge><Link className="button button-ghost" to={`/actions/${action.id}`} aria-label={`Otwórz Zadanie: ${action.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<ListChecks />} title="Brak Zadań" detail="Dodaj pojedynczy krok lub utwórz go wewnątrz Celu." action={<Button onClick={() => setDialog("action")}><Plus />Dodaj Zadanie</Button>} />}
+        {actions.length ? <div className="project-entity-list">{actions.map((action) => <Panel className="entity-card" key={action.id}>{action.status === "completed" ? <CheckCircle2 /> : <Circle />}<span><strong className="line-clamp-2">{action.title}</strong><small className="line-clamp-2">{action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title : "Zadanie Projektu"}{action.scheduledFor ? ` · ${action.scheduledFor}` : ""}</small></span><Badge tone={action.status === "blocked" ? "danger" : "neutral"}>{action.status === "ready" ? "Do zrobienia" : action.status === "in_progress" ? "W toku" : action.status === "completed" ? "Gotowe" : action.status}</Badge><Link className="button button-ghost entity-card-open" to={routeForEntity({ type: "action", id: action.id, goalId: action.goalId })} aria-label={`Otwórz Zadanie: ${action.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<ListChecks />} title="Brak Zadań" detail="Dodaj pojedynczy krok lub utwórz go wewnątrz Celu." action={<Button onClick={() => setDialog("action")}><Plus />Dodaj Zadanie</Button>} />}
       </section> : null}
 
       {visibleSections.includes("knowledge") ? <section><div className="section-heading"><div><h2>Wiedza</h2><span>Notatki, materiały i decyzje zachowane przy Projekcie</span></div><Button onClick={() => setDialog("knowledge")}><Plus />Dodaj Wiedzę</Button></div>
-        {knowledge.length ? <div className="project-entity-list">{knowledge.map((item) => <Panel key={item.id}><FileText /><span><strong>{item.title}</strong><small>{item.detail || knowledgeKindLabels[item.type]}</small></span><Badge>{knowledgeKindLabels[item.type]}</Badge><Link className="button button-ghost" to={`/knowledge/${item.id}`} aria-label={`Otwórz Wiedzę: ${item.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<BookOpen />} title="Brak Wiedzy" detail="Zapisz materiał, decyzję albo notatkę, która ma zostać w tym Projekcie." action={<Button onClick={() => setDialog("knowledge")}><Plus />Dodaj Wiedzę</Button>} />}
+        {knowledge.length ? <div className="project-entity-list">{knowledge.map((item) => <Panel className="entity-card" key={item.id}><FileText /><span><strong className="line-clamp-2">{item.title}</strong><small className="line-clamp-2">{item.detail || knowledgeKindLabels[item.type]}</small></span><Badge>{knowledgeKindLabels[item.type]}</Badge><Link className="button button-ghost entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })} aria-label={`Otwórz Wiedzę: ${item.title}`}><ArrowRight /></Link></Panel>)}</div> : <EmptyState icon={<BookOpen />} title="Brak Wiedzy" detail="Zapisz materiał, decyzję albo notatkę, która ma zostać w tym Projekcie." action={<Button onClick={() => setDialog("knowledge")}><Plus />Dodaj Wiedzę</Button>} />}
       </section> : null}
     </div>
 

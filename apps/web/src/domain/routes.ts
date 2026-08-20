@@ -13,3 +13,7 @@ export function routeForEntity(entity: EntityRoute) {
   if (entity.type === "knowledge") return `/knowledge/${id}`;
   return `/inbox?view=${entity.status}&item=${id}`;
 }
+
+export function goalActionRoute(goalId: string, actionId: string) {
+  return routeForEntity({ type: "action", id: actionId, goalId });
+}

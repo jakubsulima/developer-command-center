@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare, UserRound } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
+import { Avatar, AvatarFallback } from "./ui/avatar";
 import { QuickAdd } from "./QuickAdd";
+import { Sheet } from "./ui/sheet";
 
 const navigation = [
   { to: "/", label: "Dzisiaj", icon: CalendarDays },
@@ -21,13 +23,15 @@ const navigation = [
 export function AppShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   const { state, mode, syncing, error, resetDemo, exportData, reload } = useStore();
   const { user, signOut } = useAuth();
+  const location = useLocation();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
+  const moreActive = ["/goals", "/routines", "/knowledge", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   const downloadExport = async () => {
     const data = await exportData();
@@ -89,7 +93,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
             <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>Eksportuj dane</span></button>
             {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
           </div> : null}
-          <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><span className="avatar">{initials}</span><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
+          <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
         </div>
       </aside>
 
@@ -97,7 +101,6 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
         <span className="mobile-brand" aria-hidden="true"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></span>
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
-        <button className="icon-button mobile-menu-trigger" aria-label="Menu Workspace" onClick={() => setMobileMenuOpen(true)}><Menu /></button>
         <div className="top-actions">
           <Button aria-label="Otwórz szybkie dodawanie" onClick={() => setQuickAddOpen(true)}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error ? "sync-error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
@@ -110,13 +113,27 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Dzisiaj</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className="capture-fab" onClick={() => setQuickAddOpen(true)} aria-label="Dodaj Działanie, Cel, Wiedzę lub wpis do Inboxu"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
-        <NavLink to="/knowledge"><Archive /><span>Wiedza</span></NavLink>
-        <button className="mobile-more-trigger" onClick={() => setMobileMenuOpen(true)} aria-label="Otwórz więcej opcji"><span className="mobile-nav-icon"><Menu />{pending > 0 ? <span className="nav-badge">{pending}</span> : null}</span><span>Więcej</span></button>
+        <button className={`capture-fab ${quickAddOpen ? "active" : ""}`} aria-expanded={quickAddOpen} onClick={() => setQuickAddOpen(true)} aria-label="Otwórz centrum dodawania"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
+        <NavLink to="/inbox" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Inbox />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Inbox</span></NavLink>
+        <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz centrum profilu"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
-      <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
-      <Modal open={mobileMenuOpen} title="Więcej" onClose={() => setMobileMenuOpen(false)}><div className="mobile-workspace-menu"><nav className="mobile-more-nav" aria-label="Więcej opcji"><NavLink to="/goals" onClick={() => setMobileMenuOpen(false)}><Flag /><span><strong>Cele</strong><small>Rezultaty i następne kroki</small></span></NavLink><NavLink to="/routines" onClick={() => setMobileMenuOpen(false)}><Repeat2 /><span><strong>Rutyny</strong><small>Działania cykliczne</small></span></NavLink><NavLink to="/inbox" onClick={() => setMobileMenuOpen(false)}><Inbox /><span><strong>Inbox</strong><small>{pending ? `${pending} elementów czeka` : "Wszystko przejrzane"}</small></span></NavLink><NavLink to="/review" onClick={() => setMobileMenuOpen(false)}><CalendarCheck /><span><strong>Podsumowanie</strong><small>Automatyczny przegląd tygodnia</small></span></NavLink></nav><p className={`sync-mobile ${error ? "error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? `Błąd synchronizacji: ${error}` : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</p>{error ? <Button onClick={() => void reload()}><RotateCcw />Spróbuj ponownie</Button> : null}{mode === "demo" ? <Button onClick={() => { resetDemo(); setMobileMenuOpen(false); }}><RotateCcw />Przywróć demo</Button> : null}<Button onClick={() => void downloadExport()}><Download />Eksportuj dane</Button>{mode === "supabase" ? <Button onClick={() => void signOut()}><LogOut />Wyloguj się</Button> : null}</div></Modal>
+      <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
+      <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
+        <section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{error ? "Błąd synchronizacji" : mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><UserRound /></section>
+        <nav className="mobile-more-links" aria-label="Więcej nawigacji">
+          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><Flag /><span><strong>Cele</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><Repeat2 /><span><strong>Rutyny</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><Archive /><span><strong aria-label="Wiedza">Wiedza</strong></span><ChevronRight /></NavLink>
+          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><CalendarCheck /><span><strong>Podsumowanie</strong></span><ChevronRight /></NavLink>
+        </nav>
+        <div className="mobile-more-actions" aria-label="Akcje konta">
+          {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+          <button type="button" onClick={() => void downloadExport()}><Download /><span>Eksport danych</span></button>
+          {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
+          {mode === "supabase" ? <button className="danger" type="button" onClick={() => void signOut()}><LogOut /><span>Wyloguj się</span></button> : null}
+        </div>
+      </div></Sheet>
     </div>
   );
 }

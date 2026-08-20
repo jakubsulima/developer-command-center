@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -30,6 +30,20 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(navigation).queryByRole("link", { name: /nauka|fokus/i })).not.toBeInTheDocument();
   });
 
+  it("udostępnia komplet głównych sekcji z mobilnej nawigacji", async () => {
+    const user = userEvent.setup();
+    renderApp("/goals/fintrack-api");
+    await screen.findByRole("heading", { name: "FinTrack API" });
+    const mobileNavigation = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
+    expect(within(mobileNavigation).getByRole("link", { name: /Dzisiaj/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: /Projekty/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: /Inbox/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("button", { name: "Otwórz centrum profilu" })).toHaveAttribute("aria-current", "page");
+    await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz centrum profilu" }));
+    const more = screen.getByRole("dialog", { name: "Więcej" });
+    for (const label of ["Cele", "Rutyny", "Wiedza", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+  });
+
   it("otwiera działające menu profilu i zamyka je klawiszem Escape", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -43,6 +57,34 @@ describe("regresje nowego modelu Celów", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu", { name: "Opcje profilu" })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("prowadzi tworzenie przez centralny przycisk i oddziela je od centrum profilu", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Otwórz centrum dodawania" }));
+    const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
+    const quickAdd = createCenter.querySelector(".quick-add");
+    expect(quickAdd).toHaveClass("mobile-chooser");
+    for (const mode of ["Działanie", "Cel", "Wiedza", "Inbox"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
+    expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
+    await user.click(within(createCenter).getByRole("button", { name: "Działanie" }));
+    expect(quickAdd).toHaveClass("mobile-expanded");
+    expect(within(createCenter).getByRole("button", { name: "Wróć do wyboru typu" })).toBeInTheDocument();
+    await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
+    const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
+    await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));
+    expect(within(dateChoices).getByRole("button", { name: "Dzisiaj" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(createCenter).getByRole("button", { name: "Zamknij okno" }));
+
+    await user.click(screen.getByRole("button", { name: "Otwórz centrum profilu" }));
+    const profileCenter = screen.getByRole("dialog", { name: "Więcej" });
+    expect(within(profileCenter).getByText("Jakub Kowalski")).toBeInTheDocument();
+    expect(within(profileCenter).getByRole("button", { name: /Eksport danych/ })).toBeInTheDocument();
+    expect(within(profileCenter).getByRole("link", { name: /Podsumowanie/ })).toHaveAttribute("href", "/review");
+    expect(within(profileCenter).queryByText("Działanie cykliczne")).not.toBeInTheDocument();
   });
 
   it("pokazuje ogólne Rutyny niezależnie od planu dnia i otwiera ich ustawienia", async () => {
@@ -77,7 +119,10 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(await screen.findByRole("button", { name: "Otwórz wyszukiwanie" }));
     const dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
     const search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Zadaniach i Wiedzy" });
+    await waitFor(() => expect(search).toHaveFocus());
+    expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
     await user.type(search, "Portfolio");
+    expect(within(dialog).getByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
     const goalResult = within(dialog).getAllByRole("option").find((option) => within(option).queryByText("Portfolio v2"));
     expect(goalResult).toBeDefined();
     await user.click(goalResult!);
@@ -120,7 +165,8 @@ describe("regresje nowego modelu Celów", () => {
     const dialog = screen.getByRole("dialog", { name: "Filtry Celów (0)" });
     expect(within(dialog).getByRole("button", { name: "Aktywny" })).toHaveAttribute("aria-pressed", "true");
     await user.click(within(dialog).getByRole("button", { name: "Wstrzymany" }));
-    expect(within(dialog).getByRole("button", { name: "Wstrzymany" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("dialog", { name: "Filtry Celów (0)" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filtry (1)" })).toBeInTheDocument();
   });
 
   it("pokazuje walidację nowego Celu przy konkretnych polach", async () => {

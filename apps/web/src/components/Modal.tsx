@@ -1,12 +1,33 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { DialogContent } from "./ui/dialog";
 
-export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean }) {
+export function Modal({ open, title, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0 }: { open: boolean; title: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: "first" | "input"; exitDurationMs?: number }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const [present, setPresent] = useState(open);
+  const [closing, setClosing] = useState(false);
   const titleId = useId();
   onCloseRef.current = onClose;
+  useEffect(() => {
+    if (open) {
+      setPresent(true);
+      setClosing(false);
+      return;
+    }
+    if (!present || exitDurationMs <= 0) {
+      setPresent(false);
+      setClosing(false);
+      return;
+    }
+    setClosing(true);
+    const timeout = window.setTimeout(() => {
+      setPresent(false);
+      setClosing(false);
+    }, exitDurationMs);
+    return () => window.clearTimeout(timeout);
+  }, [exitDurationMs, open, present]);
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
@@ -27,7 +48,8 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
     const frame = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
       if (!dialog || dialog.contains(document.activeElement)) return;
-      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')?.focus();
+      const preferred = initialFocus === "input" ? dialog.querySelector<HTMLElement>('input:not([disabled])') : null;
+      (preferred ?? dialog.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])'))?.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);
@@ -36,20 +58,20 @@ export function Modal({ open, title, onClose, children, role = "dialog", closeOn
       previousFocusRef.current = null;
       previousFocus?.focus();
     };
-  }, [closeDisabled, closeOnBackdrop, open]);
+  }, [closeDisabled, closeOnBackdrop, initialFocus, open]);
 
-  if (!open) return null;
+  if (exitDurationMs > 0 ? !present : !open) return null;
   return (
-    <div className="modal-backdrop" role="presentation" onFocusCapture={(event) => {
+    <div className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
-      <div ref={dialogRef} className="modal" role={role} aria-modal="true" aria-labelledby={titleId}>
+      <DialogContent ref={dialogRef} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" aria-labelledby={titleId} showClose={false}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           <button className="icon-button" disabled={closeDisabled} onClick={onClose} aria-label="Zamknij okno"><X /></button>
         </div>
         {children}
-      </div>
+      </DialogContent>
     </div>
   );
 }

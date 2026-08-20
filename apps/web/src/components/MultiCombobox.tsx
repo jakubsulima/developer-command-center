@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { Input } from "./ui/input";
 
 export interface MultiComboboxOption { id: string; label: string }
 
@@ -13,7 +14,7 @@ export function MultiCombobox({ label, options, value, onChange }: { label: stri
   const choose = (id: string) => { onChange([...value, id]); setQuery(""); setActive(0); setOpen(false); };
   return <div className="multi-combobox">
     <div className="combobox-chips">{selected.map((option) => <span key={option.id}>{option.label}<button type="button" aria-label={`Usuń powiązanie: ${option.label}`} onClick={() => onChange(value.filter((id) => id !== option.id))}><X /></button></span>)}</div>
-    <input role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && available[active] ? `${listId}-${available[active].id}` : undefined} value={query} placeholder="Wyszukaj i dodaj Cel…" onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={(event) => {
+    <Input role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && available[active] ? `${listId}-${available[active].id}` : undefined} value={query} placeholder="Wyszukaj i dodaj Cel…" onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={(event) => {
       if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive((index) => Math.min(available.length - 1, index + 1)); }
       if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(0, index - 1)); }
       if (event.key === "Enter" && open && available[active]) { event.preventDefault(); choose(available[active].id); }
