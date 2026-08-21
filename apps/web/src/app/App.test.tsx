@@ -110,4 +110,14 @@ describe("goal-centric workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
     expect(await screen.findByText("Przygotować plan rozmowy")).toBeInTheDocument();
   });
+
+  it("pusty Start prowadzi do działających akcji wejściowych", async () => {
+    localStorage.setItem("command-center-state-v1", JSON.stringify(emptyState));
+    renderApp();
+    await screen.findByRole("heading", { name: "Start" });
+    expect(screen.queryByRole("link", { name: "Zobacz wszystkie" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dodaj do Wiedzy" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
+    expect(screen.getAllByRole("button", { name: "Dodaj Działanie" }).length).toBeGreaterThanOrEqual(2);
+  });
 });
