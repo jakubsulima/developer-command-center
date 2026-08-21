@@ -22,10 +22,10 @@ function renderApp(path = "/") {
 describe("goal-centric workspace", () => {
   it("przechwytuje treść bez wcześniejszej klasyfikacji", async () => {
     const user = userEvent.setup();
-    renderApp("/inbox");
+    renderApp("/knowledge?section=inbox&capture=true");
     const capture = await screen.findByPlaceholderText("Zapisz myśl, zadanie lub link…");
     await user.type(capture, "Sprawdzić indeks na tabeli transakcji");
-    await user.click(screen.getByRole("button", { name: "Zapisz do Inboxu" }));
+    await user.click(screen.getByRole("button", { name: "Dodaj do Wiedzy" }));
     expect(screen.getAllByText("Sprawdzić indeks na tabeli transakcji").length).toBeGreaterThanOrEqual(1);
     expect(capture).toHaveValue("");
   });
@@ -73,35 +73,33 @@ describe("goal-centric workspace", () => {
 
   it("tworzy, edytuje i wzbogaca własną serię cykliczną", async () => {
     const user = userEvent.setup();
-    renderApp();
-    await screen.findByRole("heading", { name: "Dzisiaj" });
-    await user.click(screen.getByRole("button", { name: "Nowe cykliczne" }));
+    renderApp("/routines");
+    await screen.findByRole("heading", { name: "Rutyny" });
+    await user.click(screen.getByRole("button", { name: "Nowa rutyna" }));
     const create = screen.getByRole("dialog", { name: "Nowe Działanie cykliczne" });
-    expect(within(create).getByText("Tak zapiszesz serię")).toBeInTheDocument();
+    expect(within(create).getByText("Tak zapiszesz Rutynę")).toBeInTheDocument();
     expect(within(create).getByRole("button", { name: /Co tydzień/ })).toHaveAttribute("aria-pressed", "true");
     await user.type(within(create).getByLabelText("Nazwa"), "Cotygodniowy plan posiłków");
     await user.type(within(create).getByLabelText("Opis"), "Ustal menu i listę zakupów");
     await user.click(within(create).getByRole("button", { name: "Utwórz serię" }));
-    const materialSelect = await screen.findByLabelText("Dodaj materiał do serii Cotygodniowy plan posiłków");
-    const series = materialSelect.closest(".series-row") as HTMLElement;
-    expect(within(series).getByText(/Co tydzień/)).toBeInTheDocument();
-    expect(within(series).getByText("Następne")).toBeInTheDocument();
-    expect(within(series).getByText("Start")).toBeInTheDocument();
-    expect(within(series).getByText("Kontekst")).toBeInTheDocument();
-    await user.selectOptions(materialSelect, "know-3");
-    expect(await within(series).findByRole("button", { name: "Odłącz PostgreSQL: constraints and normalization" })).toBeInTheDocument();
-    await user.click(within(series).getByRole("button", { name: "Edytuj" }));
+    const routine = await screen.findByRole("heading", { name: "Cotygodniowy plan posiłków" });
+    expect(routine).toBeInTheDocument();
+    expect(within(routine.closest("section") as HTMLElement).getByText("Najbliższe wykonania")).toBeInTheDocument();
+    await user.click(within(routine.closest("section") as HTMLElement).getByRole("link", { name: "Edytuj ustawienia" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj serię cykliczną" });
     await user.clear(within(edit).getByLabelText("Nazwa"));
     await user.type(within(edit).getByLabelText("Nazwa"), "Plan posiłków i zakupów");
     await user.click(within(edit).getByRole("button", { name: "Zapisz serię" }));
-    expect(await screen.findByLabelText("Dodaj materiał do serii Plan posiłków i zakupów")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Plan posiłków i zakupów" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Start" }));
+    const recurringAction = await screen.findByText("Plan posiłków i zakupów");
+    expect(recurringAction.parentElement).toHaveTextContent("cykliczne");
   });
 
   it("pokazuje podsumowanie podczas szybkiego dodawania Działania", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole("heading", { name: "Dzisiaj" });
+    await screen.findByRole("heading", { name: "Start" });
     await user.click(screen.getByRole("button", { name: "Dodaj Działanie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj Działanie" });
     await user.type(within(dialog).getByLabelText("Nazwa Działania"), "Przygotować plan rozmowy");

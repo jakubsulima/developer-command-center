@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, CalendarDays, Layers3, ListChecks, Pause, Play, Plus, Repeat2, Settings2, ShieldCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { routeForEntity } from "../domain/routes";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -8,6 +8,7 @@ import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { describeRecurringSchedule, nextOccurrenceDates } from "../domain/recurrence";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
+import { RecurringActionForm } from "../components/RecurringActionForm";
 
 const localDate = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const formatDate = (date: string, timeZone: string, weekday = false) => new Intl.DateTimeFormat("pl-PL", { weekday: weekday ? "short" : undefined, day: "numeric", month: "short", year: weekday ? undefined : "numeric", timeZone }).format(new Date(`${date}T12:00:00Z`));
@@ -16,6 +17,9 @@ export function RoutinesPage() {
   const { state, setRecurringStatus } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string>();
   const [filter, setFilter] = useState<"all" | "active" | "paused">("all");
   const currentDate = localDate(state.workspaceTimezone);
   const routines = useMemo(() => state.recurringActionTemplates
@@ -23,6 +27,22 @@ export function RoutinesPage() {
     .sort((a, b) => a.title.localeCompare(b.title, "pl")), [filter, state.recurringActionTemplates]);
   const activeCount = state.recurringActionTemplates.filter((item) => item.status === "active").length;
   const pausedCount = state.recurringActionTemplates.filter((item) => item.status === "paused").length;
+
+  useEffect(() => {
+    const newRoutine = searchParams.get("newRecurring") === "1";
+    const editSeries = searchParams.get("editSeries");
+    if (newRoutine || editSeries) {
+      setEditingTemplateId(editSeries ?? undefined);
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("newRecurring");
+      next.delete("editSeries");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const openNew = () => { setEditingTemplateId(undefined); setFormOpen(true); };
+  const closeForm = () => { setFormOpen(false); setEditingTemplateId(undefined); };
 
   const changeStatus = async (routine: typeof state.recurringActionTemplates[number]) => {
     const nextStatus = routine.status === "active" ? "paused" : "active";
@@ -36,7 +56,7 @@ export function RoutinesPage() {
   };
 
   return <AppShell>
-    <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" action={<Link className="button button-primary" to="/?newRecurring=1"><Plus />Nowa rutyna</Link>} />
+    <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" action={<Button variant="primary" onClick={openNew}><Plus />Nowa rutyna</Button>} />
     <div className="routine-overview" aria-label="Podsumowanie Rutyn">
       <div><Repeat2 /><span><strong>{activeCount}</strong><small>aktywne</small></span></div>
       <div><Pause /><span><strong>{pausedCount}</strong><small>wstrzymane</small></span></div>
@@ -58,8 +78,9 @@ export function RoutinesPage() {
         </dl>
         {routine.checklist.length ? <div className="routine-checklist"><span><ListChecks />Checklista ({routine.checklist.length})</span><ul>{routine.checklist.slice(0, 3).map((item) => <li key={item.title}>{item.title}</li>)}</ul></div> : null}
         {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
-        <div className="routine-card-actions"><Link className="button button-secondary" to={`/?editSeries=${routine.id}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
+        <div className="routine-card-actions"><Link className="button button-secondary" to={`/routines?editSeries=${encodeURIComponent(routine.id)}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
       </Panel>;
-    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Dodaj pierwsze powtarzalne Działanie i wybierz jego rytm." : "Zmień filtr albo utwórz nową Rutynę."} action={<Link className="button button-primary" to="/?newRecurring=1"><Plus />Nowa rutyna</Link>} />}
+    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Dodaj pierwsze powtarzalne Działanie i wybierz jego rytm." : "Zmień filtr albo utwórz nową Rutynę."} action={<Button variant="primary" onClick={openNew}><Plus />Nowa rutyna</Button>} />}
+    <RecurringActionForm open={formOpen} templateId={editingTemplateId} onClose={closeForm} />
   </AppShell>;
 }

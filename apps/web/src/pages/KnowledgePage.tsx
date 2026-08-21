@@ -1,4 +1,4 @@
-import { Archive, BookMarked, FileCode2, FileText, FlaskConical, Link2, MoreHorizontal, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Archive, BookMarked, FileCode2, FileText, FlaskConical, Inbox, Link2, MoreHorizontal, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -11,6 +11,7 @@ import { useActionFeedback } from "../components/action-feedback-context";
 import { MultiCombobox } from "../components/MultiCombobox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
+import { KnowledgeInbox } from "./InboxPage";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -29,6 +30,9 @@ export function KnowledgePage() {
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [query, setQuery] = useState("");
+  const section = params.get("section") === "inbox" ? "inbox" : "library";
+  const captureOpen = params.get("capture") === "true";
+  const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const kind = (params.get("kind") ?? "all") as KnowledgeKind | "all";
   const goalFilter = params.get("goal") ?? "";
   const areaFilter = params.get("area") ?? "";
@@ -39,7 +43,7 @@ export function KnowledgePage() {
   const [actionsItemId, setActionsItemId] = useState<string>();
   const [form, setForm] = useState<{ kind: KnowledgeKind; title: string; detail: string; goalIds: string[]; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
   const normalized = query.trim().toLocaleLowerCase("pl");
-  useEffect(() => { const legacyId = params.get("item"); if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params]);
+  useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
     const next = new URLSearchParams(params); let changed = false;
     if (kind !== "all" && !Object.prototype.hasOwnProperty.call(kinds, kind)) { next.delete("kind"); changed = true; }
@@ -79,39 +83,64 @@ export function KnowledgePage() {
 
   return (
     <AppShell>
-      <PageHeading title="Wiedza" eyebrow="Materiały, notatki, decyzje i rezultaty" action={<Button variant="primary" onClick={() => setModalOpen(true)}><Plus />Nowy element</Button>} />
-      <div className="knowledge-toolbar">
-        <div className="knowledge-search"><Search /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj po tytule, treści i powiązaniach…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-        <label className="sr-only" htmlFor="knowledge-kind">Filtr typu</label>
-        <select id="knowledge-kind" value={kind} onChange={(event) => { if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{Object.entries(kinds).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select>
+      <PageHeading title="Wiedza" eyebrow="Twoja biblioteka materiałów, notatek i decyzji" />
+      <div className="knowledge-section-bar">
+        <div className="knowledge-section-tabs" role="tablist" aria-label="Obszary Wiedzy">
+          <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{state.knowledge.filter((item) => !item.archivedAt && !item.trashedAt).length}</small></button>
+          <button type="button" role="tab" aria-selected={section === "inbox"} onClick={() => { params.set("section", "inbox"); setParams(params); }}><Inbox /><span>Do przejrzenia</span>{pending > 0 ? <small>{pending}</small> : null}</button>
+        </div>
+        <button
+          type="button"
+          className="knowledge-add-trigger"
+          aria-label={section === "library" ? "Nowy element" : captureOpen ? "Zamknij dodawanie" : "Dodaj do kolejki Wiedzy"}
+          aria-expanded={section === "inbox" ? captureOpen : undefined}
+          title={section === "library" ? "Nowy element Wiedzy" : captureOpen ? "Zamknij dodawanie" : "Dodaj do kolejki Wiedzy"}
+          onClick={() => {
+            if (section === "library") { setModalOpen(true); return; }
+            const next = new URLSearchParams(params);
+            if (captureOpen) next.delete("capture"); else next.set("capture", "true");
+            setParams(next);
+          }}
+        ><Plus /></button>
       </div>
-      <div className="knowledge-filter-row"><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><select aria-label="Filtr Obszaru" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Obszar</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
-      <Tabs value={view} onValueChange={(value) => setView(value as View)} className="knowledge-views" aria-label="Widoczność obiektów">
-        <TabsList className="h-auto border-0 bg-transparent p-0">
+      {section === "inbox" ? <KnowledgeInbox /> : <>
+      <div className="knowledge-controls">
+        <div className="knowledge-toolbar">
+          <div className="knowledge-search"><Search /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj w bibliotece…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+          <label className="sr-only" htmlFor="knowledge-kind">Filtr typu</label>
+          <select id="knowledge-kind" value={kind} onChange={(event) => { if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{Object.entries(kinds).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select>
+        </div>
+        <div className="knowledge-filter-row"><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><select aria-label="Filtr Obszaru" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Obszar</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
+      </div>
+      <div className="knowledge-view-row">
+        <Tabs value={view} onValueChange={(value) => setView(value as View)} className="knowledge-views" aria-label="Widoczność obiektów">
+        <TabsList className="knowledge-view-tabs h-auto">
           <TabsTrigger className="min-h-10" value="active">Aktywne</TabsTrigger>
           <TabsTrigger className="min-h-10" value="archived"><Archive />Archiwum</TabsTrigger>
           <TabsTrigger className="min-h-10" value="trashed"><Trash2 />Kosz</TabsTrigger>
         </TabsList>
-      </Tabs>
-      <p className="results-summary" aria-live="polite">{results.length} wyników{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
+        </Tabs>
+        <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
+      </div>
       {loading ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (
-        <div className="knowledge-list">
+        <div className="knowledge-library-surface"><div className="knowledge-list">
           {results.map((item) => {
             const { icon: Icon, label } = kinds[item.type];
             const mutationKey = `visibility:${item.id}`;
+            const relationships = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title ?? state.knowledge.find((knowledge) => knowledge.id === link.targetKnowledgeItemId)?.title).filter(Boolean).join(" · ");
             return (
               <Panel className="entity-card" key={item.id}>
-                <Icon />
-                <span><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail}</small>{item.sourceUrl && <small className="line-clamp-2">Źródło URL: {item.sourceUrl}</small>}{item.sourceInboxItemId && <small>Źródło: Inbox · zachowano oryginał</small>}<small className="line-clamp-2">Powiązania: {state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title).filter(Boolean).join(" · ") || "brak"}</small>{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
+                <span className="knowledge-kind-icon" aria-hidden="true"><Icon /></span>
+                <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail || "Bez dodatkowego opisu"}</small>{relationships || item.sourceInboxItemId ? <span className="knowledge-row-meta">{relationships ? <small className="line-clamp-1">Powiązane: {relationships}</small> : null}{item.sourceInboxItemId ? <small>Źródło: kolejka Wiedzy</small> : null}</span> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <Badge tone="neutral">{label}</Badge>
                 <div className="knowledge-actions">
-                  <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} onClick={() => setActionsItemId(item.id)}><MoreHorizontal />Więcej</Button>
+                  <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
                 </div>
               </Panel>
             );
           })}
-        </div>
+        </div></div>
       ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Notatki, materiały, decyzje, rezultaty i poszukiwania pojawią się tu po świadomym zapisaniu."} action={normalized || kind !== "all" || goalFilter || areaFilter ? <Button onClick={() => { setQuery(""); setParams({}); }}>Wyczyść filtry</Button> : <Button variant="primary" onClick={() => setModalOpen(true)}>Nowy element Wiedzy</Button>} />}
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
         const item = state.knowledge.find((candidate) => candidate.id === actionsItemId);
@@ -138,6 +167,7 @@ export function KnowledgePage() {
         {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
         <div className="modal-actions"><Button disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button variant="primary" loading={createSaving} disabled={!form.title.trim()} onClick={() => void create()}>Zapisz w Wiedzy</Button></div>
       </Modal>
+      </>}
     </AppShell>
   );
 }

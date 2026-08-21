@@ -14,9 +14,9 @@ function renderApp(path = "/") {
 
 describe("regresje nowego modelu Celów", () => {
   it.each([
-    ["/", "Dzisiaj"], ["/routines", "Rutyny"], ["/goals", "Cele"], ["/inbox", "Inbox"], ["/knowledge", "Wiedza"],
-    ["/focus", "Dzisiaj"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
-    ["/learning", "Cele"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Dzisiaj"]
+    ["/", "Start"], ["/routines", "Rutyny"], ["/goals", "Cele"], ["/inbox", "Wiedza"], ["/knowledge", "Wiedza"],
+    ["/focus", "Start"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
+    ["/learning", "Cele"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
   ])("renderuje lub przekierowuje trasę %s", async (path, heading) => {
     renderApp(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
@@ -24,9 +24,10 @@ describe("regresje nowego modelu Celów", () => {
 
   it("pokazuje Projekty i Cele jako osobne kierunki nawigacji i nie eksponuje Fokusów", async () => {
     renderApp();
-    await screen.findByRole("heading", { name: "Dzisiaj" });
+    await screen.findByRole("heading", { name: "Start" });
     const navigation = screen.getByRole("navigation", { name: "Główna nawigacja" });
-    for (const label of ["Dzisiaj", "Projekty", "Rutyny", "Cele", "Wiedza", "Inbox", "Podsumowanie"]) expect(within(navigation).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Start", "Projekty", "Rutyny", "Cele", "Wiedza", "Podsumowanie"]) expect(within(navigation).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    expect(within(navigation).queryByRole("link", { name: /Inbox/ })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole("link", { name: /nauka|fokus/i })).not.toBeInTheDocument();
   });
 
@@ -35,13 +36,13 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
     const mobileNavigation = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
-    expect(within(mobileNavigation).getByRole("link", { name: /Dzisiaj/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: /Start/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("link", { name: /Projekty/ })).toBeInTheDocument();
-    expect(within(mobileNavigation).getByRole("link", { name: /Inbox/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: /Wiedza/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz centrum profilu" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz centrum profilu" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Cele", "Rutyny", "Wiedza", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Cele", "Rutyny", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
   });
 
   it("otwiera działające menu profilu i zamyka je klawiszem Escape", async () => {
@@ -68,7 +69,8 @@ describe("regresje nowego modelu Celów", () => {
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).toHaveClass("mobile-chooser");
-    for (const mode of ["Działanie", "Cel", "Wiedza", "Inbox"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
+    for (const mode of ["Działanie", "Cel", "Wiedza"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
+    expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
     await user.click(within(createCenter).getByRole("button", { name: "Działanie" }));
     expect(quickAdd).toHaveClass("mobile-expanded");
@@ -132,22 +134,22 @@ describe("regresje nowego modelu Celów", () => {
 
   it("wykonuje intencyjne triage Inboxu do Wiedzy i zachowuje źródło", async () => {
     const user = userEvent.setup();
-    renderApp("/inbox");
+    renderApp("/knowledge?section=inbox");
     const source = await screen.findByText("https://www.postgresql.org/docs/current/erd.html");
     const item = source.closest("section") as HTMLElement;
-    await user.click(within(item).getByRole("button", { name: "Co chcesz z tym zrobić?" }));
+    await user.click(within(item).getByRole("button", { name: "Przetwórz" }));
     const decision = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
-    await user.click(within(decision).getByText("Zapisz w Wiedzy").closest("button")!);
+    await user.click(within(decision).getByText("Zapisz w bibliotece").closest("button")!);
     await user.clear(screen.getByLabelText("Tytuł"));
     await user.type(screen.getByLabelText("Tytuł"), "Dokumentacja PostgreSQL ERD");
     const knowledgeDialog = screen.getByRole("dialog", { name: "Zapisz w Wiedzy" });
     await user.click(within(knowledgeDialog).getByRole("button", { name: "Zapisz" }));
     await user.click(screen.getAllByRole("link", { name: /Wiedza/ })[0]!);
     expect(await screen.findByText("Dokumentacja PostgreSQL ERD")).toBeInTheDocument();
-    expect(screen.getByText(/Źródło: Inbox/)).toBeInTheDocument();
+    expect(screen.getByText(/Źródło: kolejka Wiedzy/)).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Dokumentacja PostgreSQL ERD" }));
     expect(await screen.findByRole("heading", { name: "Pochodzenie" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /https:\/\/www\.postgresql\.org\/docs\/current\/erd\.html.*Otwórz wpis/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /https:\/\/www\.postgresql\.org\/docs\/current\/erd\.html.*Otwórz przechwycenie/ })).toBeInTheDocument();
   });
 
   it("filtruje Wiedzę i pokazuje pusty wynik", async () => {
@@ -212,6 +214,15 @@ describe("regresje nowego modelu Celów", () => {
     expect(screen.queryByRole("link", { name: "Zbudować spokojny budżet domowy" })).not.toBeInTheDocument();
   });
 
+  it("dołącza materiał do decyzji jako potwierdzenie", async () => {
+    const user = userEvent.setup();
+    renderApp("/knowledge/know-2");
+    await screen.findByRole("heading", { name: "Typ danych dla kwot pieniężnych" });
+    await user.selectOptions(screen.getByLabelText("Materiał potwierdzający decyzję"), "know-3");
+    await user.click(screen.getByRole("button", { name: "Dołącz" }));
+    expect(await screen.findByRole("link", { name: "PostgreSQL: constraints and normalization" })).toBeInTheDocument();
+  });
+
   it("archiwizuje Wiedzę i pozwala cofnąć zmianę", async () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
@@ -243,25 +254,25 @@ describe("regresje nowego modelu Celów", () => {
     expect(screen.queryByRole("button", { name: /start|wznów|pauza|checkpoint/i })).not.toBeInTheDocument();
   });
 
-  it("dodaje z dowolnego widoku do Inboxu bez utraty kontekstu i czyści draft po sukcesie", async () => {
+  it("dodaje z dowolnego widoku do kolejki Wiedzy bez utraty kontekstu i czyści draft po sukcesie", async () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
     expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Inbox" }));
+    await user.click(within(dialog).getByRole("button", { name: "Wiedza" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz do Inboxu" }));
+    await user.click(within(dialog).getByRole("button", { name: "Dodaj do Wiedzy" }));
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Dodaj" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Zapisano do Inboxu.");
+    expect(screen.getByRole("status")).toHaveTextContent("Dodano do Wiedzy. Materiał czeka na przetworzenie.");
   });
 
   it("rozpoznaje komendę /cel i tworzy Cel z jednego pola", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole("heading", { name: "Dzisiaj" });
+    await screen.findByRole("heading", { name: "Start" });
     await user.keyboard("{Control>}j{/Control}");
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
@@ -272,16 +283,16 @@ describe("regresje nowego modelu Celów", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Cel utworzony.");
   });
 
-  it("zapisuje Wiedzę z tego samego szybkiego formularza", async () => {
+  it("przechwytuje Wiedzę z tego samego szybkiego formularza do późniejszego przetworzenia", async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole("heading", { name: "Dzisiaj" });
+    await screen.findByRole("heading", { name: "Start" });
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
     await user.click(within(dialog).getByRole("button", { name: "Wiedza" }));
-    await user.type(within(dialog).getByLabelText("Co chcesz zapamiętać?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz w Wiedzy" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Zapisano w Wiedzy.");
+    await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
+    await user.click(within(dialog).getByRole("button", { name: "Dodaj do Wiedzy" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Dodano do Wiedzy. Materiał czeka na przetworzenie.");
   });
 
   it("pokazuje automatyczne podsumowanie tygodnia z sugestiami", async () => {

@@ -14,7 +14,9 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260804124522_goal_centric_model.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260805193000_ui_ux_remediation_commands.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260807120000_projects_as_persistent_contexts.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260809130312_harden_public_release_boundaries.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260809130312_harden_public_release_boundaries.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260820182555_link_knowledge_as_decision_evidence.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260820182703_index_knowledge_evidence_fk.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -229,6 +231,7 @@ describe("migracje Supabase", () => {
     const goalId = "90000000-0000-0000-0000-000000000010";
     const actionId = "90000000-0000-0000-0000-000000000011";
     const knowledgeId = "90000000-0000-0000-0000-000000000012";
+    const decisionId = "90000000-0000-0000-0000-000000000016";
     const seriesId = "90000000-0000-0000-0000-000000000014";
     await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace I"}', '{"workspace_name":"Workspace J"}']);
     const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
@@ -294,6 +297,11 @@ describe("migracje Supabase", () => {
     await database.query("select public.update_knowledge_item($1, '{\"title\":\"Powtórzona próba\"}'::jsonb, $2::jsonb, $3)", [knowledgeId, replacementLinks, updateKnowledgeCommand]);
     expect(await scalar<string>("select title from public.entities where id = $1", [knowledgeId])).toBe("Nowa notatka");
     expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and goal_id is not null", [knowledgeId])).toBe(0);
+
+    await database.query("select public.create_knowledge_with_goal_links($1, $2, 'decision', 'Wybieramy PostgreSQL', 'Uzasadnienie', null, '[]'::jsonb, 'decision', $3)", [workspace, decisionId, "90000000-0000-0000-0000-000000000036"]);
+    await database.query("insert into public.knowledge_links (workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ($1, $2, $3, 'material')", [workspace, knowledgeId, decisionId]);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and target_knowledge_entity_id = $2", [knowledgeId, decisionId])).toBe(1);
+    await expect(database.query("insert into public.knowledge_links (workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ($1, $2, $2, 'material')", [workspace, decisionId])).rejects.toThrow("knowledge_links_no_self_reference_check");
 
     await expect(database.query("insert into public.inbox_items (workspace_id, kind, raw_content) values ($1, 'voice', 'fałszywe nagranie')", [workspace])).rejects.toThrow("capture_asset_required");
     await expect(database.query("insert into public.inbox_items (workspace_id, kind, raw_content) values ($1, 'link', 'javascript:alert(1)')", [workspace])).rejects.toThrow("invalid_capture_url");

@@ -39,16 +39,21 @@ czasowej. Wystąpienie można zmienić lub ukończyć bez zmiany serii.
 Krótka notatka, decyzja, rezultat, dowód albo blocker na osi czasu Celu.
 
 **Knowledge / Wiedza**:
-Samodzielna biblioteka Notatek, Materiałów, Decyzji, Rezultatów i Poszukiwań.
-Jeden element może mieć wiele relacji z Celami, Działaniami i seriami.
+Jeden obszar obejmujący kolejkę surowych przechwyceń oraz bibliotekę Notatek,
+Materiałów, Decyzji, Rezultatów i Poszukiwań. Link albo treść dodane z globalnego
+„Dodaj” trafiają najpierw do kolejki Wiedzy, gdzie można je przetworzyć. Element
+Wiedzy może mieć wiele relacji z Celami, Działaniami, seriami i innymi elementami
+Wiedzy; Materiał może na przykład potwierdzać Decyzję.
 
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
 planem, sesją pracy, timerem ani osobnym stanem domenowym.
 
 **Inbox Item**:
-Zachowana koperta surowego przechwycenia. Triage zaczyna się od intencji:
-utwórz Cel, dodaj Działanie, zapisz w Wiedzy, odłóż albo odrzuć.
+Techniczna, zachowana koperta surowego przechwycenia widoczna jako kolejka
+„Do przetworzenia” wewnątrz Wiedzy. Nie jest osobnym modułem nawigacji. Triage
+zaczyna się od intencji: utwórz Cel, dodaj Działanie, zapisz w bibliotece
+Wiedzy, odłóż albo odrzuć.
 
 **Archive** i **Trash**:
 Odwracalne stany widoczności niezależne od osiągnięcia, ukończenia lub

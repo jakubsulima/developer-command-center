@@ -3,7 +3,7 @@ import { InboxPage } from "../pages/InboxPage";
 import { KnowledgePage } from "../pages/KnowledgePage";
 import { GoalsPage } from "../pages/GoalsPage";
 import { GoalDetailPage } from "../pages/GoalDetailPage";
-import { TodayPage } from "../pages/TodayPage";
+import { StartPage } from "../pages/StartPage";
 import { LegacyFocusHistoryPage } from "../pages/LegacyFocusHistoryPage";
 import { KnowledgeDetailPage } from "../pages/KnowledgeDetailPage";
 import { ActionFeedbackProvider } from "../components/ActionFeedback";
@@ -19,7 +19,7 @@ export function App() {
     <ActionFeedbackProvider>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<TodayPage />} />
+        <Route path="/" element={<StartPage />} />
         <Route path="/routines" element={<RoutinesPage />} />
         <Route path="/focus" element={<Navigate to="/" replace />} />
         <Route path="/inbox" element={<InboxPage />} />

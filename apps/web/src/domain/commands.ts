@@ -147,6 +147,7 @@ export type DomainCommand = {
   type: "link_knowledge";
   id: string;
   knowledgeItemId: string;
+  targetKnowledgeItemId?: string;
   areaId?: string;
   goalId?: string;
   actionId?: string;
@@ -401,14 +402,18 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
 
   if (command.type === "link_knowledge") {
     if (!state.knowledge.some((item) => item.id === command.knowledgeItemId)) throw new Error("knowledge_item_not_found");
-    if ([command.areaId, command.goalId, command.actionId, command.recurringTemplateId].filter(Boolean).length !== 1) throw new Error("knowledge_link_target_required");
+    if ([command.targetKnowledgeItemId, command.areaId, command.goalId, command.actionId, command.recurringTemplateId].filter(Boolean).length !== 1) throw new Error("knowledge_link_target_required");
+    if (command.targetKnowledgeItemId && !state.knowledge.some((item) => item.id === command.targetKnowledgeItemId)) throw new Error("knowledge_target_not_found");
+    if (command.targetKnowledgeItemId === command.knowledgeItemId) throw new Error("knowledge_self_link_not_allowed");
     const duplicate = state.knowledgeLinks.some((link) => link.knowledgeItemId === command.knowledgeItemId
       && link.areaId === command.areaId && link.goalId === command.goalId && link.actionId === command.actionId
-      && link.recurringTemplateId === command.recurringTemplateId && link.meaning === command.meaning);
+      && link.recurringTemplateId === command.recurringTemplateId && link.targetKnowledgeItemId === command.targetKnowledgeItemId
+      && link.meaning === command.meaning);
     if (duplicate) return state;
     return { ...state, knowledgeLinks: [...state.knowledgeLinks, {
       id: command.id,
       knowledgeItemId: command.knowledgeItemId,
+      targetKnowledgeItemId: command.targetKnowledgeItemId,
       areaId: command.areaId,
       goalId: command.goalId,
       actionId: command.actionId,

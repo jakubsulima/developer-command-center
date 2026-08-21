@@ -13,12 +13,12 @@ export function ActionDetailPage() {
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const action = state.actions.find((candidate) => candidate.id === actionId && !candidate.goalId);
-  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innego Workspace'u." action={<Link className="button button-primary" to="/">Wróć do Dzisiaj</Link>} /></AppShell>;
+  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innego Workspace'u." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
     const previous = action.pinnedToToday;
     await mutation.run(`action-detail:${action.id}`, async () => {
       await updateAction(action.id, { pinnedToToday: !previous });
-      notifyUndo({ message: previous ? "Działanie odpięte od Dzisiaj." : "Działanie przypięte do Dzisiaj.", undo: () => updateAction(action.id, { pinnedToToday: previous }) });
+      notifyUndo({ message: previous ? "Działanie odpięte od Startu." : "Działanie przypięte do Startu.", undo: () => updateAction(action.id, { pinnedToToday: previous }) });
     });
   };
   const complete = async () => {
@@ -34,7 +34,7 @@ export function ActionDetailPage() {
     : null;
 
   return <AppShell><div className="action-detail-page">
-    <Link className="back-link" to="/"><ArrowLeft />Dzisiaj</Link>
+    <Link className="back-link" to="/"><ArrowLeft />Start</Link>
     <PageHeading title={action.title} eyebrow="Samodzielne Działanie" />
     <Panel className="detail-section" aria-busy={mutation.isBusy(key)}>
       <div className="section-heading">
@@ -50,7 +50,7 @@ export function ActionDetailPage() {
       </div>
       {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
       <div className="action-detail-actions">
-        <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Dzisiaj" : "Przypnij do Dzisiaj"}</Button>
+        <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button>
         {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}
       </div>
     </Panel>
