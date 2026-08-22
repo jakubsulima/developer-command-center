@@ -6,13 +6,14 @@ import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { actionStatusLabels } from "../domain/labels";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
+import { resolveActionContext } from "../domain/actionContext";
 
 export function ActionDetailPage() {
   const { actionId } = useParams();
   const { state, updateAction, setActionStatus } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
-  const action = state.actions.find((candidate) => candidate.id === actionId && !candidate.goalId);
+  const action = state.actions.find((candidate) => candidate.id === actionId);
   if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innego Workspace'u." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
     const previous = action.pinnedToToday;
@@ -33,14 +34,16 @@ export function ActionDetailPage() {
     ? new Date(`${action.scheduledFor}T12:00:00Z`).toLocaleDateString("pl-PL")
     : null;
 
+  const context = resolveActionContext(action, state);
   return <AppShell><div className="action-detail-page">
-    <Link className="back-link" to="/"><ArrowLeft />Start</Link>
-    <PageHeading title={action.title} eyebrow="Samodzielne Działanie" />
+    <Link className="back-link" to={context.to}><ArrowLeft />{context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"}</Link>
+    <PageHeading title={action.title} eyebrow={context.name ? `${context.label} · ${context.name}` : context.label} />
     <Panel className="detail-section" aria-busy={mutation.isBusy(key)}>
       <div className="section-heading">
         <h2>Szczegóły</h2>
         <Badge tone={action.status === "completed" ? "success" : action.status === "blocked" ? "danger" : "info"}>{actionStatusLabels[action.status]}</Badge>
       </div>
+      {context.kind === "missing-project" ? <p className="muted-copy" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
       <div className="action-detail-content">
         <div>
           <span className="action-detail-label">Opis</span>

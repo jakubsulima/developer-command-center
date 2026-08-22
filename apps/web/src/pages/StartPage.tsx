@@ -10,6 +10,8 @@ import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { deriveHomeSummary } from "../domain/homeSummary";
 import type { GoalAction } from "../domain/types";
 import { routeForEntity } from "../domain/routes";
+import { describeActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
+import { formatWorkspaceDateRange } from "../domain/activity";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
@@ -17,7 +19,7 @@ const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("
 
 function StartActionRow({ action, context, complete, reschedule, skip, togglePin, setNext, openMore, busy, error, retry }: {
   action: GoalAction;
-  context: string;
+  context: ActionContext;
   complete: (actionId: string) => Promise<void>;
   reschedule: (actionId: string, scheduledFor: string) => Promise<void>;
   skip: (action: GoalAction) => Promise<void>;
@@ -30,7 +32,7 @@ function StartActionRow({ action, context, complete, reschedule, skip, togglePin
 }) {
   return <div className="today-action">
     <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => void complete(action.id)} onSetNext={() => void setNext(action)} onMore={() => openMore(action.id)} />
-    <div className="action-copy"><strong>{action.title}</strong><small>{context}{action.recurringTemplateId ? <> · <Repeat2 /> cykliczne</> : null}</small></div>
+    <div className="action-copy"><strong>{action.title}</strong><small>{context.to !== "/" ? <Link to={context.to}>{describeActionContext(context)}</Link> : describeActionContext(context)}{action.recurringTemplateId ? <> · <Repeat2 /> cykliczne</> : null}</small></div>
     {action.status === "blocked" ? <Badge tone="danger">Zablokowane</Badge> : null}
     <div className="today-row-actions">
       <Button variant="ghost" disabled={busy} loading={busy} aria-label={action.pinnedToToday ? `Odepnij od Start: ${action.title}` : `Przypnij do Start: ${action.title}`} onClick={() => void togglePin(action)}>{action.pinnedToToday ? "Odepnij" : "Przypnij"}</Button>
@@ -69,7 +71,7 @@ export function StartPage() {
   const togglePin = (action: GoalAction) => mutation.run(`start:${action.id}`, async () => { await updateAction(action.id, { pinnedToToday: !action.pinnedToToday }); notifyUndo({ message: action.pinnedToToday ? "Odpięto od Startu." : "Przypięto do Startu.", undo: () => updateAction(action.id, { pinnedToToday: action.pinnedToToday }) }); });
   const setNext = (action: GoalAction) => action.goalId ? mutation.run(`start:${action.id}`, () => setNextAction(action.goalId!, action.id)) : Promise.resolve();
   const skip = (action: GoalAction) => mutation.run(`start:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, action.status, action.blocker) }); });
-  const contextFor = (action: GoalAction) => state.goals.find((goal) => goal.id === action.goalId)?.title ?? state.areas.find((area) => area.id === action.areaId)?.name ?? "Samodzielne Działanie";
+  const contextFor = (action: GoalAction) => resolveActionContext(action, state);
   const renderAction = (action: GoalAction) => <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} complete={complete} reschedule={reschedule} skip={skip} togglePin={togglePin} setNext={setNext} openMore={setActionMenuId} busy={mutation.isBusy(`start:${action.id}`)} error={mutation.error(`start:${action.id}`)} retry={mutation.retry(`start:${action.id}`)} /></div>;
 
   const submitAction = async (event: FormEvent) => {
@@ -96,20 +98,20 @@ export function StartPage() {
   const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
 
   return <AppShell>
-    <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(new Date())} action={<Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button>} />
+    <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} action={hasWork ? <Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button> : undefined} />
 
-    <Panel className="start-recommendation" aria-labelledby="start-recommendation-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Priorytet</span><h2 id="start-recommendation-title">Najważniejsze teraz</h2></div><Badge tone={summary.recommendation.kind === "calm" ? "success" : "warning"}>{summary.recommendation.kind === "calm" ? "Spokojny stan" : "Jedna decyzja"}</Badge></div><div className="recommendation-content"><div><strong>{summary.recommendation.title}</strong><p>{summary.recommendation.detail}</p></div>{summary.recommendation.kind === "calm" ? <Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button> : <Link className="button button-primary" to={summary.recommendation.to}>Przejdź do decyzji<ChevronRight /></Link>}</div></Panel>
+    {summary.recommendation.kind !== "calm" ? <Panel className="start-recommendation" aria-labelledby="start-recommendation-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Priorytet</span><h2 id="start-recommendation-title">Najważniejsze teraz</h2></div><Badge tone="warning">Jedna decyzja</Badge></div><div className="recommendation-content"><div><strong>{summary.recommendation.title}</strong><p>{summary.recommendation.detail}</p></div><Link className="button button-primary" to={summary.recommendation.to}>Przejdź do decyzji<ChevronRight /></Link></div></Panel> : null}
 
     <Panel className="start-attention" aria-labelledby="start-attention-title"><div className="start-section-heading"><div><span className="eyebrow"><CircleAlert />Exception-first</span><h2 id="start-attention-title">Wymaga uwagi</h2></div><span className="count-chip" aria-label={`${summary.attentionCount} spraw wymaga uwagi`}>{summary.attentionCount}</span></div>{attentionItems.length ? <div className="attention-list">{attentionItems.map((signal) => <Link key={signal.id} to={signal.to}><span className={`attention-marker attention-${signal.kind}`} aria-hidden="true" /><span><strong>{signal.title}</strong><small>{signal.detail}</small></span><ChevronRight /></Link>)}</div> : <p className="muted-copy">Brak blokad, zaległości i decyzji czekających na Ciebie.</p>}{summary.attentionCount > 5 ? <Link className="section-link" to="/?show=attention">{showAll("attention") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
 
     <div className="today-layout start-layout">
       <div className="today-main start-main">
         <Panel aria-labelledby="start-today-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarDays />Plan dnia</span><h2 id="start-today-title">Na dziś</h2></div><span className="count-chip" aria-label={`${summary.todayActions.length} działań na dziś`}>{summary.todayActions.length}</span></div>{todayItems.length ? <div className="today-list">{todayItems.map(renderAction)}</div> : <p className="muted-copy">Nic nie jest zaplanowane ani przypięte na dziś.</p>}{summary.todayActions.length > 5 ? <Link className="section-link" to="/?show=today">{showAll("today") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-        {!hasWork ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Start jest spokojny" detail="Nie ma pilnych spraw. Dodaj pierwsze Działanie albo zapisz coś, co warto zachować w Wiedzy." action={<div className="button-row"><Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button><Link className="button button-secondary" to="/knowledge?section=inbox&capture=true"><Archive />Dodaj do Wiedzy</Link></div>} /></Panel> : null}
+        {!hasWork ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Zacznij od jednego kroku" detail="Workspace jest pusty. Wykonaj pierwsze Działanie albo zapisz myśl do późniejszego uporządkowania." action={<div className="button-row"><Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button><Link className="button button-secondary" to="/knowledge?section=inbox&capture=true"><Archive />Zapisz do Skrzynki</Link></div>} /></Panel> : null}
       </div>
       <aside className="today-aside start-aside">
         <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h2 id="start-upcoming-title">Nadchodzące</h2></div><span className="count-chip" aria-label={`${summary.upcomingActions.length} nadchodzących działań`}>{summary.upcomingActions.length}</span></div>{upcomingItems.length ? upcomingItems.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><Link to={routeForEntity({ type: "action", id: action.id, goalId: action.goalId })}>{action.title}{action.recurringTemplateId ? <small><Repeat2 />cykliczne</small> : null}</Link></div>) : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{summary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-        <Panel aria-labelledby="start-activity-title"><div className="start-section-heading"><div><span className="eyebrow"><TrendingUp />Rytm pracy</span><h2 id="start-activity-title">Ostatnie 7 dni</h2></div></div><div className="activity-grid"><div><strong>{summary.activity.completedActions}</strong><span>ukończonych Działań</span></div><div><strong>{summary.activity.progressUpdates}</strong><span>aktualizacji postępu</span></div><div><strong>{summary.activity.knowledgeAdded}</strong><span>dodanych elementów Wiedzy</span></div></div><p className="muted-copy">To informacja o ruchu w Workspace, nie ocena produktywności.</p></Panel>
+        <Panel aria-labelledby="start-activity-title"><div className="start-section-heading"><div><span className="eyebrow"><TrendingUp />Rytm pracy</span><h2 id="start-activity-title">Bieżący tydzień</h2></div></div><p className="activity-period">{formatWorkspaceDateRange(summary.activity.periodStart, summary.activity.periodEnd)}</p><div className="activity-grid"><div><strong>{summary.activity.completedActions}</strong><span>ukończonych Działań</span></div><div><strong>{summary.activity.progressUpdates}</strong><span>aktualizacji postępu</span></div><div><strong>{summary.activity.knowledgeAdded}</strong><span>dodanych elementów Wiedzy</span></div></div><p className="muted-copy">To informacja o ruchu w Workspace, nie ocena produktywności.</p></Panel>
       </aside>
     </div>
 

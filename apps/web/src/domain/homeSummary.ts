@@ -1,5 +1,6 @@
-import type { AppState, Goal, GoalAction, InboxItem, KnowledgeItem, ProgressEntry } from "./types";
-import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions, withinDateRange } from "./weeklyReview";
+import type { AppState, Goal, GoalAction, InboxItem } from "./types";
+import { localDateForTimeZone, selectWorkspaceActivity } from "./activity";
+import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
 export type HomeAttentionKind = "blocked" | "overdue" | "goal_without_next_action" | "knowledge_queue";
 export type HomeRecommendationKind = HomeAttentionKind | "today_action" | "calm";
@@ -26,6 +27,8 @@ export interface HomeActivitySummary {
   completedActions: number;
   progressUpdates: number;
   knowledgeAdded: number;
+  periodStart: string;
+  periodEnd: string;
 }
 
 export interface HomeSummary {
@@ -41,29 +44,10 @@ export interface HomeSummary {
   knowledgeQueue: InboxItem[];
 }
 
-export function localDateForTimeZone(now: Date, timeZone: string) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-}
-
 function shiftDate(value: string, amount: number) {
   const result = new Date(`${value}T12:00:00Z`);
   result.setUTCDate(result.getUTCDate() + amount);
   return result.toISOString().slice(0, 10);
-}
-
-function zonedStartOfDay(value: string, timeZone: string) {
-  const guess = new Date(`${value}T00:00:00.000Z`);
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(guess);
-  const numeric = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
-  const represented = Date.UTC(numeric.year, numeric.month - 1, numeric.day, numeric.hour, numeric.minute, numeric.second);
-  return new Date(guess.getTime() - (represented - guess.getTime()));
-}
-
-function localDayBounds(now: Date, timeZone: string) {
-  const today = localDateForTimeZone(now, timeZone);
-  const start = zonedStartOfDay(shiftDate(today, -6), timeZone);
-  const end = zonedStartOfDay(shiftDate(today, 1), timeZone);
-  return { today, start, end };
 }
 
 function sortByAge<T extends { id: string; createdAt?: string; scheduledFor?: string }>(items: T[]) {
@@ -91,7 +75,8 @@ function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeA
 }
 
 export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummary {
-  const { today, start, end } = localDayBounds(now, state.workspaceTimezone);
+  const today = localDateForTimeZone(now, state.workspaceTimezone);
+  const activity = selectWorkspaceActivity(state, now);
   const blocked = sortByAge(blockedActions(state));
   const overdue = sortByAge(
     overdueActions(state, today).filter((action) => action.status !== "blocked"),
@@ -110,7 +95,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
     ...blocked.map((action) => signalForAction("blocked", action)),
     ...overdue.map((action) => signalForAction("overdue", action)),
     ...goalsWithoutNextAction.map((goal) => ({ id: `goal-${goal.id}`, kind: "goal_without_next_action" as const, title: goal.title, detail: "Aktywny Cel nie ma gotowego następnego Działania.", to: `/goals/${encodeURIComponent(goal.id)}`, goalId: goal.id })),
-    ...queue.map((item) => ({ id: `knowledge-${item.id}`, kind: "knowledge_queue" as const, title: item.content, detail: "Element kolejki Wiedzy czeka na decyzję.", to: `/knowledge?section=inbox&status=${item.status}&item=${encodeURIComponent(item.id)}`, inboxItemId: item.id }))
+    ...queue.map((item) => ({ id: `knowledge-${item.id}`, kind: "knowledge_queue" as const, title: item.content, detail: "Element Skrzynki czeka na decyzję.", to: `/knowledge?section=inbox&status=${item.status}&item=${encodeURIComponent(item.id)}`, inboxItemId: item.id }))
   ];
 
   let recommendation: HomeRecommendation;
@@ -129,11 +114,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
     attentionSignals,
     attentionCount: attentionSignals.length,
     recommendation,
-    activity: {
-      completedActions: state.actions.filter((action) => action.status === "completed" && withinDateRange(action.completedAt ?? action.updatedAt, start, end)).length,
-      progressUpdates: state.progressEntries.filter((entry: ProgressEntry) => withinDateRange(entry.createdAt, start, end)).length,
-      knowledgeAdded: state.knowledge.filter((item: KnowledgeItem) => withinDateRange(item.createdAt, start, end)).length
-    },
+    activity,
     goalsWithoutNextAction,
     knowledgeQueue: queue
   };

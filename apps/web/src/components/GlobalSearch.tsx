@@ -3,10 +3,11 @@ import { Archive, Flag, FolderKanban, Inbox, ListChecks, Search, X } from "lucid
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { routeForEntity } from "../domain/routes";
+import { describeActionContext, resolveActionContext } from "../domain/actionContext";
 import { GLOBAL_SEARCH_STORAGE_KEY } from "../auth/private-browser-state";
 import { Input } from "./ui/input";
 
-type SearchGroup = "Projekty" | "Cele" | "Zadania" | "Wiedza" | "Inbox";
+type SearchGroup = "Projekty" | "Cele" | "Działania" | "Wiedza" | "Skrzynka";
 
 interface SearchResult { id: string; title: string; detail: string; to: string; group: SearchGroup; icon: typeof Flag }
 
@@ -26,13 +27,13 @@ export function GlobalSearch({ id = "global-search", onNavigate }: { id?: string
     const candidates: SearchResult[] = [
       ...state.areas.filter((project) => project.visibility === "active").map((project) => ({ id: `project-${project.id}`, title: project.name, detail: project.description || "Stały kontekst pracy", to: `/projects/${project.id}`, group: "Projekty" as const, icon: FolderKanban })),
       ...state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: `goal-${goal.id}`, title: goal.title, detail: goal.outcome, to: routeForEntity({ type: "goal", id: goal.id }), group: "Cele" as const, icon: Flag })),
-      ...state.actions.filter((action) => !["cancelled", "completed"].includes(action.status)).map((action) => ({ id: `action-${action.id}`, title: action.title, detail: state.goals.find((goal) => goal.id === action.goalId)?.title ?? "Samodzielne Zadanie", to: routeForEntity({ type: "action", id: action.id, goalId: action.goalId }), group: "Zadania" as const, icon: ListChecks })),
+      ...state.actions.filter((action) => !["cancelled", "completed"].includes(action.status)).map((action) => { const context = resolveActionContext(action, state); return { id: `action-${action.id}`, title: action.title, detail: describeActionContext(context), to: routeForEntity({ type: "action", id: action.id, goalId: action.goalId }), group: "Działania" as const, icon: ListChecks }; }),
       ...state.knowledge.filter((item) => !item.trashedAt && !item.archivedAt).map((item) => ({ id: `knowledge-${item.id}`, title: item.title, detail: item.detail, to: routeForEntity({ type: "knowledge", id: item.id }), group: "Wiedza" as const, icon: Archive })),
-      ...state.inbox.map((item) => ({ id: `inbox-${item.id}`, title: item.content, detail: item.status === "unprocessed" ? "Czeka na decyzję" : "Historia Inboxu", to: routeForEntity({ type: "inbox", id: item.id, status: item.status }), group: "Inbox" as const, icon: Inbox }))
+      ...state.inbox.map((item) => ({ id: `inbox-${item.id}`, title: item.content, detail: item.status === "unprocessed" ? "Czeka na decyzję" : "Historia Skrzynki", to: routeForEntity({ type: "inbox", id: item.id, status: item.status }), group: "Skrzynka" as const, icon: Inbox }))
     ];
     if (!normalized) return [];
     return candidates.filter((item) => normalizeSearchText(`${item.title} ${item.detail}`).includes(normalized)).slice(0, 8);
-  }, [normalized, state.actions, state.areas, state.goals, state.inbox, state.knowledge]);
+  }, [normalized, state]);
   const resultsId = `${id}-results`;
   const choose = (result: SearchResult) => { setOpen(false); navigate(result.to); onNavigate?.(); };
 
@@ -47,7 +48,7 @@ export function GlobalSearch({ id = "global-search", onNavigate }: { id?: string
 
   let resultIndex = 0;
   return <div ref={rootRef} className="global-search">
-    <div className="search-wrap"><Search /><Input id={id} role="combobox" aria-label="Szukaj w Projektach, Celach, Zadaniach i Wiedzy" aria-expanded={open} aria-controls={resultsId} aria-activedescendant={open && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setQuery("")}><X /></button> : null}</div>
+    <div className="search-wrap"><Search /><Input id={id} role="combobox" aria-label="Szukaj w Projektach, Celach, Działaniach i Wiedzy" aria-expanded={open} aria-controls={resultsId} aria-activedescendant={open && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setQuery("")}><X /></button> : null}</div>
     {open && normalized && <div id={resultsId} className="search-results" role="listbox" aria-label="Wyniki wyszukiwania">{results.length ? <>
       <div className="search-results-summary" role="status"><span>Wyniki</span><strong>{results.length}</strong></div>
       <div className="search-result-list">

@@ -1,4 +1,5 @@
 import type { AppState } from "./types";
+import { selectWorkspaceActivity, withinDateRange, workspaceWeekBounds } from "./activity";
 
 export interface WeeklyReviewSuggestion {
   id: string;
@@ -10,6 +11,8 @@ export interface WeeklyReviewSuggestion {
 export interface WeeklyReviewSummary {
   start: Date;
   end: Date;
+  startDate: string;
+  endDate: string;
   completedActions: number;
   focusMinutes: number;
   knowledgeAdded: number;
@@ -17,12 +20,6 @@ export interface WeeklyReviewSummary {
   generatedSummary: string;
   suggestions: WeeklyReviewSuggestion[];
 }
-
-export const withinDateRange = (value: string | undefined, start: Date, end: Date) => {
-  if (!value) return false;
-  const timestamp = new Date(value).getTime();
-  return timestamp >= start.getTime() && timestamp < end.getTime();
-};
 
 const within = withinDateRange;
 
@@ -52,20 +49,15 @@ export function knowledgeQueue(state: AppState) {
   return state.inbox.filter((item) => item.status === "unprocessed");
 }
 
-export function weekBounds(now = new Date()) {
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
+export function weekBounds(now = new Date(), timeZone = "Europe/Warsaw") {
+  const { start, end } = workspaceWeekBounds(now, timeZone);
   return { start, end };
 }
 
 export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyReviewSummary {
-  const { start, end } = weekBounds(now);
-  const completedActions = state.actions.filter((action) => action.status === "completed" && within(action.completedAt ?? action.updatedAt, start, end)).length;
-  const knowledgeAdded = state.knowledge.filter((item) => within(item.createdAt, start, end)).length;
-  const progressUpdates = state.progressEntries.filter((entry) => within(entry.createdAt, start, end)).length;
+  const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
+  const activity = selectWorkspaceActivity(state, now);
+  const { completedActions, knowledgeAdded, progressUpdates } = activity;
   const focusMinutes = Math.round(state.focusSessions.reduce((total, session) => {
     if (!session.endedAt || !within(session.endedAt, start, end)) return total;
     return total + Math.max(0, new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60_000;
@@ -75,7 +67,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
   const blocked = blockedActions(state);
   const activeProjects = state.projects.filter((project) => project.commitmentStatus === "active");
   const unprocessedInbox = knowledgeQueue(state);
-  const today = now.toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const overdue = overdueActions(state, today);
 
   const suggestions: WeeklyReviewSuggestion[] = [];
@@ -129,6 +121,8 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
   return {
     start,
     end,
+    startDate,
+    endDate,
     completedActions,
     focusMinutes,
     knowledgeAdded,

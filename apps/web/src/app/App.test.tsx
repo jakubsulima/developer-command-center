@@ -23,9 +23,9 @@ describe("goal-centric workspace", () => {
   it("przechwytuje treść bez wcześniejszej klasyfikacji", async () => {
     const user = userEvent.setup();
     renderApp("/knowledge?section=inbox&capture=true");
-    const capture = await screen.findByPlaceholderText("Zapisz myśl, zadanie lub link…");
+    const capture = await screen.findByPlaceholderText("Zapisz myśl, Działanie lub link…");
     await user.type(capture, "Sprawdzić indeks na tabeli transakcji");
-    await user.click(screen.getByRole("button", { name: "Dodaj do Wiedzy" }));
+    await user.click(screen.getByRole("button", { name: "Zapisz do Skrzynki" }));
     expect(screen.getAllByText("Sprawdzić indeks na tabeli transakcji").length).toBeGreaterThanOrEqual(1);
     expect(capture).toHaveValue("");
   });
@@ -66,7 +66,7 @@ describe("goal-centric workspace", () => {
     await user.click(await screen.findByRole("button", { name: "Nowy projekt" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy projekt" });
     await user.type(within(dialog).getByLabelText("Nazwa Projektu"), "Zdrowie");
-    await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, zadania i wiedza o zdrowiu");
+    await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, Działania i wiedza o zdrowiu");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Projekt" }));
     expect(await screen.findByRole("heading", { name: "Zdrowie" })).toBeInTheDocument();
   });
@@ -117,7 +117,7 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("link", { name: "Zobacz wszystkie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Dodaj do Wiedzy" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
-    expect(screen.getAllByRole("button", { name: "Dodaj Działanie" }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
+    expect(screen.getAllByRole("button", { name: "Dodaj Działanie" })).toHaveLength(1);
   });
 });

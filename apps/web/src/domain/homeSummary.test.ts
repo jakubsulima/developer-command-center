@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
 import { deriveHomeSummary } from "./homeSummary";
+import { deriveWeeklyReview } from "./weeklyReview";
 import type { AppState } from "./types";
 
 const action = (id: string, changes: Partial<typeof emptyState.actions[number]> = {}) => ({
@@ -54,11 +55,21 @@ describe("deriveHomeSummary", () => {
     state.actions = [action("completed", { status: "completed", completedAt: "2026-08-20T12:00:00.000Z" }), action("old", { status: "completed", completedAt: "2026-08-13T12:00:00.000Z" })];
     state.progressEntries = [{ id: "progress", goalId: "goal", kind: "note", content: "Postęp", createdAt: "2026-08-18T12:00:00.000Z" }];
     state.knowledge = [{ id: "knowledge", type: "note", title: "Wiedza", detail: "", createdAt: "2026-08-19T12:00:00.000Z" }];
-    expect(deriveHomeSummary(state, now).activity).toEqual({ completedActions: 1, progressUpdates: 1, knowledgeAdded: 1 });
+    expect(deriveHomeSummary(state, now).activity).toEqual({ completedActions: 1, progressUpdates: 1, knowledgeAdded: 1, periodStart: "2026-08-17", periodEnd: "2026-08-24" });
   });
 
   it("returns a calm recommendation for an empty workspace", () => {
     const state = structuredClone(emptyState);
     expect(deriveHomeSummary(state, now)).toMatchObject({ recommendation: { kind: "calm" }, attentionCount: 0, todayActions: [], upcomingActions: [] });
+  });
+
+  it("shares the weekly activity fixture with the review", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("completed", { status: "completed", completedAt: "2026-08-20T12:00:00.000Z" })];
+    state.progressEntries = [{ id: "progress", goalId: "goal", kind: "note", content: "Postęp", createdAt: "2026-08-18T12:00:00.000Z" }];
+    state.knowledge = [{ id: "knowledge", type: "note", title: "Wiedza", detail: "", createdAt: "2026-08-19T12:00:00.000Z" }];
+    const home = deriveHomeSummary(state, now).activity;
+    const review = deriveWeeklyReview(state, now);
+    expect(home).toEqual({ completedActions: review.completedActions, progressUpdates: review.progressUpdates, knowledgeAdded: review.knowledgeAdded, periodStart: review.startDate, periodEnd: review.endDate });
   });
 });

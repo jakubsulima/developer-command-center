@@ -6,7 +6,7 @@ odzyskiwania kontekstu i pomaga doprowadzać rozpoczęte rzeczy do wyniku.
 ## Current language — Projects as persistent contexts
 
 **Project / Projekt**:
-Trwały, własny kontekst pracy, który grupuje Cele, Zadania i Wiedzę. Projekt
+Trwały, własny kontekst pracy, który grupuje Cele, Działania i Wiedzę. Projekt
 nie ma jednego warunku ukończenia; można go archiwizować, ale nie „osiąga się”
 go tak jak Celu. W bieżącym modelu danych jest addytywnie oparty na tabeli
 `areas`, aby zachować istniejące rekordy i relacje.
@@ -39,21 +39,20 @@ czasowej. Wystąpienie można zmienić lub ukończyć bez zmiany serii.
 Krótka notatka, decyzja, rezultat, dowód albo blocker na osi czasu Celu.
 
 **Knowledge / Wiedza**:
-Jeden obszar obejmujący kolejkę surowych przechwyceń oraz bibliotekę Notatek,
-Materiałów, Decyzji, Rezultatów i Poszukiwań. Link albo treść dodane z globalnego
-„Dodaj” trafiają najpierw do kolejki Wiedzy, gdzie można je przetworzyć. Element
-Wiedzy może mieć wiele relacji z Celami, Działaniami, seriami i innymi elementami
-Wiedzy; Materiał może na przykład potwierdzać Decyzję.
+Jeden obszar z dwiema widocznymi częściami: Skrzynką surowych przechwyceń oraz
+Biblioteką Notatek, Materiałów, Decyzji, Rezultatów i Poszukiwań. Link albo treść
+dodane z globalnego „Dodaj” trafiają najpierw do Skrzynki, gdzie można je
+przetworzyć. Element Wiedzy może mieć wiele relacji z Celami, Działaniami,
+seriami i innymi elementami Wiedzy; Materiał może na przykład potwierdzać Decyzję.
 
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
 planem, sesją pracy, timerem ani osobnym stanem domenowym.
 
 **Inbox Item**:
-Techniczna, zachowana koperta surowego przechwycenia widoczna jako kolejka
-„Do przetworzenia” wewnątrz Wiedzy. Nie jest osobnym modułem nawigacji. Triage
-zaczyna się od intencji: utwórz Cel, dodaj Działanie, zapisz w bibliotece
-Wiedzy, odłóż albo odrzuć.
+Techniczna, zachowana koperta surowego przechwycenia widoczna jako Skrzynka
+wewnątrz Wiedzy. Nie jest osobnym modułem nawigacji. Triage zaczyna się od
+intencji: utwórz Cel, dodaj Działanie, zapisz w Bibliotece, odłóż albo odrzuć.
 
 **Archive** i **Trash**:
 Odwracalne stany widoczności niezależne od osiągnięcia, ukończenia lub

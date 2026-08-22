@@ -23,6 +23,7 @@ export function App() {
         <Route path="/routines" element={<RoutinesPage />} />
         <Route path="/focus" element={<Navigate to="/" replace />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/skrzynka" element={<Navigate to="/knowledge?section=inbox" replace />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/goals/:goalId" element={<GoalDetailPage />} />
         <Route path="/actions/:actionId" element={<ActionDetailPage />} />

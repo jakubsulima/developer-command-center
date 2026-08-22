@@ -10,7 +10,8 @@ const commands: Record<string, QuickAddMode> = {
   wiedza: "knowledge",
   notatka: "knowledge",
   knowledge: "knowledge",
-  inbox: "knowledge"
+  inbox: "knowledge",
+  skrzynka: "knowledge"
 };
 
 export function parseQuickAddCommand(value: string): { mode: QuickAddMode; content: string } | undefined {
