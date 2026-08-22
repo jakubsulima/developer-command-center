@@ -1,8 +1,15 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { isSupabaseConfigured, runtimeConfig } from "../lib/runtime";
+import { markStartupPhase } from "../lib/startupMetrics";
 import DemoAuthProvider from "./DemoAuthProvider";
 
-const SupabaseAuthProvider = lazy(() => import("./SupabaseAuthProvider"));
+const supabaseAuthModule = isSupabaseConfigured
+  ? import("./SupabaseAuthProvider").then((module) => {
+      markStartupPhase("auth-module-ready");
+      return module;
+    })
+  : null;
+const SupabaseAuthProvider = lazy(() => supabaseAuthModule ?? import("./SupabaseAuthProvider"));
 
 export function AuthRoot({ children }: { children: ReactNode }) {
   if (runtimeConfig.configurationError) {
@@ -15,9 +22,12 @@ export function AuthRoot({ children }: { children: ReactNode }) {
       </main>
     );
   }
-  if (!isSupabaseConfigured) return <DemoAuthProvider>{children}</DemoAuthProvider>;
+  if (!isSupabaseConfigured) {
+    markStartupPhase("auth-module-ready");
+    return <DemoAuthProvider>{children}</DemoAuthProvider>;
+  }
   return (
-    <Suspense fallback={<AppLoading label="Łączenie z bezpieczną sesją…" />}>
+    <Suspense fallback={<AppLoading label="Przygotowanie logowania…" />}>
       <SupabaseAuthProvider>{children}</SupabaseAuthProvider>
     </Suspense>
   );

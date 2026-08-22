@@ -26,7 +26,7 @@ export function CaptureComposer({ draftKey, id, onSubmit, onClose, compact = fal
     try {
       const normalized = normalizeCapture(draft.value, kind);
       await onSubmit(normalized.content, normalized.kind);
-      draft.clear(); setSuccess("Dodano do Wiedzy. Materiał czeka na przetworzenie.");
+      draft.clear(); setSuccess("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "capture_failed";
       setError(code === "invalid_capture_url" || code === "invalid_capture_protocol" ? "Podaj pełny adres HTTP lub HTTPS, np. https://example.com." : code === "capture_content_required" ? "Wpisz treść przechwycenia." : "Nie udało się zapisać. Spróbuj ponownie.");

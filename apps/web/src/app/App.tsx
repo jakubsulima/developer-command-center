@@ -13,8 +13,13 @@ import { ProjectsPage } from "../pages/ProjectsPage";
 import { ProjectDetailPage } from "../pages/ProjectDetailPage";
 import { ReviewPage } from "../pages/ReviewPage";
 import { ScrollToTop } from "../components/ScrollToTop";
+import { useEffect } from "react";
+import { useStore } from "./useStore";
+import { markStartupPhase } from "../lib/startupMetrics";
 
 export function App() {
+  const { loading } = useStore();
+  useEffect(() => { if (!loading) markStartupPhase("app-interactive"); }, [loading]);
   return (
     <ActionFeedbackProvider>
       <ScrollToTop />

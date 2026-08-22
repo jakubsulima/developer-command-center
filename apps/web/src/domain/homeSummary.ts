@@ -3,7 +3,7 @@ import { localDateForTimeZone, selectWorkspaceActivity } from "./activity";
 import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
 export type HomeAttentionKind = "blocked" | "overdue" | "goal_without_next_action" | "knowledge_queue";
-export type HomeRecommendationKind = HomeAttentionKind | "today_action" | "calm";
+export type HomeRecommendationKind = HomeAttentionKind | "today_action" | "next_action" | "calm";
 
 export interface HomeAttentionSignal {
   id: string;
@@ -21,6 +21,7 @@ export interface HomeRecommendation {
   title: string;
   detail: string;
   to: string;
+  context?: string;
 }
 
 export interface HomeActivitySummary {
@@ -33,6 +34,7 @@ export interface HomeActivitySummary {
 
 export interface HomeSummary {
   today: string;
+  isPristineWorkspace: boolean;
   todayActions: GoalAction[];
   overdueActions: GoalAction[];
   upcomingActions: GoalAction[];
@@ -74,6 +76,18 @@ function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeA
   };
 }
 
+function actionContext(action: GoalAction, state: AppState) {
+  if (action.goalId) {
+    const goal = state.goals.find((candidate) => candidate.id === action.goalId);
+    if (goal) return `Cel: ${goal.title}`;
+  }
+  if (action.areaId) {
+    const area = state.areas.find((candidate) => candidate.id === action.areaId);
+    if (area) return `Projekt: ${area.name}`;
+  }
+  return "Samodzielne Działanie";
+}
+
 export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummary {
   const today = localDateForTimeZone(now, state.workspaceTimezone);
   const activity = selectWorkspaceActivity(state, now);
@@ -82,11 +96,14 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
     overdueActions(state, today).filter((action) => action.status !== "blocked"),
   );
   const goalsWithoutNextAction = [...activeGoalsWithoutNextAction(state)].sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.id.localeCompare(b.id));
+  const activeGoalIds = new Set(state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").map((goal) => goal.id));
+  const nextActions = state.actions
+    .filter((action) => isOpenAction(action) && action.isNext && Boolean(action.goalId && activeGoalIds.has(action.goalId)))
+    .sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.goalId!.localeCompare(b.goalId!) || a.id.localeCompare(b.id));
   const queue = [...knowledgeQueue(state)].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const todayActions = state.actions
     .filter((action) => isOpenAction(action) && (action.scheduledFor === today || (!action.scheduledFor && action.pinnedToToday)))
     .sort((a, b) => (a.scheduledFor ?? today).localeCompare(b.scheduledFor ?? today) || a.position - b.position || a.id.localeCompare(b.id));
-  const scheduledTodayActions = todayActions.filter((action) => action.scheduledFor === today);
   const upcomingActions = state.actions
     .filter((action) => isOpenAction(action) && Boolean(action.scheduledFor && action.scheduledFor > today && action.scheduledFor <= shiftDate(today, 7)))
     .sort((a, b) => a.scheduledFor!.localeCompare(b.scheduledFor!) || a.position - b.position || a.id.localeCompare(b.id));
@@ -101,13 +118,15 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
   let recommendation: HomeRecommendation;
   if (blocked[0]) recommendation = { kind: "blocked", title: `Odblokuj: ${blocked[0].title}`, detail: blocked[0].blocker ?? "Podejmij decyzję, która pozwoli ruszyć dalej.", to: actionRoute(blocked[0]) };
   else if (overdue[0]) recommendation = { kind: "overdue", title: `Zdecyduj o zaległym Działaniu: ${overdue[0].title}`, detail: "Ukończ, przełóż albo anuluj — nie przenoś go bez decyzji.", to: actionRoute(overdue[0]) };
-  else if (scheduledTodayActions[0]) recommendation = { kind: "today_action", title: `Zacznij od: ${scheduledTodayActions[0].title}`, detail: "To najbliższe Działanie zaplanowane na dziś.", to: actionRoute(scheduledTodayActions[0]) };
+  else if (todayActions[0]) recommendation = { kind: "today_action", title: `Zacznij od: ${todayActions[0].title}`, detail: todayActions[0].scheduledFor === today ? "To najbliższe Działanie zaplanowane na dziś." : "To Działanie zostało przez Ciebie przypięte na dziś.", to: actionRoute(todayActions[0]) };
+  else if (nextActions[0]) recommendation = { kind: "next_action", title: nextActions[0].title, detail: "To świadomie wybrane następne Działanie dla aktywnego Celu.", context: actionContext(nextActions[0], state), to: actionRoute(nextActions[0]) };
   else if (goalsWithoutNextAction[0]) recommendation = { kind: "goal_without_next_action", title: `Ustal następny krok: ${goalsWithoutNextAction[0].title}`, detail: "Aktywny Cel potrzebuje jednego konkretnego ruchu.", to: `/goals/${encodeURIComponent(goalsWithoutNextAction[0].id)}` };
   else if (queue[0]) recommendation = { kind: "knowledge_queue", title: `Przejrzyj kolejkę Wiedzy: ${queue[0].content}`, detail: "Podejmij decyzję, zanim element zacznie obciążać pamięć.", to: `/knowledge?section=inbox&status=${queue[0].status}&item=${encodeURIComponent(queue[0].id)}` };
   else recommendation = { kind: "calm", title: "Wszystko jest pod kontrolą", detail: "Nie ma pilnych wyjątków. Wybierz spokojnie kolejny krok.", to: "/?show=today" };
 
   return {
     today,
+    isPristineWorkspace: state.projects.length === 0 && state.goals.length === 0 && state.actions.length === 0 && state.knowledge.length === 0 && state.inbox.length === 0,
     todayActions,
     overdueActions: overdue,
     upcomingActions,

@@ -14,13 +14,13 @@ const emptyDraft = { mode: "action" as QuickAddMode, content: "", context: "", s
 const modes = [
   { id: "action" as const, label: "Działanie", command: "/dzialanie", icon: ListPlus },
   { id: "goal" as const, label: "Cel", command: "/cel", icon: Flag },
-  { id: "knowledge" as const, label: "Skrzynka", command: "/skrzynka", icon: BookMarked }
+  { id: "knowledge" as const, label: "Do Skrzynki", command: "/skrzynka", icon: BookMarked }
 ];
 
 const copy = {
   action: { label: "Co chcesz zrobić?", placeholder: "Np. Spisać trzy pytania do rozmowy\nW kolejnych liniach możesz dodać szczegóły", submit: "Dodaj Działanie", detail: "Konkretny krok, termin i kontekst" },
   goal: { label: "Co chcesz osiągnąć?", placeholder: "Np. Zbudować spokojny budżet domowy\nOpisz rezultat w kolejnych liniach", submit: "Utwórz Cel", detail: "Rezultat, który chcesz doprowadzić do końca" },
-  knowledge: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść — uporządkujesz ją później", submit: "Zapisz do Skrzynki", detail: "Trafi do Skrzynki do późniejszego przetworzenia" }
+  knowledge: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść — uporządkujesz później", submit: "Zapisz do Skrzynki", detail: "Zapiszesz teraz, uporządkujesz później" }
 } satisfies Record<QuickAddMode, { label: string; placeholder: string; submit: string; detail: string }>;
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
@@ -81,7 +81,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
         notifySuccess("Cel utworzony.");
       } else {
         await capture(content);
-        notifySuccess("Zapisano do Skrzynki. Materiał czeka na przetworzenie.");
+        notifySuccess("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
       }
       draft.clear();
       close();

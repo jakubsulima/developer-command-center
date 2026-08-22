@@ -69,7 +69,7 @@ describe("regresje nowego modelu Celów", () => {
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).toHaveClass("mobile-chooser");
-    for (const mode of ["Działanie", "Cel", "Skrzynka"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
+    for (const mode of ["Działanie", "Cel", "Do Skrzynki"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
     await user.click(within(createCenter).getByRole("button", { name: "Działanie" }));
@@ -261,12 +261,12 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
     expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Skrzynka" }));
+    await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Dodaj" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Materiał czeka na przetworzenie.");
+    expect(screen.getByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
   });
 
   it("rozpoznaje komendę /cel i tworzy Cel z jednego pola", async () => {
@@ -289,10 +289,10 @@ describe("regresje nowego modelu Celów", () => {
     await screen.findByRole("heading", { name: "Start" });
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
-    await user.click(within(dialog).getByRole("button", { name: "Skrzynka" }));
+    await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Materiał czeka na przetworzenie.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
   });
 
   it("pokazuje automatyczne podsumowanie tygodnia z sugestiami", async () => {

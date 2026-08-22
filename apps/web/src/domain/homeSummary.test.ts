@@ -15,6 +15,8 @@ describe("deriveHomeSummary", () => {
     ["blocked", { actions: [action("blocked", { status: "blocked", scheduledFor: "2026-08-20" })] }],
     ["overdue", { actions: [action("overdue", { scheduledFor: "2026-08-20" })] }],
     ["today_action", { actions: [action("today", { scheduledFor: "2026-08-21" })] }],
+    ["today_action", { actions: [action("pinned", { pinnedToToday: true })] }],
+    ["next_action", { goals: [{ id: "goal-next", title: "Cel z następnym krokiem", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }], actions: [action("next", { goalId: "goal-next", isNext: true })] }],
     ["goal_without_next_action", { goals: [{ id: "goal-1", title: "Cel", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }] }],
     ["knowledge_queue", { inbox: [{ id: "inbox-1", kind: "text" as const, content: "Decyzja", createdAt: "2026-08-20T10:00:00.000Z", status: "unprocessed" as const }] }]
   ] as const)("selects %s by deterministic priority", (kind, changes) => {
@@ -26,6 +28,23 @@ describe("deriveHomeSummary", () => {
     const state = structuredClone(emptyState);
     state.actions = [action("newer", { status: "blocked", createdAt: "2026-08-20T10:00:00.000Z" }), action("older", { status: "blocked", createdAt: "2026-08-19T10:00:00.000Z" })];
     expect(deriveHomeSummary(state, now).recommendation.title).toContain("older");
+  });
+
+  it("does not guess an arbitrary open action", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    state.actions = [action("unmarked", { goalId: "goal-1", title: "Nieoznaczone Działanie" })];
+    expect(deriveHomeSummary(state, now).recommendation.kind).toBe("goal_without_next_action");
+  });
+
+  it("prefers a conscious next action across multiple goals", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [
+      { id: "goal-b", title: "Późniejszy Cel", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-20T10:00:00.000Z" },
+      { id: "goal-a", title: "Wcześniejszy Cel", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-19T10:00:00.000Z" }
+    ];
+    state.actions = [action("next-b", { goalId: "goal-b", isNext: true, createdAt: "2026-08-20T10:00:00.000Z" }), action("next-a", { goalId: "goal-a", isNext: true, createdAt: "2026-08-19T10:00:00.000Z" })];
+    expect(deriveHomeSummary(state, now).recommendation).toMatchObject({ kind: "next_action", title: "next-a", context: "Cel: Wcześniejszy Cel" });
   });
 
   it("does not duplicate a blocked overdue action in attention", () => {
@@ -60,7 +79,15 @@ describe("deriveHomeSummary", () => {
 
   it("returns a calm recommendation for an empty workspace", () => {
     const state = structuredClone(emptyState);
-    expect(deriveHomeSummary(state, now)).toMatchObject({ recommendation: { kind: "calm" }, attentionCount: 0, todayActions: [], upcomingActions: [] });
+    expect(deriveHomeSummary(state, now)).toMatchObject({ isPristineWorkspace: true, recommendation: { kind: "calm" }, attentionCount: 0, todayActions: [], upcomingActions: [] });
+  });
+
+  it("keeps historical data from looking pristine", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("done", { status: "completed", completedAt: "2026-08-01T10:00:00.000Z" })];
+    state.knowledge = [{ id: "archived-knowledge", type: "note", title: "Archiwalna notatka", detail: "", archivedAt: "2026-08-02T10:00:00.000Z" }];
+    state.inbox = [{ id: "resolved-capture", kind: "text", content: "Historia", createdAt: "2026-08-03T10:00:00.000Z", status: "resolved" }];
+    expect(deriveHomeSummary(state, now).isPristineWorkspace).toBe(false);
   });
 
   it("shares the weekly activity fixture with the review", () => {

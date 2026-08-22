@@ -9,6 +9,7 @@ import { Button } from "./ui";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { QuickAdd } from "./QuickAdd";
 import { Sheet } from "./ui/sheet";
+import { AppLoading } from "../auth/AuthRoot";
 
 const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
@@ -20,7 +21,7 @@ const navigation = [
 ];
 
 export function AppShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
-  const { state, mode, syncing, error, resetDemo, exportData, reload } = useStore();
+  const { state, mode, loading, syncing, error, resetDemo, exportData, reload } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
@@ -72,6 +73,8 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [profileMenuOpen]);
+
+  if (loading) return <AppLoading label="Ładowanie Workspace…" />;
 
   return (
     <div className={`app-shell ${aside ? "with-aside" : ""}`}>

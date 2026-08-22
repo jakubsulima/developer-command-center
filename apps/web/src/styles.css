@@ -200,7 +200,7 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .page-heading { @apply [min-height:58px]; @apply [display:flex]; @apply [justify-content:space-between]; @apply [align-items:flex-start]; @apply [gap:24px]; @apply [margin-bottom:24px]; }
 .eyebrow { @apply [display:flex]; @apply [align-items:center]; @apply [gap:7px]; @apply [margin-bottom:3px]; @apply [color:var(--muted-foreground)]; @apply [font-size:13px]; }
 .eyebrow svg { @apply [width:14px]; @apply [height:14px]; }
-.button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3.5 text-sm font-medium transition-colors; }
+.button { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border px-3.5 text-sm font-medium transition-colors; }
 .button:active { @apply translate-y-px; }
 .button-primary { @apply border-primary bg-primary text-primary-foreground shadow-none hover:bg-primary/90; }
 .button-secondary { @apply border-border bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground; }
@@ -1467,7 +1467,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .page-heading > .button {
     @apply [width:fit-content];
     @apply [justify-self:start];
-    @apply [min-height:40px];
+    @apply [min-height:44px];
   }
 
   .page-heading > .button-row {
@@ -1480,7 +1480,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .page-heading > .button-row .button {
-    @apply [min-height:40px];
+    @apply [min-height:44px];
     @apply [flex:1_1_150px];
     @apply [min-width:0];
     @apply [padding-inline:10px];
@@ -1505,7 +1505,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .button {
-    @apply [min-height:40px];
+    @apply [min-height:44px];
     @apply [padding-inline:11px];
     @apply [font-size:13px];
   }
@@ -1518,10 +1518,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .icon-button,
   .today-row-actions > a,
   .icon-date {
-    @apply [width:40px];
-    @apply [min-width:40px];
-    @apply [height:40px];
-    @apply [min-height:40px];
+    @apply [width:44px];
+    @apply [min-width:44px];
+    @apply [height:44px];
+    @apply [min-height:44px];
   }
 
   .focus-card {
@@ -1624,7 +1624,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .inbox-tabs button {
-    @apply [min-height:40px];
+    @apply [min-height:44px];
     @apply [padding-inline:10px];
     @apply [font-size:12px];
   }
@@ -1645,7 +1645,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .inbox-actions .button {
-    @apply [min-height:40px];
+    @apply [min-height:44px];
   }
 
   .project-card-grid {
@@ -1671,7 +1671,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .project-card > .button {
-    @apply [min-height:38px];
+    @apply [min-height:44px];
   }
 
   .project-tabs {
@@ -1725,7 +1725,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .project-tabs button {
-    @apply [min-height:36px];
+    @apply [min-height:44px];
     @apply [padding-inline:11px];
     @apply [font-size:12px];
   }
@@ -2134,7 +2134,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .knowledge-section-tabs button span { @apply [padding:0]; @apply [background:transparent]; @apply [font-size:14px]; }
 .knowledge-section-tabs button small { @apply [min-width:22px]; @apply [padding:2px_6px]; @apply [border-radius:999px]; @apply [background:var(--secondary)]; @apply [color:var(--secondary-foreground)]; @apply [font-size:11px]; @apply [text-align:center]; }
 .knowledge-section-tabs button[aria-selected="true"] small { @apply [color:#bfdbfe]; @apply [background:#173e70]; }
-.knowledge-add-trigger { @apply [width:40px]; @apply [height:40px]; @apply [display:grid]; @apply [place-items:center]; @apply [flex:0_0_auto]; @apply [margin-bottom:6px]; @apply [padding:0]; @apply [border:1px_solid_#315b97]; @apply [border-radius:999px]; @apply [color:white]; @apply [background:linear-gradient(145deg,_#3b82f6,_#1d4ed8)]; @apply [box-shadow:0_7px_20px_rgba(37,_99,_235,_.24)]; @apply [transition:transform_.18s_ease,_box-shadow_.18s_ease]; }
+.knowledge-add-trigger { @apply [width:44px]; @apply [height:44px]; @apply [display:grid]; @apply [place-items:center]; @apply [flex:0_0_auto]; @apply [margin-bottom:6px]; @apply [padding:0]; @apply [border:1px_solid_#315b97]; @apply [border-radius:999px]; @apply [color:white]; @apply [background:linear-gradient(145deg,_#3b82f6,_#1d4ed8)]; @apply [box-shadow:0_7px_20px_rgba(37,_99,_235,_.24)]; @apply [transition:transform_.18s_ease,_box-shadow_.18s_ease]; }
 .knowledge-add-trigger:hover { @apply [transform:translateY(-1px)]; @apply [box-shadow:0_9px_24px_rgba(37,_99,_235,_.36)]; }
 .knowledge-add-trigger[aria-expanded="true"] svg { @apply [transform:rotate(45deg)]; }
 .knowledge-add-trigger svg { @apply [width:20px]; @apply [height:20px]; @apply [transition:transform_.18s_ease]; }
@@ -2164,7 +2164,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .knowledge-row-meta { @apply [display:flex]; @apply [flex-wrap:wrap]; @apply [gap:4px_14px]; @apply [margin-top:7px]; }
 .knowledge-row-meta small { @apply [margin:0]; @apply [color:#75869e]; @apply [font-size:11px]; }
 .knowledge-actions { @apply [display:block]; }
-.knowledge-actions .button { @apply [width:38px]; @apply [min-width:38px]; @apply [height:38px]; @apply [min-height:38px]; @apply [padding:0]; }
+.knowledge-actions .button { @apply [width:44px]; @apply [min-width:44px]; @apply [height:44px]; @apply [min-height:44px]; @apply [padding:0]; }
 
 @media (max-width: 767px) {
   .knowledge-section-bar { @apply [align-items:stretch]; @apply [gap:8px]; @apply [margin:-6px_0_16px]; }
@@ -2172,7 +2172,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .knowledge-section-tabs button { @apply [min-height:48px]; @apply [flex:0_0_auto]; }
   .knowledge-section-tabs button span { @apply [font-size:13px]; }
   .knowledge-section-tabs button svg { @apply [display:none]; }
-  .knowledge-add-trigger { @apply [width:38px]; @apply [height:38px]; @apply [align-self:center]; @apply [margin:0]; }
+  .knowledge-add-trigger { @apply [width:44px]; @apply [height:44px]; @apply [align-self:center]; @apply [margin:0]; }
   .knowledge-toolbar { @apply [grid-template-columns:1fr]; @apply [gap:8px]; }
   .knowledge-filter-row { @apply [grid-template-columns:repeat(2,_minmax(0,_1fr))]; @apply [gap:8px]; @apply [margin:8px_0_0]; }
   .knowledge-view-row { @apply [display:block]; @apply [margin-bottom:10px]; }
@@ -2185,7 +2185,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .knowledge-kind-icon { @apply [width:32px]; @apply [height:32px]; }
   .knowledge-list .badge { @apply [grid-column:2]; @apply [justify-self:start]; @apply [margin-top:1px]; }
   .knowledge-actions { @apply [grid-column:3]; @apply [grid-row:1_/_3]; @apply [align-self:center]; }
-  .knowledge-actions .button { @apply [width:36px]; @apply [min-width:36px]; @apply [height:36px]; @apply [min-height:36px]; }
+  .knowledge-actions .button { @apply [width:44px]; @apply [min-width:44px]; @apply [height:44px]; @apply [min-height:44px]; }
 }
 
 @media (max-width: 420px) {
@@ -2199,12 +2199,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .knowledge-capture-head { @apply [display:flex]; @apply [align-items:flex-start]; @apply [justify-content:space-between]; @apply [gap:16px]; @apply [margin-bottom:12px]; }
 .knowledge-capture-head h2 { @apply [margin:0]; @apply [font-size:17px]; }
 .knowledge-capture-head p { @apply [margin:2px_0_0]; @apply [color:var(--muted-foreground)]; @apply [font-size:12px]; }
-.knowledge-capture-head .button { @apply [width:38px]; @apply [min-width:38px]; @apply [height:38px]; @apply [min-height:38px]; @apply [padding:0]; }
+.knowledge-capture-head .button { @apply [width:44px]; @apply [min-width:44px]; @apply [height:44px]; @apply [min-height:44px]; @apply [padding:0]; }
 .knowledge-capture-panel textarea { @apply [min-height:92px]; @apply [padding:12px_2px]; @apply [border-width:0_0_1px]; @apply [border-radius:0]; @apply [background:transparent]; @apply [box-shadow:none]; }
 .knowledge-capture-panel textarea:focus, .knowledge-capture-panel textarea:focus-visible { @apply [border-color:var(--ring)]; @apply [outline:0]; @apply [box-shadow:none]; }
 .knowledge-capture-panel .capture-mode-row { @apply [margin-top:10px]; }
 .knowledge-capture-panel .capture-mode-row > div { @apply [display:flex]; @apply [gap:4px]; }
-.knowledge-capture-panel .capture-mode-row > div button { @apply [min-height:34px]; @apply [padding:0_10px]; @apply [border:0]; @apply [border-radius:999px]; @apply [background:transparent]; }
+.knowledge-capture-panel .capture-mode-row > div button { @apply [min-height:44px]; @apply [padding:0_10px]; @apply [border:0]; @apply [border-radius:999px]; @apply [background:transparent]; }
 .knowledge-capture-panel .capture-mode-row > div button.active { @apply [color:#bfdbfe]; @apply [background:#173e70]; }
 .knowledge-capture-panel .capture-composer-actions { @apply [position:static]; @apply [padding:0]; @apply [margin-top:12px]; @apply [background:transparent]; }
 .inbox-tabs { @apply [gap:24px]; @apply [margin:0_0_22px]; @apply [padding:0]; @apply [border-bottom:1px_solid_var(--border)]; }
@@ -2237,7 +2237,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .knowledge-section-tabs { @apply [gap:8px]; @apply [overflow:hidden]; }
   .knowledge-section-tabs button { @apply [gap:4px]; }
   .knowledge-section-tabs button small { @apply [min-width:19px]; @apply [padding-inline:4px]; }
-  .knowledge-add-trigger { @apply [position:absolute]; @apply [right:0]; @apply [bottom:5px]; @apply [width:36px]; @apply [height:36px]; }
+  .knowledge-add-trigger { @apply [position:absolute]; @apply [right:0]; @apply [bottom:5px]; @apply [width:44px]; @apply [height:44px]; }
   .knowledge-filter-row { @apply [grid-template-columns:1fr]; }
   .knowledge-kind-icon { @apply [display:none]; }
   .knowledge-list .panel { @apply [grid-template-columns:minmax(0,_1fr)_36px]; @apply [padding-inline:2px]; }
@@ -2339,7 +2339,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .project-entity-list .button {
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Touch target contract: mobile controls remain usable at 320px as well as 390px. */
+@media (max-width: 767px) {
+  input, select { min-height: 44px; height: 44px; }
+  textarea { min-height: 44px; }
+  .button, .icon-button, .today-row-actions > a, .icon-date,
+  .inbox-tabs button, .filter-pills button, .knowledge-views button,
+  .knowledge-section-tabs button, .project-tabs button,
+  .capture-mode-row button, .quick-choice-row button, .quick-add-date-choices button,
+  .quick-add-modes > button, .quick-add-stage-header > button,
+  .knowledge-add-trigger, .knowledge-actions .button, .input-with-icon button,
+  .search-wrap > button, .profile-popover > button {
+    min-height: 44px;
+  }
+  .icon-button, .today-row-actions > a, .icon-date,
+  .quick-add-stage-header > button, .knowledge-add-trigger,
+  .knowledge-actions .button, .input-with-icon button, .search-wrap > button {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+  }
+  .goal-card-open:focus-visible, .project-card-open:focus-visible, .entity-card-open:focus-visible {
+    position: relative;
+    z-index: 2;
+    outline: 3px solid var(--ring);
+    outline-offset: 3px;
+  }
+  .knowledge-capture-panel .capture-mode-row > div button,
+  .creation-hub-modal .quick-add-modes > button,
+  .creation-hub-modal .quick-add-stage-header > button {
+    min-height: 44px;
   }
 }

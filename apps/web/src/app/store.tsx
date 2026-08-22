@@ -11,6 +11,7 @@ import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
 import type { AppState, NewLearningGoalInput, NewProjectInput } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
+import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 
 const STORAGE_KEY = "command-center-state-v1";
 const loadRepository = () => import("../data/supabaseRepository");
@@ -60,8 +61,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const remoteQuery = useQuery({
     queryKey: ["workspace-state", user?.id],
     enabled: mode === "supabase" && Boolean(user),
-    queryFn: async () => (await loadRepository()).loadSupabaseState(user!.id)
+    queryFn: async () => {
+      const startedAt = performance.now();
+      try {
+        return await (await loadRepository()).loadSupabaseState(user!.id);
+      } finally {
+        recordStartupTiming("supabase-workspace", performance.now() - startedAt);
+      }
+    }
   });
+
+  useEffect(() => {
+    if (mode === "demo" && localHydrated) markStartupPhase("workspace-resolved");
+    if (mode === "supabase" && remoteQuery.data) markStartupPhase("workspace-resolved");
+  }, [localHydrated, mode, remoteQuery.data]);
 
   useEffect(() => {
     if (mode !== "demo") return;
@@ -146,7 +159,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStore>(() => ({
     state,
     mode,
-    loading: mode === "supabase" && remoteQuery.isPending,
+    loading: mode === "supabase" ? remoteQuery.isPending : !localHydrated,
     syncing,
     scratchpadStatus,
     error: mutationError ?? (remoteQuery.error instanceof Error ? remoteQuery.error.message : undefined),
@@ -813,13 +826,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [ensureWorkspaceState, localRepository, mode, mutationError, remoteQuery, runRemote, scratchpadStatus, state, syncing, user]);
+  }), [ensureWorkspaceState, localHydrated, localRepository, mode, mutationError, remoteQuery, runRemote, scratchpadStatus, state, syncing, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
-    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie prywatnego Workspace…</span></div>;
+    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;
   }
   if (mode === "demo" && !localHydrated) {
-    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie lokalnego Workspace…</span></div>;
+    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;
   }
   if (mode === "supabase" && remoteQuery.isError && !remoteQuery.data) {
     const message = remoteQuery.error instanceof Error ? remoteQuery.error.message : "Nie udało się załadować Workspace.";

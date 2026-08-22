@@ -83,7 +83,7 @@ export function KnowledgePage() {
 
   return (
     <AppShell>
-      <PageHeading title="Wiedza" eyebrow="Twoja biblioteka materiałów, notatek i decyzji" />
+      <PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" />
       <div className="knowledge-section-bar">
         <div className="knowledge-section-tabs" role="tablist" aria-label="Obszary Wiedzy">
           <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{state.knowledge.filter((item) => !item.archivedAt && !item.trashedAt).length}</small></button>

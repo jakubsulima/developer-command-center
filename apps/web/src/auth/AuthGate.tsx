@@ -6,7 +6,7 @@ import { useAuth } from "./useAuth";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { loading, user } = useAuth();
-  if (loading) return <AppLoading />;
+  if (loading) return <AppLoading label="Sprawdzanie sesji…" />;
   if (!user) return <AuthPage />;
   return <StoreProvider>{children}</StoreProvider>;
 }
