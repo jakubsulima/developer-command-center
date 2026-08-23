@@ -38,7 +38,7 @@ export default defineConfig({
             provider: "v8",
             reporter: ["text", "html", "json-summary"],
             include: ["src/**/*.{ts,tsx}"],
-            exclude: ["src/main.tsx", "src/**/*.test.{ts,tsx}", "src/test/**", "src/domain/types.ts"],
+            exclude: ["src/main.tsx", "src/**/*.test.{ts,tsx}", "src/test/**", "src/domain/types.ts", "src/pages/TodayPage 2.tsx"],
             thresholds: {
                 // Ratchet from the verified repository baseline; raise these as tests grow.
                 statements: 63,

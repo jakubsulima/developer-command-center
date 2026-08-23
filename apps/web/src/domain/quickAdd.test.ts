@@ -8,7 +8,8 @@ describe("quick add commands", () => {
     ["/cel Uporządkować finanse", "goal", "Uporządkować finanse"],
     ["/wiedza Wzorzec repozytorium", "knowledge", "Wzorzec repozytorium"],
     ["/notatka Pytania do rozmowy", "knowledge", "Pytania do rozmowy"],
-    ["/inbox Luźna myśl", "inbox", "Luźna myśl"]
+    ["/inbox Luźna myśl", "knowledge", "Luźna myśl"],
+    ["/skrzynka Pomysł do późniejszego triage", "knowledge", "Pomysł do późniejszego triage"]
   ] as const)("rozpoznaje %s", (value, mode, content) => {
     expect(parseQuickAddCommand(value)).toEqual({ mode, content });
   });

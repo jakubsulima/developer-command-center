@@ -10,6 +10,6 @@ describe("routeForEntity", () => {
   });
 
   it.each(["unprocessed", "snoozed", "resolved", "discarded"] as const)("includes the %s Inbox view", (status) => {
-    expect(routeForEntity({ type: "inbox", id: "i1", status })).toBe(`/inbox?view=${status}&item=i1`);
+    expect(routeForEntity({ type: "inbox", id: "i1", status })).toBe(`/knowledge?section=inbox&status=${status}&item=i1`);
   });
 });

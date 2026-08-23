@@ -83,7 +83,7 @@ export interface AppStore {
   createRecurringAction: (input: NewRecurringActionInput) => Promise<string>;
   updateRecurringAction: (templateId: string, changes: Partial<NewRecurringActionInput>, updateFutureActions?: boolean) => Promise<void>;
   materializeRecurring: (today?: string) => Promise<void>;
-  linkKnowledge: (knowledgeItemId: string, target: { areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning?: "material" | "result" | "decision" | "reference") => Promise<void>;
+  linkKnowledge: (knowledgeItemId: string, target: { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning?: "material" | "result" | "decision" | "reference") => Promise<void>;
   unlinkKnowledge: (linkId: string) => Promise<void>;
   triageInboxIntent: (inboxItemId: string, intent: NewInboxTriageIntent) => Promise<void>;
   createProject: (input: NewProjectInput) => Promise<CreatedProjectReference>;

@@ -12,6 +12,11 @@ Najpierw domyka on dostęp do wszystkich sekcji, poprawne deep linki i reset
 przewinięcia, a dopiero później skraca formularze i porządkuje warstwę
 Tailwind/shadcn.
 
+Plan pierwszego pionu AI, z bezpiecznym adapterem NVIDIA API/NIM, znajduje się w
+dokumencie [AI z obsługą NVIDIA](./nvidia-ai-implementation.md). Zaczyna od
+propozycji triage Inboxu i zachowuje rozdział `AIProposal → approval →
+AIExecution`.
+
 Aktualnym źródłem decyzji produktowych jest dokument
 [Trwałe Projekty i proste Cele](./project-centered-hierarchy.md). Wcześniejszy
 dokument [Cele, działania cykliczne i wiedza](./goal-centric-redesign.md)
