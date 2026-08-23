@@ -6,8 +6,8 @@ import { deriveWeeklyReview, weekBounds } from "./weeklyReview";
 describe("automatyczne podsumowanie tygodnia", () => {
   it("wyznacza tydzień od poniedziałku do poniedziałku", () => {
     const { start, end } = weekBounds(new Date("2026-08-08T12:00:00.000Z"));
-    expect(start.toISOString()).toBe("2026-08-03T00:00:00.000Z");
-    expect(end.toISOString()).toBe("2026-08-10T00:00:00.000Z");
+    expect(start.toISOString()).toBe("2026-08-02T22:00:00.000Z");
+    expect(end.toISOString()).toBe("2026-08-09T22:00:00.000Z");
   });
 
   it("liczy aktywność i proponuje decyzje z bieżącego stanu", () => {

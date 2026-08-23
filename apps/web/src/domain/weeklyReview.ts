@@ -1,4 +1,5 @@
 import type { AppState } from "./types";
+import { selectWorkspaceActivity, withinDateRange, workspaceWeekBounds } from "./activity";
 
 export interface WeeklyReviewSuggestion {
   id: string;
@@ -10,6 +11,8 @@ export interface WeeklyReviewSuggestion {
 export interface WeeklyReviewSummary {
   start: Date;
   end: Date;
+  startDate: string;
+  endDate: string;
   completedActions: number;
   focusMinutes: number;
   knowledgeAdded: number;
@@ -18,11 +21,7 @@ export interface WeeklyReviewSummary {
   suggestions: WeeklyReviewSuggestion[];
 }
 
-const within = (value: string | undefined, start: Date, end: Date) => {
-  if (!value) return false;
-  const timestamp = new Date(value).getTime();
-  return timestamp >= start.getTime() && timestamp < end.getTime();
-};
+const within = withinDateRange;
 
 const counted = (count: number, one: string, few: string, many: string) => {
   if (count === 1) return one;
@@ -31,37 +30,50 @@ const counted = (count: number, one: string, few: string, many: string) => {
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many;
 };
 
-export function weekBounds(now = new Date()) {
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
+export const isOpenAction = (action: AppState["actions"][number]) => !["completed", "skipped", "cancelled"].includes(action.status);
+
+export function activeGoalsWithoutNextAction(state: AppState) {
+  const activeGoals = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active");
+  return activeGoals.filter((goal) => !state.actions.some((action) => action.goalId === goal.id && action.isNext && ["ready", "in_progress"].includes(action.status)));
+}
+
+export function blockedActions(state: AppState) {
+  return state.actions.filter((action) => action.status === "blocked");
+}
+
+export function overdueActions(state: AppState, today: string) {
+  return state.actions.filter((action) => isOpenAction(action) && Boolean(action.scheduledFor && action.scheduledFor < today));
+}
+
+export function knowledgeQueue(state: AppState) {
+  return state.inbox.filter((item) => item.status === "unprocessed");
+}
+
+export function weekBounds(now = new Date(), timeZone = "Europe/Warsaw") {
+  const { start, end } = workspaceWeekBounds(now, timeZone);
   return { start, end };
 }
 
 export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyReviewSummary {
-  const { start, end } = weekBounds(now);
-  const completedActions = state.actions.filter((action) => action.status === "completed" && within(action.completedAt ?? action.updatedAt, start, end)).length;
-  const knowledgeAdded = state.knowledge.filter((item) => within(item.createdAt, start, end)).length;
-  const progressUpdates = state.progressEntries.filter((entry) => within(entry.createdAt, start, end)).length;
+  const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
+  const activity = selectWorkspaceActivity(state, now);
+  const { completedActions, knowledgeAdded, progressUpdates } = activity;
   const focusMinutes = Math.round(state.focusSessions.reduce((total, session) => {
     if (!session.endedAt || !within(session.endedAt, start, end)) return total;
     return total + Math.max(0, new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60_000;
   }, 0));
 
-  const activeGoals = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active");
-  const goalsWithoutNextAction = activeGoals.filter((goal) => !state.actions.some((action) => action.goalId === goal.id && action.isNext && ["ready", "in_progress"].includes(action.status)));
-  const blockedActions = state.actions.filter((action) => action.status === "blocked");
+  const goalsWithoutNextAction = activeGoalsWithoutNextAction(state);
+  const blocked = blockedActions(state);
   const activeProjects = state.projects.filter((project) => project.commitmentStatus === "active");
-  const unprocessedInbox = state.inbox.filter((item) => item.status === "unprocessed");
-  const today = now.toISOString().slice(0, 10);
-  const overdueActions = state.actions.filter((action) => action.scheduledFor && action.scheduledFor < today && ["ready", "in_progress", "blocked"].includes(action.status));
+  const unprocessedInbox = knowledgeQueue(state);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const overdue = overdueActions(state, today);
 
   const suggestions: WeeklyReviewSuggestion[] = [];
-  if (blockedActions.length) suggestions.push({
+  if (blocked.length) suggestions.push({
     id: "blocked",
-    title: `Odblokuj ${blockedActions.length === 1 ? "jedno Działanie" : `${blockedActions.length} ${counted(blockedActions.length, "Działanie", "Działania", "Działań")}`}`,
+    title: `Odblokuj ${blocked.length === 1 ? "jedno Działanie" : `${blocked.length} ${counted(blocked.length, "Działanie", "Działania", "Działań")}`}`,
     detail: "Najpierw podejmij decyzję albo nazwij osobę, od której zależy dalszy ruch.",
     to: "/"
   });
@@ -71,9 +83,9 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     detail: "Cel bez konkretnego następnego Działania będzie trudny do wznowienia.",
     to: `/goals/${goalsWithoutNextAction[0]!.id}`
   });
-  if (overdueActions.length) suggestions.push({
+  if (overdue.length) suggestions.push({
     id: "overdue",
-    title: `Zdecyduj o ${overdueActions.length === 1 ? "jednym zaległym Działaniu" : `${overdueActions.length} zaległych Działaniach`}`,
+    title: `Zdecyduj o ${overdue.length === 1 ? "jednym zaległym Działaniu" : `${overdue.length} zaległych Działaniach`}`,
     detail: "Przełóż, ukończ lub anuluj je, zamiast przenosić cały ciężar na kolejny tydzień.",
     to: "/"
   });
@@ -85,9 +97,9 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
   });
   if (unprocessedInbox.length) suggestions.push({
     id: "inbox",
-    title: `Przejrzyj ${unprocessedInbox.length} ${counted(unprocessedInbox.length, "element Inboxu", "elementy Inboxu", "elementów Inboxu")}`,
+    title: `Przejrzyj ${unprocessedInbox.length} ${counted(unprocessedInbox.length, "element kolejki Wiedzy", "elementy kolejki Wiedzy", "elementów kolejki Wiedzy")}`,
     detail: "Zacznij od tych, które mogą zmienić plan lub blokują następny krok.",
-    to: "/inbox"
+    to: "/knowledge?section=inbox"
   });
   if (!suggestions.length) suggestions.push({
     id: "continue",
@@ -102,13 +114,15 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
   const context = knowledgeAdded || progressUpdates
     ? `Dodano ${knowledgeAdded} ${counted(knowledgeAdded, "element Wiedzy", "elementy Wiedzy", "elementów Wiedzy")} i ${progressUpdates} ${counted(progressUpdates, "aktualizację postępu", "aktualizacje postępu", "aktualizacji postępu")}.`
     : "Nie dodano nowej Wiedzy ani aktualizacji postępu.";
-  const attention = blockedActions.length || goalsWithoutNextAction.length || unprocessedInbox.length
-    ? `Na decyzję czeka ${blockedActions.length} ${counted(blockedActions.length, "blokada", "blokady", "blokad")}, ${goalsWithoutNextAction.length} ${counted(goalsWithoutNextAction.length, "Cel", "Cele", "Celów")} bez następnego kroku i ${unprocessedInbox.length} ${counted(unprocessedInbox.length, "element Inboxu", "elementy Inboxu", "elementów Inboxu")}.`
+  const attention = blocked.length || goalsWithoutNextAction.length || unprocessedInbox.length
+    ? `Na decyzję czeka ${blocked.length} ${counted(blocked.length, "blokada", "blokady", "blokad")}, ${goalsWithoutNextAction.length} ${counted(goalsWithoutNextAction.length, "Cel", "Cele", "Celów")} bez następnego kroku i ${unprocessedInbox.length} ${counted(unprocessedInbox.length, "element kolejki Wiedzy", "elementy kolejki Wiedzy", "elementów kolejki Wiedzy")}.`
     : "Nie ma pilnych sygnałów wymagających decyzji.";
 
   return {
     start,
     end,
+    startDate,
+    endDate,
     completedActions,
     focusMinutes,
     knowledgeAdded,

@@ -217,6 +217,38 @@ describe("komendy domenowe Workspace", () => {
     expect(next.knowledge[0]).toMatchObject({ id: "note-one", type: "note", detail: "indeks złożony", sourceSessionId: "session-one" });
   });
 
+  it("dołącza materiał do decyzji jako jej potwierdzenie", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      knowledge: [
+        { id: "decision", type: "decision" as const, title: "Wybieramy PostgreSQL", detail: "" },
+        { id: "source", type: "resource" as const, title: "Porównanie baz", detail: "" }
+      ]
+    };
+    const next = executeDomainCommand(state, {
+      type: "link_knowledge",
+      id: "support-link",
+      knowledgeItemId: "source",
+      targetKnowledgeItemId: "decision",
+      meaning: "material",
+      createdAt: "2026-08-20T12:00:00.000Z"
+    });
+
+    expect(next.knowledgeLinks).toEqual([expect.objectContaining({
+      knowledgeItemId: "source",
+      targetKnowledgeItemId: "decision",
+      meaning: "material"
+    })]);
+    expect(() => executeDomainCommand(state, {
+      type: "link_knowledge",
+      id: "self-link",
+      knowledgeItemId: "decision",
+      targetKnowledgeItemId: "decision",
+      meaning: "material",
+      createdAt: "2026-08-20T12:00:00.000Z"
+    })).toThrow("knowledge_self_link_not_allowed");
+  });
+
   it("archiwizuje, przenosi do Trash i przywraca bez zmiany stanu domenowego", () => {
     const state = executeDomainCommand(structuredClone(emptyState), {
       type: "create_project", id: "project", title: "Projekt", outcome: "Rezultat", technology: "React",
