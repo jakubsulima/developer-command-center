@@ -6,10 +6,10 @@ import { AppShell, PageHeading } from "../components/AppShell";
 import { DraftStatus } from "../components/DraftStatus";
 import { Badge, Button, Panel } from "../components/ui";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
+import { formatWorkspaceDateRange } from "../domain/activity";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 
 const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
-const dayFormatter = new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short" });
 
 export function ReviewPage() {
   const { state, completeReview } = useStore();
@@ -17,8 +17,6 @@ export function ReviewPage() {
   const weekly = useMemo(() => deriveWeeklyReview(state), [state]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const rangeEnd = new Date(weekly.end);
-  rangeEnd.setUTCDate(rangeEnd.getUTCDate() - 1);
   const completedThisWeek = state.reviews.some((review) => review.type === "weekly" && new Date(review.completedAt) >= weekly.start && new Date(review.completedAt) < weekly.end);
   const recentReviews = [...state.reviews].filter((review) => review.type === "weekly").reverse().slice(0, 4);
 
@@ -43,7 +41,7 @@ export function ReviewPage() {
     <AppShell>
       <PageHeading
         title="Podsumowanie tygodnia"
-        eyebrow={`${dayFormatter.format(weekly.start)}–${dayFormatter.format(rangeEnd)} · aktualizuje się automatycznie`}
+        eyebrow={`${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
         action={completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}
       />
       <div className="review-layout weekly-review-layout">
@@ -81,7 +79,7 @@ export function ReviewPage() {
 
         <aside className="review-side">
           <Panel><h2>Historia tygodni</h2>{recentReviews.length ? recentReviews.map((review) => <div className="review-history-item" key={review.id}><strong>Podsumowanie zapisane</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Bez dodatkowej decyzji."}</p></div>) : <p className="muted-copy">Pierwsze zapisane podsumowanie pojawi się tutaj.</p>}</Panel>
-          <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length}</strong><span>aktywnych Celów</span></p><p><strong>{state.actions.filter((action) => action.status === "blocked").length}</strong><span>blokad</span></p><p><strong>{state.inbox.filter((item) => item.status === "unprocessed").length}</strong><span>w Inboxie</span></p></div></Panel>
+          <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length}</strong><span>aktywnych Celów</span></p><p><strong>{state.actions.filter((action) => action.status === "blocked").length}</strong><span>blokad</span></p><p><strong>{state.inbox.filter((item) => item.status === "unprocessed").length}</strong><span>w Skrzynce</span></p></div></Panel>
         </aside>
       </div>
     </AppShell>
