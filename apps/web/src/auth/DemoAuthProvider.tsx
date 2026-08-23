@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { AuthContext, demoUser, type AuthContextValue } from "./auth-context";
+import { markStartupPhase } from "../lib/startupMetrics";
 
 const demoAuth: AuthContextValue = {
   mode: "demo",
@@ -12,5 +13,6 @@ const demoAuth: AuthContextValue = {
 };
 
 export default function DemoAuthProvider({ children }: { children: ReactNode }) {
+  useEffect(() => { markStartupPhase("session-resolved"); }, []);
   return <AuthContext.Provider value={demoAuth}>{children}</AuthContext.Provider>;
 }

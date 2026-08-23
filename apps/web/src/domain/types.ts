@@ -134,6 +134,7 @@ export interface RecurringActionTemplate {
 export interface KnowledgeLink {
   id: string;
   knowledgeItemId: string;
+  targetKnowledgeItemId?: string;
   areaId?: string;
   goalId?: string;
   actionId?: string;

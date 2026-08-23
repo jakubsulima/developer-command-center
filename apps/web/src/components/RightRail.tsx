@@ -23,8 +23,8 @@ export function RightRail() {
             {expanded && (
               <div className="proposal-preview">
                 <span className="proposal-label"><Bot />Proponowana zmiana</span>
-                <strong>{target ? `Dodaj pracę do projektu ${target.name}` : "Przetwórz element Inboxu"}</strong>
-                <p>{source ? `„${source.content}” wymaga Twojej decyzji.` : "Sprawdź typowaną komendę przed wykonaniem."} Źródło: Inbox. Ryzyko: niskie.</p>
+                <strong>{target ? `Dodaj pracę do projektu ${target.name}` : "Przetwórz element Skrzynki"}</strong>
+                <p>{source ? `„${source.content}” wymaga Twojej decyzji.` : "Sprawdź typowaną komendę przed wykonaniem."} Źródło: Skrzynka. Ryzyko: niskie.</p>
               </div>
             )}
             {!expanded ? <Button variant="primary" onClick={() => setExpanded(true)}>Zobacz propozycję</Button> : (

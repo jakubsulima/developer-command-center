@@ -26,7 +26,7 @@ interface GoalCriterionRow { id: string; goal_id: string; title: string; complet
 interface ActionRow { id: string; version: number; goal_id: string | null; area_id: string | null; title: string; detail: string; status: ActionStatus; blocker: string | null; position: number; is_next: boolean; pinned_to_today: boolean; scheduled_for: string | null; completed_at: string | null; skipped_at: string | null; cancelled_at: string | null; recurring_template_id: string | null; occurrence_date: string | null; checklist: AppState["actions"][number]["checklist"]; legacy_source_id: string | null; created_at: string; updated_at: string }
 interface ProgressRow { id: string; goal_id: string; action_id: string | null; knowledge_entity_id: string | null; kind: AppState["progressEntries"][number]["kind"]; content: string; legacy_source: "learning_evidence" | "checkpoint" | null; legacy_source_id: string | null; created_at: string }
 interface RecurringRow { id: string; title: string; detail: string; goal_id: string | null; area_id: string | null; timezone: string; starts_on: string; recurrence_rule: RecurringActionTemplate["rule"]; missed_policy: RecurringActionTemplate["missedPolicy"]; status: RecurringActionTemplate["status"]; checklist: RecurringActionTemplate["checklist"]; last_materialized_on: string | null; skipped_occurrence_count: number; created_at: string; updated_at: string }
-interface KnowledgeLinkRow { id: string; knowledge_entity_id: string; area_id: string | null; goal_id: string | null; action_id: string | null; recurring_template_id: string | null; meaning: AppState["knowledgeLinks"][number]["meaning"]; created_at: string }
+interface KnowledgeLinkRow { id: string; knowledge_entity_id: string; target_knowledge_entity_id: string | null; area_id: string | null; goal_id: string | null; action_id: string | null; recurring_template_id: string | null; meaning: AppState["knowledgeLinks"][number]["meaning"]; created_at: string }
 interface KnowledgeContentRow { entity_id: string; detail: string; source_url: string | null; source_inbox_item_id: string | null; created_at: string; updated_at: string }
 
 function dataOrThrow<T>(result: { data: T | null; error: { message: string } | null }, label: string): T {
@@ -108,7 +108,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
     client.from("actions").select("id,version,goal_id,area_id,title,detail,status,blocker,position,is_next,pinned_to_today,scheduled_for,completed_at,skipped_at,cancelled_at,recurring_template_id,occurrence_date,checklist,legacy_source_id,created_at,updated_at").order("position"),
     client.from("progress_entries").select("id,goal_id,action_id,knowledge_entity_id,kind,content,legacy_source,legacy_source_id,created_at").order("created_at", { ascending: false }).limit(500),
     client.from("recurring_action_templates").select("id,title,detail,goal_id,area_id,timezone,starts_on,recurrence_rule,missed_policy,status,checklist,last_materialized_on,skipped_occurrence_count,created_at,updated_at"),
-    client.from("knowledge_links").select("id,knowledge_entity_id,area_id,goal_id,action_id,recurring_template_id,meaning,created_at"),
+    client.from("knowledge_links").select("id,knowledge_entity_id,target_knowledge_entity_id,area_id,goal_id,action_id,recurring_template_id,meaning,created_at"),
     client.from("knowledge_items").select("entity_id,detail,source_url,source_inbox_item_id,created_at,updated_at")
   ]);
 
@@ -196,7 +196,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
     actions: actionRows.map((action) => ({ id: action.id, version: action.version, goalId: action.goal_id ?? undefined, areaId: action.area_id ?? undefined, title: action.title, detail: action.detail, status: action.status, blocker: action.blocker ?? undefined, position: action.position, isNext: action.is_next, pinnedToToday: action.pinned_to_today, scheduledFor: action.scheduled_for ?? undefined, completedAt: action.completed_at ?? undefined, skippedAt: action.skipped_at ?? undefined, cancelledAt: action.cancelled_at ?? undefined, recurringTemplateId: action.recurring_template_id ?? undefined, occurrenceDate: action.occurrence_date ?? undefined, checklist: action.checklist, legacySourceId: action.legacy_source_id ?? undefined, createdAt: action.created_at, updatedAt: action.updated_at })),
     progressEntries: progressRows.map((entry) => ({ id: entry.id, goalId: entry.goal_id, actionId: entry.action_id ?? undefined, knowledgeItemId: entry.knowledge_entity_id ?? undefined, kind: entry.kind, content: entry.content, legacySource: entry.legacy_source ?? undefined, legacySourceId: entry.legacy_source_id ?? undefined, createdAt: entry.created_at })),
     recurringActionTemplates: recurringRows.map((template) => ({ id: template.id, title: template.title, detail: template.detail, goalId: template.goal_id ?? undefined, areaId: template.area_id ?? undefined, timezone: template.timezone, startsOn: template.starts_on, rule: template.recurrence_rule, missedPolicy: template.missed_policy, status: template.status, checklist: template.checklist, lastMaterializedOn: template.last_materialized_on ?? undefined, skippedOccurrenceCount: template.skipped_occurrence_count, createdAt: template.created_at, updatedAt: template.updated_at })),
-    knowledgeLinks: knowledgeLinkRows.map((link) => ({ id: link.id, knowledgeItemId: link.knowledge_entity_id, areaId: link.area_id ?? undefined, goalId: link.goal_id ?? undefined, actionId: link.action_id ?? undefined, recurringTemplateId: link.recurring_template_id ?? undefined, meaning: link.meaning, createdAt: link.created_at })),
+    knowledgeLinks: knowledgeLinkRows.map((link) => ({ id: link.id, knowledgeItemId: link.knowledge_entity_id, targetKnowledgeItemId: link.target_knowledge_entity_id ?? undefined, areaId: link.area_id ?? undefined, goalId: link.goal_id ?? undefined, actionId: link.action_id ?? undefined, recurringTemplateId: link.recurring_template_id ?? undefined, meaning: link.meaning, createdAt: link.created_at })),
     projects,
     inbox: inboxRows.map((item) => ({ id: item.id, kind: item.kind, content: item.raw_content, createdAt: item.created_at, status: item.status as InboxItem["status"], snoozedUntil: item.snoozed_until ?? undefined, discardedAt: item.discarded_at ?? undefined })),
     checkpoints: checkpointRows.map((item) => {
@@ -498,9 +498,10 @@ export async function materializeRecurringOccurrenceRemote(workspaceId: string, 
   }), "Utworzenie wystąpienia cyklicznego");
 }
 
-export async function linkKnowledgeRemote(workspaceId: string, id: string, knowledgeItemId: string, target: { areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning: string) {
+export async function linkKnowledgeRemote(workspaceId: string, id: string, knowledgeItemId: string, target: { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning: string) {
   dataOrThrow(await getSupabase().from("knowledge_links").insert({
     id, workspace_id: workspaceId, knowledge_entity_id: knowledgeItemId,
+    target_knowledge_entity_id: target.targetKnowledgeItemId ?? null,
     area_id: target.areaId ?? null, goal_id: target.goalId ?? null, action_id: target.actionId ?? null,
     recurring_template_id: target.recurringTemplateId ?? null, meaning
   }).select("id").single(), "Powiązanie Wiedzy");

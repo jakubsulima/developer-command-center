@@ -11,7 +11,7 @@ export function routeForEntity(entity: EntityRoute) {
   if (entity.type === "goal") return `/goals/${id}`;
   if (entity.type === "action") return entity.goalId ? `/goals/${encodeURIComponent(entity.goalId)}?action=${id}` : `/actions/${id}`;
   if (entity.type === "knowledge") return `/knowledge/${id}`;
-  return `/inbox?view=${entity.status}&item=${id}`;
+  return `/knowledge?section=inbox&status=${entity.status}&item=${id}`;
 }
 
 export function goalActionRoute(goalId: string, actionId: string) {
