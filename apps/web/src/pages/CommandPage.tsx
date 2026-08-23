@@ -140,8 +140,8 @@ export function CommandPage() {
         </Panel>
       </div>
 
-      <Link className="mobile-ai-row" to="/inbox"><Sparkles />AI ma {state.aiProposal === "pending" ? "1 propozycję" : "0 propozycji"}<ArrowRight /></Link>
-      <Link className="mobile-inbox-row" to="/inbox"><BookOpenCheck />{pendingInbox} elementów czeka w Inboxie<ArrowRight /></Link>
+      <Link className="mobile-ai-row" to="/knowledge?section=inbox"><Sparkles />AI ma {state.aiProposal === "pending" ? "1 propozycję" : "0 propozycji"}<ArrowRight /></Link>
+      <Link className="mobile-inbox-row" to="/knowledge?section=inbox"><BookOpenCheck />{pendingInbox} elementów czeka na przetworzenie<ArrowRight /></Link>
     </AppShell>
   );
 }

@@ -19,7 +19,7 @@ describe("infrastruktura Auth", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrap = (value: AuthContextValue) => <QueryClientProvider client={queryClient}><AuthContext.Provider value={value}><AuthGate><div>Private app</div></AuthGate></AuthContext.Provider></QueryClientProvider>;
     const { rerender } = render(wrap({ ...base, loading: true }));
-    expect(screen.getByRole("status")).toHaveTextContent("Ładowanie Command");
+    expect(screen.getByRole("status")).toHaveTextContent("Sprawdzanie sesji");
     rerender(wrap(base));
     expect(screen.getByRole("heading", { name: "Witaj ponownie" })).toBeInTheDocument();
     rerender(wrap({ ...base, mode: "demo", user: { id: "user", email: "dev@example.com", name: "Dev" } }));

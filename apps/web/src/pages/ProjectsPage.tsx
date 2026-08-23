@@ -51,7 +51,7 @@ export function ProjectsPage() {
 
   return <AppShell>
     <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe obszary pracy`} action={<Button variant="primary" onClick={() => setOpen(true)}><Plus />Nowy projekt</Button>} />
-    <p className="page-lead">Projekt przechowuje wspólny kontekst przez długi czas. W jego ramach tworzysz prostsze Cele, Zadania i Wiedzę.</p>
+    <p className="page-lead">Projekt przechowuje wspólny kontekst przez długi czas. W jego ramach tworzysz prostsze Cele, Działania i Wiedzę.</p>
     <div className="knowledge-views" role="group" aria-label="Widoczność Projektów">
       <Button variant={view === "active" ? "primary" : "ghost"} onClick={() => setView("active")}>Aktywne</Button>
       <Button variant={view === "archived" ? "primary" : "ghost"} onClick={() => setView("archived")}><Archive />Archiwum</Button>
@@ -70,7 +70,7 @@ export function ProjectsPage() {
         </div>
         {view === "active" ? <Link className="button button-secondary entity-card-open" to={`/projects/${project.id}`}>Otwórz projekt <ArrowRight /></Link> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
       </Panel>;
-    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Utwórz trwałe miejsce, w którym połączysz Cele, Zadania i Wiedzę." : "Nie ma tutaj żadnych Projektów."} action={view === "active" ? <Button variant="primary" onClick={() => setOpen(true)}><Plus />Utwórz pierwszy Projekt</Button> : undefined} />}
+    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Utwórz trwałe miejsce, w którym połączysz Cele, Działania i Wiedzę." : "Nie ma tutaj żadnych Projektów."} action={view === "active" ? <Button variant="primary" onClick={() => setOpen(true)}><Plus />Utwórz pierwszy Projekt</Button> : undefined} />}
 
     <Modal open={open} title="Nowy projekt" onClose={() => setOpen(false)}>
       <form onSubmit={submit}>
@@ -79,7 +79,7 @@ export function ProjectsPage() {
         <input id="project-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Np. Finanse osobiste" required autoFocus />
         <label className="field-label" htmlFor="project-description">Krótki kontekst <span className="optional-label">opcjonalnie</span></label>
         <textarea id="project-description" rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Co należy do tego Projektu?" />
-        <div className="project-preview"><FolderKanban /><span><small>Stały Projekt</small><strong>{form.name.trim() || "Nowy Projekt"}</strong><p>{form.description.trim() || "Cele, Zadania i Wiedza będą zebrane w jednym miejscu."}</p></span></div>
+        <div className="project-preview"><FolderKanban /><span><small>Stały Projekt</small><strong>{form.name.trim() || "Nowy Projekt"}</strong><p>{form.description.trim() || "Cele, Działania i Wiedza będą zebrane w jednym miejscu."}</p></span></div>
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}
         <div className="modal-actions"><Button type="button" onClick={() => setOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.name.trim()}><Plus />Utwórz Projekt</Button></div>
       </form>
