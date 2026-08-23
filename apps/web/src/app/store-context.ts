@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxKind, InboxStatus, KnowledgeKind, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule, WorkItemStatus } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, FocusEndReason, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule, WorkItemStatus } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { DraftSaveStatus } from "../hooks/usePersistentDraft";
 
@@ -83,7 +83,7 @@ export interface AppStore {
   createRecurringAction: (input: NewRecurringActionInput) => Promise<string>;
   updateRecurringAction: (templateId: string, changes: Partial<NewRecurringActionInput>, updateFutureActions?: boolean) => Promise<void>;
   materializeRecurring: (today?: string) => Promise<void>;
-  linkKnowledge: (knowledgeItemId: string, target: { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning?: "material" | "result" | "decision" | "reference") => Promise<void>;
+  linkKnowledge: (knowledgeItemId: string, target: KnowledgeRelationTarget, meaning?: KnowledgeRelationMeaning) => Promise<void>;
   unlinkKnowledge: (linkId: string) => Promise<void>;
   triageInboxIntent: (inboxItemId: string, intent: NewInboxTriageIntent) => Promise<void>;
   createProject: (input: NewProjectInput) => Promise<CreatedProjectReference>;
@@ -99,7 +99,8 @@ export interface AppStore {
   triageInbox: (id: string, target: KnowledgeKind, title: string, detail: string, projectId?: string) => void;
   setInboxStatus: (id: string, status: InboxStatus, snoozedUntil?: string) => Promise<void>;
   releaseDueInbox: (now?: Date) => Promise<void>;
-  createKnowledge: (kind: KnowledgeKind, title: string, detail: string, goalId?: string, sourceUrl?: string, goalIds?: string[]) => Promise<string>;
+  createKnowledge: (input: CreateKnowledgeInput) => Promise<string>;
+  recordActionResult: (actionId: string, result: ActionResultInput) => Promise<string>;
   updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; goalIds?: string[] }) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
   startFocus: (workItemId?: string) => Promise<boolean>;

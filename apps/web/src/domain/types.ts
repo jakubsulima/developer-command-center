@@ -6,6 +6,7 @@ export type FocusEndReason = "paused" | "work_item_completed" | "stopped" | "int
 export type InboxKind = "text" | "link" | "file" | "voice";
 export type InboxStatus = "unprocessed" | "snoozed" | "resolved" | "discarded";
 export type KnowledgeKind = "note" | "resource" | "decision" | "artifact" | "investigation";
+export type KnowledgeRelationMeaning = "material" | "result" | "decision" | "reference";
 export type GoalKind = "project" | "learning" | "personal" | "maintenance" | "custom";
 export type GoalStatus = "active" | "paused" | "achieved" | "abandoned";
 export type Visibility = "active" | "archived" | "trashed";
@@ -139,9 +140,37 @@ export interface KnowledgeLink {
   goalId?: string;
   actionId?: string;
   recurringTemplateId?: string;
-  meaning: "material" | "result" | "decision" | "reference";
+  meaning: KnowledgeRelationMeaning;
   createdAt: string;
 }
+
+/** Exactly one target is required for every Knowledge relation. */
+export type KnowledgeRelationTarget =
+  | { targetKnowledgeItemId: string; areaId?: never; goalId?: never; actionId?: never; recurringTemplateId?: never }
+  | { targetKnowledgeItemId?: never; areaId: string; goalId?: never; actionId?: never; recurringTemplateId?: never }
+  | { targetKnowledgeItemId?: never; areaId?: never; goalId: string; actionId?: never; recurringTemplateId?: never }
+  | { targetKnowledgeItemId?: never; areaId?: never; goalId?: never; actionId: string; recurringTemplateId?: never }
+  | { targetKnowledgeItemId?: never; areaId?: never; goalId?: never; actionId?: never; recurringTemplateId: string };
+
+export interface KnowledgeRelationInput {
+  id?: string;
+  meaning: KnowledgeRelationMeaning;
+  target: KnowledgeRelationTarget;
+}
+
+export interface CreateKnowledgeInput {
+  kind: KnowledgeKind;
+  title: string;
+  detail: string;
+  sourceUrl?: string;
+  projectId?: string;
+  sourceInboxItemId?: string;
+  relations?: KnowledgeRelationInput[];
+}
+
+export type ActionResultInput =
+  | { kind: "new"; title: string; detail: string; sourceUrl?: string }
+  | { kind: "existing"; knowledgeItemId: string };
 
 export interface NewProjectInput {
   title: string;

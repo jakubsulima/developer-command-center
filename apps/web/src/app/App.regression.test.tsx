@@ -315,10 +315,9 @@ describe("regresje nowego modelu Celów", () => {
     await user.type(within(edit).getByLabelText("Nazwa"), "Zaprojektuj model transakcji");
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Powiąż Wiedzę: Zaprojektuj model transakcji" }));
-    const material = screen.getByRole("dialog", { name: "Powiąż Wiedzę z Działaniem" });
-    await user.selectOptions(within(material).getByLabelText("Materiał dla Działania"), "know-3");
-    await user.click(within(material).getByRole("button", { name: "Połącz" }));
-    expect(await screen.findByText(/Materiały: PostgreSQL: constraints and normalization/)).toBeInTheDocument();
+    const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
+    await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
+    await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
+    expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();
   });
 });

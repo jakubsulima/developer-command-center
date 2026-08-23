@@ -12,6 +12,8 @@ import { Modal } from "../components/Modal";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { goalKindLabels } from "../domain/labels";
 import { routeForEntity } from "../domain/routes";
+import { ActionResultDialog } from "../components/ActionResultDialog";
+import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 
 export function GoalDetailPage() {
   const { state, createAction, updateAction, setActionStatus, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
@@ -26,8 +28,6 @@ export function GoalDetailPage() {
   const [blocker, setBlocker] = useState("");
   const [knowledgeId, setKnowledgeId] = useState("");
   const [editAction, setEditAction] = useState<{ id: string; title: string; detail: string; scheduledFor: string; checklist: Array<{ id: string; title: string; completed: boolean }> }>();
-  const [linkActionId, setLinkActionId] = useState<string>();
-  const [actionKnowledgeId, setActionKnowledgeId] = useState("");
   const [pendingGoalStatus, setPendingGoalStatus] = useState<"achieved" | "abandoned">();
   const [statusReason, setStatusReason] = useState("");
   const [goalStatusSaving, setGoalStatusSaving] = useState(false);
@@ -35,6 +35,7 @@ export function GoalDetailPage() {
   const [editGoal, setEditGoal] = useState(false);
   const [goalForm, setGoalForm] = useState({ title: "", outcome: "", areaId: "", priority: "normal" as "low" | "normal" | "high", targetDate: "", criteria: "" });
   const [actionMenuId, setActionMenuId] = useState<string>();
+  const [resultActionId, setResultActionId] = useState<string>();
   const [dialogSaving, setDialogSaving] = useState(false);
   const [dialogError, setDialogError] = useState("");
   const [trashOpen, setTrashOpen] = useState(false);
@@ -68,7 +69,7 @@ export function GoalDetailPage() {
     if (!previous) return;
     await actionMutation.run(`goal-action:${actionId}`, async () => {
       await setActionStatus(actionId, "completed");
-      notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(actionId, previous.status, previous.blocker) });
+      if (!state.knowledgeLinks.some((link) => link.actionId === actionId && link.meaning === "result")) notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(actionId, previous.status, previous.blocker), action: { label: "Dodaj rezultat", onClick: () => setResultActionId(actionId) } });
     });
   };
   const restoreCompletedAction = (action: typeof actions[number]) => actionMutation.run(`goal-action:${action.id}`, async () => {
@@ -143,14 +144,13 @@ export function GoalDetailPage() {
               <Button variant="ghost" aria-label={`Edytuj: ${action.title}`} onClick={() => openActionEditor(action)}><Pencil /></Button>
               <Button variant="ghost" aria-label={`Przesuń wyżej: ${action.title}`} disabled={action.id === actions[0]?.id} onClick={() => void move(action.id, -1)}><ArrowUp /></Button>
               <Button variant="ghost" aria-label={`Przesuń niżej: ${action.title}`} disabled={action.id === actions.at(-1)?.id} onClick={() => void move(action.id, 1)}><ArrowDown /></Button>
-              <Button variant="ghost" aria-label={`Powiąż Wiedzę: ${action.title}`} onClick={() => { setDialogError(""); setLinkActionId(action.id); setActionKnowledgeId(""); }}><Link2 /></Button>
               <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.pinnedToToday; void actionMutation.run(`goal-action:${action.id}`, async () => { await updateAction(action.id, { pinnedToToday: !previous }); notifyUndo({ message: previous ? "Odpięto od Startu." : "Przypięto do Startu.", undo: () => updateAction(action.id, { pinnedToToday: previous }) }); }); }}>{action.pinnedToToday ? "Odepnij" : "Przypnij"}</Button>
               {["ready", "in_progress"].includes(action.status) && !action.isNext && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setNextAction(goal.id, action.id))}>Ustaw jako następne</Button>}
               {["ready", "in_progress"].includes(action.status) && <Button variant="ghost" aria-label={`Zablokuj: ${action.title}`} onClick={() => { setDialogError(""); setBlockActionId(action.id); setBlocker(""); }}><LockKeyhole /></Button>}
               {action.status === "blocked" && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setActionStatus(action.id, "ready"))}><RotateCcw />Odblokuj</Button>}
               {action.recurringTemplateId && !["completed", "skipped", "cancelled"].includes(action.status) && <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><SkipForward />Pomiń</Button>}
               {!["completed", "cancelled"].includes(action.status) && <Button variant="danger" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "cancelled"); notifyUndo({ message: "Działanie anulowane.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><Ban />Anuluj Działanie</Button>}
-            </div>
+            </div><ActionKnowledgeRelations action={action} />
           </div>)}</div>
           <form className="inline-create" onSubmit={addAction}><input aria-label="Nowe Działanie" placeholder="Dodaj konkretny krok…" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /><input aria-label="Termin Działania" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /><Button type="submit" loading={actionMutation.isBusy("goal-create-action")} disabled={!actionForm.title.trim()}><Plus />Dodaj</Button>{actionMutation.error("goal-create-action") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-create-action")} <button type="button" onClick={() => void actionMutation.retry("goal-create-action")?.()}>Spróbuj ponownie</button></p> : null}</form>
         </Panel>
@@ -177,8 +177,8 @@ export function GoalDetailPage() {
       <Button type="button" variant="ghost" onClick={() => setEditAction((current) => current ? { ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), title: "", completed: false }] } : current)}><Plus />Dodaj punkt</Button>
       {dialogError ? <p className="auth-message error" role="alert">{dialogError}</p> : null}<div className="modal-actions"><Button disabled={dialogSaving} onClick={() => setEditAction(undefined)}>Anuluj</Button><Button variant="primary" loading={dialogSaving} disabled={!editAction.title.trim()} onClick={() => void runDialog(() => updateAction(editAction.id, { title: editAction.title, detail: editAction.detail, scheduledFor: editAction.scheduledFor || null, checklist: editAction.checklist.map((entry) => ({ ...entry, title: entry.title.trim() })).filter((entry) => entry.title) }), () => setEditAction(undefined))}>Zapisz zmiany</Button></div>
     </> : null}</Modal>
-    <Modal open={Boolean(linkActionId)} closeDisabled={dialogSaving} title="Powiąż Wiedzę z Działaniem" onClose={() => setLinkActionId(undefined)}><select aria-label="Materiał dla Działania" value={actionKnowledgeId} onChange={(event) => setActionKnowledgeId(event.target.value)}><option value="">Wybierz element…</option>{state.knowledge.filter((item) => !state.knowledgeLinks.some((link) => link.actionId === linkActionId && link.knowledgeItemId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select>{dialogError ? <p className="auth-message error" role="alert">{dialogError}</p> : null}<div className="modal-actions"><Button disabled={dialogSaving} onClick={() => setLinkActionId(undefined)}>Anuluj</Button><Button variant="primary" loading={dialogSaving} disabled={!actionKnowledgeId} onClick={() => linkActionId && void runDialog(() => linkKnowledge(actionKnowledgeId, { actionId: linkActionId }, "material"), () => setLinkActionId(undefined))}>Połącz</Button></div></Modal>
     <Modal open={Boolean(pendingGoalStatus)} closeDisabled={goalStatusSaving} title={pendingGoalStatus === "achieved" ? "Potwierdź osiągnięcie Celu" : "Porzuć Cel"} onClose={() => setPendingGoalStatus(undefined)}>{pendingGoalStatus === "achieved" ? <><p>Kryteria: {criteria.filter((item) => item.completed).length}/{criteria.length}. Otwarte Działania: {actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length}.</p><p className="muted-copy">Potwierdź tylko wtedy, gdy rezultat jest faktycznie osiągnięty.</p></> : <><label className="field-label" htmlFor="goal-abandon-reason">Powód porzucenia</label><textarea id="goal-abandon-reason" rows={3} value={statusReason} onChange={(event) => setStatusReason(event.target.value)} autoFocus required /></>}{goalStatusError ? <p className="auth-message error" role="alert">{goalStatusError}</p> : null}<div className="modal-actions"><Button disabled={goalStatusSaving} onClick={() => setPendingGoalStatus(undefined)}>Anuluj</Button><Button variant={pendingGoalStatus === "abandoned" ? "danger" : "primary"} loading={goalStatusSaving} disabled={pendingGoalStatus === "abandoned" && !statusReason.trim()} onClick={() => { if (!pendingGoalStatus) return; void changeGoalStatus(pendingGoalStatus, statusReason); }}>{pendingGoalStatus === "achieved" ? "Potwierdź osiągnięcie" : "Porzuć Cel"}</Button></div></Modal>
     <AlertDialog open={trashOpen} title="Przenieść Cel do Kosza?" objectName={goal.title} consequence="Cel zniknie z aktywnych widoków i trafi do obszaru odzyskiwania." preserved="Działania, kryteria, Wiedza i historia postępu pozostaną zachowane." recovery="Cel można przywrócić z Kosza albo natychmiast użyć akcji Cofnij." confirmLabel="Przenieś do Kosza" loading={visibilitySaving} error={visibilityError} onCancel={() => setTrashOpen(false)} onConfirm={() => changeGoalVisibility("trashed")} />
+    <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
   </AppShell>;
 }

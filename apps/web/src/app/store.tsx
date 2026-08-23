@@ -9,7 +9,7 @@ import { ensureGoalModel } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
-import type { AppState, NewLearningGoalInput, NewProjectInput } from "../domain/types";
+import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 
@@ -627,21 +627,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try { await runRemote(async () => { await (await loadRepository()).releaseDueInboxItemsRemote(previous.workspaceId!); }); }
       catch (error) { setState(previous); throw error; }
     },
-    async createKnowledge(kind, title, detail, goalId, sourceUrl, goalIds = []) {
+    async createKnowledge(input: CreateKnowledgeInput) {
       const id = crypto.randomUUID();
       const previous = state;
-      const targets = [...new Set([...(goalId ? [goalId] : []), ...goalIds])];
-      const linkSpecs = targets.map((targetGoalId) => ({ id: crypto.randomUUID(), goalId: targetGoalId }));
+      const relations = (input.relations ?? []).map((relation) => ({ ...relation, id: relation.id ?? crypto.randomUUID() }));
       setState((current) => {
-        const created = executeDomainCommand(current, { type: "create_knowledge", id, kind, title, detail, sourceUrl, createdAt: new Date().toISOString() });
-        return linkSpecs.reduce((next, link) => executeDomainCommand(next, { type: "link_knowledge", id: link.id, knowledgeItemId: id, goalId: link.goalId, meaning: kind === "decision" ? "decision" : kind === "artifact" ? "result" : "reference", createdAt: new Date().toISOString() }), created);
+        const createdAt = new Date().toISOString();
+        const created = executeDomainCommand(current, { type: "create_knowledge", id, kind: input.kind, title: input.title, detail: input.detail, sourceUrl: input.sourceUrl, projectId: input.projectId, sourceInboxItemId: input.sourceInboxItemId, createdAt });
+        return relations.reduce((next, relation) => executeDomainCommand(next, { type: "link_knowledge", id: relation.id!, knowledgeItemId: id, ...relation.target, meaning: relation.meaning, createdAt }), created);
       });
       if (mode === "supabase") {
         if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
         try {
           await runRemote(async () => {
             const repository = await loadRepository();
-            await repository.createKnowledgeRemote(state.workspaceId!, id, kind, title, detail, sourceUrl, linkSpecs, kind === "decision" ? "decision" : kind === "artifact" ? "result" : "reference");
+            await repository.createKnowledgeRemote(state.workspaceId!, id, input, relations);
           });
         } catch (error) {
           setState(previous);
@@ -649,6 +649,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
       return id;
+    },
+    async recordActionResult(actionId: string, result: ActionResultInput) {
+      const previous = stateRef.current;
+      const existingLink = previous.knowledgeLinks.find((link) => link.actionId === actionId && link.meaning === "result");
+      if (existingLink) return existingLink.knowledgeItemId;
+      const action = previous.actions.find((candidate) => candidate.id === actionId);
+      if (!action) throw new Error("action_not_found");
+      const knowledgeId = result.kind === "existing" ? result.knowledgeItemId : crypto.randomUUID();
+      const linkId = crypto.randomUUID();
+      const progressId = action.goalId ? crypto.randomUUID() : undefined;
+      const createdAt = new Date().toISOString();
+      const next = executeDomainCommand(previous, { type: "record_action_result", actionId, result, knowledgeId, linkId, progressId, createdAt });
+      stateRef.current = next;
+      setState(next);
+      if (mode === "demo") return knowledgeId;
+      if (!previous.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      try {
+        await runRemote(async () => {
+          await (await loadRepository()).recordActionResultRemote(previous.workspaceId!, actionId, result, knowledgeId, linkId, progressId);
+        });
+        return knowledgeId;
+      } catch (error) {
+        stateRef.current = previous;
+        setState(previous);
+        throw error;
+      }
     },
     async updateKnowledge(knowledgeId, changes) {
       const previous = state;

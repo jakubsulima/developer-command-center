@@ -1,4 +1,4 @@
-import type { ActionStatus, AppState, GoalKind, InboxItem, InboxKind, KnowledgeKind, NewLearningGoalInput, NewProjectInput, Project, ProjectStatus, RecurringActionTemplate } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, Project, ProjectStatus, RecurringActionTemplate } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
 import { ensureGoalModel } from "../domain/goals";
@@ -512,18 +512,31 @@ export async function unlinkKnowledgeRemote(linkId: string) {
   if (result.error) throw new Error(`Odłączenie Wiedzy: ${result.error.message}`);
 }
 
-export async function createKnowledgeRemote(workspaceId: string, id: string, kind: KnowledgeKind, title: string, detail: string, sourceUrl?: string, goalLinks: Array<{ id: string; goalId: string }> = [], meaning: "material" | "result" | "decision" | "reference" = "reference") {
-  return dataOrThrow(await getSupabase().rpc("create_knowledge_with_goal_links", {
+export async function createKnowledgeRemote(workspaceId: string, id: string, input: CreateKnowledgeInput, relations: Array<KnowledgeRelationInput & { id: string }>) {
+  return dataOrThrow(await getSupabase().rpc("create_knowledge_with_relations", {
     target_workspace_id: workspaceId,
     target_knowledge_id: id,
-    knowledge_kind: kind,
-    knowledge_title: title,
-    knowledge_detail: detail,
-    knowledge_source_url: sourceUrl ?? null,
-    goal_links: goalLinks,
-    link_meaning: meaning,
+    knowledge_kind: input.kind,
+    knowledge_title: input.title,
+    knowledge_detail: input.detail,
+    knowledge_source_url: input.sourceUrl ?? null,
+    knowledge_project_id: input.projectId ?? null,
+    knowledge_source_inbox_id: input.sourceInboxItemId ?? null,
+    relations,
     command_idempotency_key: id
   }), "Utworzenie elementu Wiedzy");
+}
+
+export async function recordActionResultRemote(workspaceId: string, actionId: string, result: ActionResultInput, knowledgeId: string, linkId: string, progressId?: string) {
+  return dataOrThrow(await getSupabase().rpc("record_action_result", {
+    target_workspace_id: workspaceId,
+    target_action_id: actionId,
+    result_input: result,
+    target_knowledge_id: knowledgeId,
+    target_link_id: linkId,
+    target_progress_id: progressId ?? null,
+    command_idempotency_key: linkId
+  }), "Zapis rezultatu Działania");
 }
 
 export async function updateKnowledgeRemote(knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null }, goalLinks?: Array<{ id: string; goalId: string }>) {

@@ -1,4 +1,5 @@
 import { ArrowLeft, CalendarDays, Check, Pin, PinOff } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -7,12 +8,15 @@ import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { actionStatusLabels } from "../domain/labels";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { resolveActionContext } from "../domain/actionContext";
+import { ActionResultDialog } from "../components/ActionResultDialog";
+import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 
 export function ActionDetailPage() {
   const { actionId } = useParams();
   const { state, updateAction, setActionStatus } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
+  const [resultOpen, setResultOpen] = useState(false);
   const action = state.actions.find((candidate) => candidate.id === actionId);
   if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innego Workspace'u." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
@@ -26,7 +30,7 @@ export function ActionDetailPage() {
     const previous = { status: action.status, blocker: action.blocker };
     await mutation.run(`action-detail:${action.id}`, async () => {
       await setActionStatus(action.id, "completed");
-      notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(action.id, previous.status, previous.blocker) });
+      if (!state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result")) notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(action.id, previous.status, previous.blocker), action: { label: "Dodaj rezultat", onClick: () => setResultOpen(true) } });
     });
   };
   const key = `action-detail:${action.id}`;
@@ -56,6 +60,6 @@ export function ActionDetailPage() {
         <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button>
         {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}
       </div>
-    </Panel>
-  </div></AppShell>;
+    </Panel><ActionKnowledgeRelations action={action} />
+  </div><ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} /></AppShell>;
 }

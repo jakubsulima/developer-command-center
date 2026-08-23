@@ -15,7 +15,7 @@ type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 export function ProjectDetailPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { state, createGoal, createAction, createKnowledge, linkKnowledge, updateArea, setAreaVisibility } = useStore();
+  const { state, createGoal, createAction, createKnowledge, updateArea, setAreaVisibility } = useStore();
   const project = state.areas.find((item) => item.id === projectId);
   const [view, setView] = useState<ProjectView>("overview");
   const [dialog, setDialog] = useState<"goal" | "action" | "knowledge" | "edit">();
@@ -56,7 +56,7 @@ export function ProjectDetailPage() {
   };
   const submitKnowledge = (event: FormEvent) => {
     event.preventDefault();
-    void run(async () => { const id = await createKnowledge(knowledgeForm.kind, knowledgeForm.title, knowledgeForm.detail); await linkKnowledge(id, { areaId: project.id }, "reference"); }, () => setKnowledgeForm({ kind: "note", title: "", detail: "" }));
+    void run(async () => { await createKnowledge({ kind: knowledgeForm.kind, title: knowledgeForm.title, detail: knowledgeForm.detail, relations: [{ meaning: "reference", target: { areaId: project.id } }] }); }, () => setKnowledgeForm({ kind: "note", title: "", detail: "" }));
   };
 
   const visibleSections = view === "overview" ? ["goals", "actions", "knowledge"] : [view];

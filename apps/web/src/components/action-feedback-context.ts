@@ -3,6 +3,7 @@ import { createContext, useContext } from "react";
 export interface UndoNoticeInput {
   message: string;
   undo: () => Promise<void> | void;
+  action?: { label: string; onClick: () => Promise<void> | void };
   durationMs?: number;
 }
 

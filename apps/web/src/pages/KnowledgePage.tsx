@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
-import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
+import { Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import type { KnowledgeItem, KnowledgeKind } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
@@ -12,6 +12,8 @@ import { MultiCombobox } from "../components/MultiCombobox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
+import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
+import { knowledgeDefaultRelationMeaning } from "../domain/labels";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -63,7 +65,7 @@ export function KnowledgePage() {
     setCreateSaving(true);
     setCreateError("");
     try {
-      await createKnowledge(form.kind, form.title, form.detail, undefined, form.sourceUrl || undefined, form.goalIds);
+      await createKnowledge({ kind: form.kind, title: form.title, detail: form.detail, sourceUrl: form.sourceUrl || undefined, relations: form.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { goalId } })) });
       setForm({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
       setModalOpen(false);
     } catch (caught) {
@@ -126,14 +128,12 @@ export function KnowledgePage() {
       {results.length ? (
         <div className="knowledge-library-surface"><div className="knowledge-list">
           {results.map((item) => {
-            const { icon: Icon, label } = kinds[item.type];
             const mutationKey = `visibility:${item.id}`;
-            const relationships = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title ?? state.knowledge.find((knowledge) => knowledge.id === link.targetKnowledgeItemId)?.title).filter(Boolean).join(" · ");
+            const relationships = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => `${link.meaning === "result" ? "Rezultat Działania" : link.meaning === "decision" ? "Decyzja" : link.meaning === "material" ? "Materiał" : "Pozostałe"} · ${state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title ?? state.knowledge.find((knowledge) => knowledge.id === link.targetKnowledgeItemId)?.title ?? "Niedostępny obiekt"}`).filter(Boolean).join(" · ");
             return (
               <Panel className="entity-card" key={item.id}>
-                <span className="knowledge-kind-icon" aria-hidden="true"><Icon /></span>
+                <KnowledgeKindBadge kind={item.type} />
                 <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail || "Bez dodatkowego opisu"}</small>{relationships || item.sourceInboxItemId ? <span className="knowledge-row-meta">{relationships ? <small className="line-clamp-1">Powiązane: {relationships}</small> : null}{item.sourceInboxItemId ? <small>Źródło: Skrzynka</small> : null}</span> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
-                <Badge tone="neutral">{label}</Badge>
                 <div className="knowledge-actions">
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
                 </div>
