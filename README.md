@@ -2,7 +2,7 @@
 
 Responsywna PWA prowadząca pracę i naukę przez pętlę:
 
-`Capture → Shape → Commit → Focus → Checkpoint → Review`
+`Capture → Project/Goal → Action → Progress → Review`
 
 Interfejs jest oparty na dokumentacji w `CONTEXT.md` oraz makietach w
 `docs/design`. Docelowym backendem aplikacji jest zarządzany Supabase SaaS:
@@ -10,12 +10,11 @@ PostgreSQL, Auth i Data API działają w projekcie Supabase, a przeglądarka ł�
 się z nimi przy użyciu publicznego klucza chronionego przez RLS. Odseparowany
 tryb demo pozostaje dostępny wyłącznie po jawnym włączeniu.
 
-Rdzeń obejmuje szybki Capture i typowany triage Inboxu, shaping projektu z
-Outcome, pierwszym Work Itemem i opcjonalnym Effort Budgetem, WIP/Primary
-Commitment, ciągłe Focus Sessions, edytowalny Context Checkpoint, promocję
-Session Scratchpadu, Knowledge (Note, Resource, Decision, Artifact,
-Investigation), odwracalne Archive/Trash, Learning Evidence i cykl Learning
-Goal, historię daily/weekly Review oraz rozdzielone AI Proposal i AI Execution.
+Rdzeń obejmuje szybki Capture i typowany triage Skrzynki, Projekty, Cele,
+otwarte Działania, postęp, Rutyny, Knowledge (Note, Resource, Decision,
+Artifact, Investigation), odwracalne Archive/Trash oraz weekly Review.
+Focus i Checkpoint pozostają danymi historycznymi: można je otworzyć w trybie
+read-only i wyeksportować, ale aktywny produkt nie tworzy nowych sesji.
 
 ## Uruchomienie z Supabase SaaS
 
@@ -41,10 +40,10 @@ umieszczone w zmiennych `VITE_*`.
 ## Migracje zarządzanego projektu
 
 Schemat znajduje się w `supabase/migrations`. Zawiera izolację Workspace przez
-RLS, rejestr typowanych encji, rdzeń projektów i nauki, ciągłe Focus Sessions,
-checkpointy, Review, AI Proposals/Executions i append-only Activity Events.
-Komendy obejmujące kilka tabel są atomowymi RPC; Capture, tworzenie projektu i
-Focus są zabezpieczone na ponowienie.
+RLS, bieżący model Project–Goal–Action, paginowane RPC z kursorem
+`(sort_value, id)`, read-only dostęp do historycznego Focus oraz pełny eksport
+historycznych tabel. Funkcje odczytu są `security invoker` i mają jawne
+`REVOKE`/`GRANT EXECUTE TO authenticated`.
 
 ```bash
 pnpm supabase:link --project-ref <project-ref>
@@ -70,6 +69,7 @@ pnpm typecheck
 pnpm test
 pnpm test:coverage
 VITE_DATA_BACKEND=demo pnpm build
+pnpm check:bundle
 ```
 
 Suita obejmuje przepływy użytkownika, Store i jego rollbacki, uwierzytelnianie,
@@ -84,7 +84,7 @@ apps/web/                 React + TypeScript + Vite PWA
   src/app/                routing i stan aplikacji
   src/components/         shell, komponenty produktowe i UI
   src/domain/             typy domenowe
-  src/pages/              Command, Focus, Inbox, Projects, Learning, Knowledge, Review
+  src/pages/              Start, Inbox, Projects, Goals, Knowledge, Review, history
 supabase/
   migrations/             wersjonowany schemat PostgreSQL i RLS
   tests/                  izolowane testy migracji/RLS

@@ -363,4 +363,11 @@ export interface AppState {
   aiProposal: "pending" | "approved" | "rejected";
   aiProposalId?: string;
   reviewCompletedAt?: string;
+  /** Server-side aggregate used by bootstrap without loading historical tables. */
+  weeklySummary?: {
+    completedActions: number;
+    focusMinutes: number;
+    knowledgeAdded: number;
+    progressUpdates: number;
+  };
 }

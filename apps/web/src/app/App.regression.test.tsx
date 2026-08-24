@@ -106,11 +106,11 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     const search = await screen.findByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
     await user.type(search, "Portfolio");
-    expect(screen.getAllByRole("option", { name: /Portfolio v2/ })[0]).toBeInTheDocument();
+    expect((await screen.findAllByRole("option", { name: /Portfolio v2/ }))[0]).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     await user.type(search, "Portfolio");
-    await user.click(screen.getAllByRole("option", { name: /Portfolio v2/ })[0]!);
+    await user.click((await screen.findAllByRole("option", { name: /Portfolio v2/ }))[0]!);
     expect(await screen.findByRole("heading", { name: "Portfolio v2" })).toBeInTheDocument();
   });
 
@@ -124,8 +124,8 @@ describe("regresje nowego modelu Celów", () => {
     await waitFor(() => expect(search).toHaveFocus());
     expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
     await user.type(search, "Portfolio");
-    expect(within(dialog).getByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
-    const goalResult = within(dialog).getAllByRole("option").find((option) => within(option).queryByText("Portfolio v2"));
+    expect(await within(dialog).findByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
+    const goalResult = (await within(dialog).findAllByRole("option")).find((option) => within(option).queryByText("Portfolio v2"));
     expect(goalResult).toBeDefined();
     await user.click(goalResult!);
     expect(await screen.findByRole("heading", { name: "Portfolio v2" })).toBeInTheDocument();

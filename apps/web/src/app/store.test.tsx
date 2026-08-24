@@ -34,12 +34,12 @@ function Probe() {
   const { state } = store;
   return <>
     <span>{state.workspaceId}</span><span>{state.inbox[0]?.content}</span><span>{state.projects.map((item) => item.name).join("|")}</span>
-    <span>{state.learningGoals.map((item) => item.title).join("|")}</span><span data-testid="focus-status">{state.focus.running ? "running" : "stopped"}</span>
+    <span>{state.learningGoals.map((item) => item.title).join("|")}</span>
     <span data-testid="inbox-status">{state.inbox.find((item) => item.id === "in-1")?.status}</span>
     <span data-testid="visibility-status">{state.knowledge.find((item) => item.id === "know-1")?.archivedAt ? "archived" : "active"}</span>
     <span data-testid="commitment-status">{state.projects.find((item) => item.id === "portfolio-v2")?.commitmentStatus}</span>
     <span data-testid="goal-status">{state.learningGoals.find((item) => item.id === "goal-ts-modeling")?.status}</span>
-    <span data-testid="ai-status">{state.aiProposal}</span><span data-testid="review-status">{state.reviewCompletedAt ? "reviewed" : "not-reviewed"}</span><span>{store.error}</span>
+    <span data-testid="ai-status">{state.aiProposal}</span><span data-testid="review-status">{state.reviewCompletedAt ? "reviewed" : "not-reviewed"}</span>{Object.values(store.syncState.errors).map((error) => <span key={error}>{error}</span>)}
     <button onClick={() => void store.capture("Nowy zdalny capture").catch(() => undefined)}>Capture</button>
     <button onClick={() => void store.resolveInbox("in-1")}>Resolve</button>
     <button onClick={() => void store.setInboxStatus("in-1", "discarded").catch(() => undefined)}>InboxStatus</button>
@@ -49,9 +49,6 @@ function Probe() {
     <button onClick={() => void store.createProject({ title: "Remote Project", outcome: "Outcome", technology: "React", firstWorkItemTitle: "Work", firstWorkItemDescription: "Detail", wipOverrideReason: "Świadomy wyjątek testowy" }).catch(() => undefined)}>Project</button>
     <button onClick={() => void store.createGoal({ title: "Early Goal", outcome: "Outcome" }).catch(() => undefined)}>UnifiedGoal</button>
     <button onClick={() => void store.createLearningGoal({ title: "Remote Goal", criterion: "Criterion", skill: "Skill" }).catch(() => undefined)}>Goal</button>
-    <button onClick={() => void store.startFocus()}>Start</button>
-    <button onClick={() => void store.pauseFocus({ currentState: "State", nextAction: "Next", evidence: { learningGoalId: "goal-ts-modeling", title: "Evidence", result: "supports", feedback: "Good" } })}>Pause</button>
-    <button onClick={() => store.updateScratchpad("Remote scratchpad")}>Scratch</button>
     <button onClick={() => void store.setAIProposal("approved")}>AI</button>
     <button onClick={() => void store.completeReview("Decision")}>Review</button>
     <button onClick={() => void store.exportData().catch(() => undefined)}>Export</button>
@@ -81,9 +78,7 @@ describe("StoreProvider", () => {
     const user = userEvent.setup();
     renderStore(<Probe />);
     await screen.findByText("workspace-1");
-    for (const name of ["Resolve", "InboxStatus", "Visibility", "Commitment", "GoalStatus", "Project", "Goal", "Start", "Scratch", "AI", "Review", "Export", "Reload"]) await user.click(screen.getByRole("button", { name }));
-    await waitFor(() => expect(repository.startFocusRemote).toHaveBeenCalled());
-    await user.click(screen.getByRole("button", { name: "Pause" }));
+    for (const name of ["Resolve", "InboxStatus", "Visibility", "Commitment", "GoalStatus", "Project", "Goal", "AI", "Review", "Export", "Reload"]) await user.click(screen.getByRole("button", { name }));
     await waitFor(() => {
       expect(repository.resolveInboxRemote).toHaveBeenCalledWith("in-1");
       expect(repository.setInboxStatusRemote).toHaveBeenCalledWith("in-1", "discarded", undefined);
@@ -92,8 +87,6 @@ describe("StoreProvider", () => {
       expect(repository.setLearningGoalStatusRemote).toHaveBeenCalledWith("goal-ts-modeling", "abandoned", "Zmiana kierunku");
       expect(repository.createProjectRemote).toHaveBeenCalled();
       expect(repository.createLearningGoalRemote).toHaveBeenCalled();
-      expect(repository.endFocusRemote).toHaveBeenCalledWith("server-session", "paused", "State", "Next");
-      expect(repository.recordLearningEvidenceRemote).toHaveBeenCalled();
       expect(repository.decideAIProposalRemote).toHaveBeenCalledWith("proposal-1", "approved");
       expect(repository.completeReviewRemote).toHaveBeenCalledWith("workspace-1", "Decision");
       expect(repository.exportWorkspaceRemote).toHaveBeenCalledWith("workspace-1");
@@ -129,7 +122,7 @@ describe("StoreProvider", () => {
     expect(screen.queryByText("Brak aktywnego Workspace.")).not.toBeInTheDocument();
   });
 
-  it("wycofuje optymistyczne zmiany Capture, Inboxu, Focus, AI i Review po błędach synchronizacji", async () => {
+  it("wycofuje optymistyczne zmiany Capture, Inboxu, AI i Review po błędach synchronizacji", async () => {
     const user = userEvent.setup();
     renderStore(<Probe />);
     await screen.findByText("workspace-1");
@@ -143,11 +136,6 @@ describe("StoreProvider", () => {
     await user.click(screen.getByRole("button", { name: "Resolve" }));
     await screen.findByText("resolve_failed");
     expect(screen.getByTestId("inbox-status")).toHaveTextContent("unprocessed");
-
-    repository.startFocusRemote.mockRejectedValueOnce(new Error("focus_failed"));
-    await user.click(screen.getByRole("button", { name: "Start" }));
-    await screen.findByText("focus_failed");
-    expect(screen.getByTestId("focus-status")).toHaveTextContent("stopped");
 
     repository.decideAIProposalRemote.mockRejectedValueOnce(new Error("ai_failed"));
     await user.click(screen.getByRole("button", { name: "AI" }));
@@ -177,19 +165,6 @@ describe("StoreProvider", () => {
     await waitFor(() => expect(screen.getByTestId("commitment-status")).toHaveTextContent("active"));
     await user.click(screen.getByRole("button", { name: "GoalStatus" }));
     await waitFor(() => expect(screen.getByTestId("goal-status")).toHaveTextContent("shaped"));
-  });
-
-  it("zapisuje scratchpad z opóźnieniem dla aktywnej zdalnej sesji", async () => {
-    const user = userEvent.setup();
-    renderStore(<Probe />);
-    await screen.findByText("workspace-1");
-    await user.click(screen.getByRole("button", { name: "Start" }));
-    await waitFor(() => expect(screen.getByTestId("focus-status")).toHaveTextContent("running"));
-    await user.click(screen.getByRole("button", { name: "Scratch" }));
-    await waitFor(
-      () => expect(repository.updateScratchpadRemote).toHaveBeenCalledWith("server-session", "Remote scratchpad"),
-      { timeout: 1_500 }
-    );
   });
 
   it("pokazuje ekran odzyskiwalnego błędu ładowania Workspace", async () => {

@@ -4,6 +4,8 @@ import type { InboxTriageIntent } from "../domain/commands";
 import { ensureGoalModel } from "../domain/goals";
 import { getSupabase } from "../lib/supabase";
 import { emptyState } from "./empty";
+import { createSupabaseWorkspaceRepository } from "./supabaseWorkspaceRepository";
+import type { WorkspacePageItem } from "./workspaceRepository";
 
 interface EntityRow { id: string; type: string; title: string; archived_at: string | null; trashed_at: string | null }
 interface ProjectRow { entity_id: string; outcome: string; constraints_md: string; status: string }
@@ -73,7 +75,7 @@ function constraintTechnology(value: string) {
   return match?.[1]?.trim() || "Projekt developerski";
 }
 
-export async function loadSupabaseState(userId: string): Promise<AppState> {
+async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const client = getSupabase();
   const membership = dataOrThrow(
     await client.from("workspace_members").select("workspace_id").eq("user_id", userId).limit(1).maybeSingle(),
@@ -254,6 +256,58 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
     reviews: reviews.map((review, index) => ({ id: `remote-review-${index}-${review.completed_at}`, type: "weekly", templateVersion: 1, answers: {}, summary: "", completedAt: review.completed_at })),
     reviewCompletedAt: reviews[0]?.completed_at
   });
+}
+
+function isMissingWorkspaceReadModel(error: unknown) {
+  const candidate = error as { code?: string; message?: string } | null;
+  return candidate?.code === "42883" || /(?:get_workspace_core|get_.*_page).*does not exist|PGRST202|WorkspaceCore\./i.test(candidate?.message ?? "");
+}
+
+/**
+ * Reads the active model through the RPC read adapter. Legacy fan-out remains
+ * a one-deployment compatibility path while the additive RPC migration rolls
+ * through environments; it is never used for a successful new deployment.
+ */
+export async function loadSupabaseState(userId: string): Promise<AppState> {
+  try {
+    const repository = createSupabaseWorkspaceRepository();
+    const core = await repository.loadCore(userId);
+    const workspaceId = core.workspaceId;
+    if (!workspaceId) throw new Error("Użytkownik nie ma przypisanego Workspace.");
+    const [inbox, knowledge, progress, completedActions] = await Promise.all([
+      repository.loadPage({ workspaceId, collection: "inbox", pageSize: 50 }),
+      repository.loadPage({ workspaceId, collection: "knowledge", pageSize: 50 }),
+      repository.loadPage({ workspaceId, collection: "goal-progress", pageSize: 25 }),
+      repository.loadPage({ workspaceId, collection: "completed-actions", pageSize: 50 })
+    ]);
+    const typed = (items: WorkspacePageItem[]) => items;
+    return ensureGoalModel({
+      ...structuredClone(emptyState),
+      workspaceId,
+      workspaceTimezone: core.workspaceTimezone,
+      areas: core.areas,
+      goalTemplates: core.goalTemplates,
+      goals: core.goals,
+      goalCriteria: core.goalCriteria,
+      actions: [...core.actions, ...(typed(completedActions.items) as AppState["actions"])],
+      projects: core.projects,
+      recurringActionTemplates: core.recurringActionTemplates,
+      knowledgeLinks: core.knowledgeLinks,
+      inbox: typed(inbox.items) as AppState["inbox"],
+      knowledge: typed(knowledge.items) as AppState["knowledge"],
+      progressEntries: typed(progress.items) as AppState["progressEntries"],
+      reviews: core.weeklySummary.recentReviews,
+      weeklySummary: {
+        completedActions: core.weeklySummary.completedActions,
+        focusMinutes: core.weeklySummary.focusMinutes,
+        knowledgeAdded: core.weeklySummary.knowledgeAdded,
+        progressUpdates: core.weeklySummary.progressUpdates
+      }
+    });
+  } catch (error) {
+    if (isMissingWorkspaceReadModel(error)) return loadSupabaseStateLegacy(userId);
+    throw error;
+  }
 }
 
 export async function captureRemote(workspaceId: string, content: string, kind: InboxKind, idempotencyKey: string): Promise<InboxItem> {

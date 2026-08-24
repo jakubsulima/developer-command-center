@@ -12,14 +12,27 @@ import { safeHttpUrl } from "../domain/http-url";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../auth/useAuth";
+import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 
 export function KnowledgeDetailPage() {
   const { knowledgeId } = useParams();
   const navigate = useNavigate();
-  const { state, updateKnowledge, linkKnowledge, unlinkKnowledge, setVisibility } = useStore();
+  const { state, mode, updateKnowledge, linkKnowledge, unlinkKnowledge, setVisibility } = useStore();
+  const { user } = useAuth();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
-  const item = state.knowledge.find((candidate) => candidate.id === knowledgeId);
+  const localItem = state.knowledge.find((candidate) => candidate.id === knowledgeId);
+  const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
+  const itemQuery = useQuery({
+    queryKey: ["knowledge-item", knowledgeId, mode, user?.id],
+    enabled: Boolean(knowledgeId && !localItem),
+    queryFn: async () => (mode === "demo"
+      ? await localRepository.loadKnowledgeItem(knowledgeId!)
+      : await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadKnowledgeItem(knowledgeId!)) ?? null
+  });
+  const resolvedItem = localItem ?? itemQuery.data;
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -27,8 +40,8 @@ export function KnowledgeDetailPage() {
   const [projectId, setProjectId] = useState("");
   const [form, setForm] = useState({ kind: "note" as KnowledgeKind, title: "", detail: "", sourceUrl: "", goalIds: [] as string[] });
   useEffect(() => {
-    if (item) setForm({ kind: item.type, title: item.title, detail: item.detail, sourceUrl: item.sourceUrl ?? "", goalIds: state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id && link.goalId).map((link) => link.goalId!) });
-  }, [item, state.knowledgeLinks]);
+    if (resolvedItem) setForm({ kind: resolvedItem.type, title: resolvedItem.title, detail: resolvedItem.detail, sourceUrl: resolvedItem.sourceUrl ?? "", goalIds: state.knowledgeLinks.filter((link) => link.knowledgeItemId === resolvedItem.id && link.goalId).map((link) => link.goalId!) });
+  }, [resolvedItem, state.knowledgeLinks]);
   const links = useMemo(() => state.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId), [knowledgeId, state.knowledgeLinks]);
   const supportingLinks = useMemo(() => state.knowledgeLinks.filter((link) => link.targetKnowledgeItemId === knowledgeId), [knowledgeId, state.knowledgeLinks]);
   const projectContexts = useMemo(() => {
@@ -55,7 +68,9 @@ export function KnowledgeDetailPage() {
     }
     return [...contexts.values()];
   }, [links, state]);
-  if (!item) return <AppShell><EmptyState icon={<BookMarked />} title="Nie znaleziono elementu Wiedzy" detail="Element nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/knowledge")}>Wróć do Wiedzy</Button>} /></AppShell>;
+  if (!localItem && itemQuery.isPending) return <AppShell><EmptyState icon={<BookMarked />} title="Ładowanie Wiedzy" detail="Pobieram element…" /></AppShell>;
+  if (!resolvedItem) return <AppShell><EmptyState icon={<BookMarked />} title="Nie znaleziono elementu Wiedzy" detail="Element nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/knowledge")}>Wróć do Wiedzy</Button>} /></AppShell>;
+  const item = resolvedItem;
 
   const save = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError("");

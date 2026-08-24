@@ -15,6 +15,7 @@ import { KnowledgeInbox } from "./InboxPage";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
 import { knowledgeDefaultRelationMeaning } from "../domain/labels";
 import { entityCardVariants } from "../components/ui-variants";
+import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -28,6 +29,7 @@ type View = "active" | "archived" | "trashed";
 
 export function KnowledgePage() {
   const { state, loading, createKnowledge, setVisibility } = useStore();
+  const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { notifyUndo } = useActionFeedback();
@@ -54,7 +56,8 @@ export function KnowledgePage() {
     if (areaFilter && !state.areas.some((area) => area.id === areaFilter)) { next.delete("area"); changed = true; }
     if (changed) setParams(next, { replace: true });
   }, [areaFilter, goalFilter, kind, params, setParams, state.areas, state.goals]);
-  const results = state.knowledge.filter((item) => {
+  const knowledgeItems = mergePagedItems(state.knowledge, knowledgePage.data?.items ?? []);
+  const results = knowledgeItems.filter((item) => {
     const visible = view === "active" ? !item.archivedAt && !item.trashedAt : view === "archived" ? Boolean(item.archivedAt) && !item.trashedAt : Boolean(item.trashedAt);
     const links = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id);
     const linkedToGoal = !goalFilter || links.some((link) => link.goalId === goalFilter || state.actions.some((action) => action.id === link.actionId && action.goalId === goalFilter));
@@ -125,7 +128,7 @@ export function KnowledgePage() {
         </Tabs>
         <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
       </div>
-      {loading ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
+      {loading || knowledgePage.isPending ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (
         <div className="knowledge-library-surface"><div className="knowledge-list">
           {results.map((item) => {
@@ -145,6 +148,9 @@ export function KnowledgePage() {
           })}
         </div></div>
       ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Notatki, materiały, decyzje, rezultaty i poszukiwania pojawią się tu po świadomym zapisaniu."} action={normalized || kind !== "all" || goalFilter || areaFilter ? <Button onClick={() => { setQuery(""); setParams({}); }}>Wyczyść filtry</Button> : <Button variant="primary" onClick={() => setModalOpen(true)}>Nowy element Wiedzy</Button>} />}
+      {knowledgePage.isError && results.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Wiedzy.</p> : null}
+      {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
+      {results.length && !knowledgePage.hasNextPage && !knowledgePage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
         const item = state.knowledge.find((candidate) => candidate.id === actionsItemId);
         if (!item) return null;

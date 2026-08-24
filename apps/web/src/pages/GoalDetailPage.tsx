@@ -15,6 +15,8 @@ import { routeForEntity } from "../domain/routes";
 import { ActionResultDialog } from "../components/ActionResultDialog";
 import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 import type { GoalAction } from "../domain/types";
+import type { GoalProgressPageItem } from "../data/workspaceRepository";
+import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 
 function ActionChecklist({ action, busy, onToggle }: { action: GoalAction; busy: boolean; onToggle: (entryId: string) => void }) {
   const completed = action.checklist.filter((entry) => entry.completed).length;
@@ -31,6 +33,7 @@ export function GoalDetailPage() {
   const { notifyUndo } = useActionFeedback();
   const actionMutation = useKeyedMutation();
   const { goalId } = useParams();
+  const progressPage = useWorkspaceInfinitePage<GoalProgressPageItem>("goal-progress", 25, { goalId });
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [actionForm, setActionForm] = useState({ title: "", detail: "", scheduledFor: "" });
@@ -57,7 +60,7 @@ export function GoalDetailPage() {
   if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono Celu" detail="Cel nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/goals")}>Wróć do Celów</Button>} /></AppShell>;
   const actions = state.actions.filter((item) => item.goalId === goal.id).sort((a, b) => a.position - b.position);
   const criteria = state.goalCriteria.filter((item) => item.goalId === goal.id);
-  const updates = state.progressEntries.filter((item) => item.goalId === goal.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const updates = mergePagedItems(state.progressEntries.filter((item) => item.goalId === goal.id), progressPage.data?.items ?? []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const links = state.knowledgeLinks.filter((item) => item.goalId === goal.id);
   const linkedKnowledge = links.map((link) => ({ link, item: state.knowledge.find((item) => item.id === link.knowledgeItemId) })).filter((value) => value.item);
   const legacySessions = state.focusSessions.filter((session) => session.projectId === goal.id);
@@ -168,6 +171,8 @@ export function GoalDetailPage() {
           <h2>Aktualizacje postępu</h2>
           <form className="progress-form" onSubmit={(event) => { event.preventDefault(); void actionMutation.run("goal-progress", async () => { await addProgress(goal.id, progress.kind, progress.content); setProgress({ kind: "note", content: "" }); }); }}><select aria-label="Rodzaj aktualizacji" value={progress.kind} onChange={(event) => setProgress((current) => ({ ...current, kind: event.target.value as typeof current.kind }))}><option value="note">Notatka</option><option value="decision">Decyzja</option><option value="result">Rezultat</option><option value="evidence">Dowód</option><option value="blocker">Blokada</option></select><textarea aria-label="Treść aktualizacji" placeholder="Co się zmieniło?" rows={3} value={progress.content} onChange={(event) => setProgress((current) => ({ ...current, content: event.target.value }))} required /><Button type="submit" loading={actionMutation.isBusy("goal-progress")} disabled={!progress.content.trim()}>Zapisz aktualizację</Button>{actionMutation.error("goal-progress") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-progress")} <button type="button" onClick={() => void actionMutation.retry("goal-progress")?.()}>Spróbuj ponownie</button></p> : null}</form>
           <div className="timeline">{updates.map((entry) => <div key={entry.id}><span>{entry.kind}</span><p>{entry.content}</p><time>{new Date(entry.createdAt).toLocaleString("pl-PL")}</time></div>)}{!updates.length && <p className="muted-copy">Pierwsza krótka aktualizacja zbuduje historię postępu.</p>}</div>
+          {progressPage.isError && updates.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać dalszej historii postępu.</p> : null}
+          {updates.length && progressPage.hasNextPage ? <div className="list-pagination"><Button loading={progressPage.isFetchingNextPage} onClick={() => void progressPage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
         </Panel>
       </div>
       <aside className="detail-aside">

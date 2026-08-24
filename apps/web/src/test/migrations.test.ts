@@ -17,7 +17,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260809130312_harden_public_release_boundaries.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260820182555_link_knowledge_as_decision_evidence.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260820182703_index_knowledge_evidence_fk.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260823070000_explicit_knowledge_relations.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260823070000_explicit_knowledge_relations.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260824054519_workspace_core_and_pages.sql", import.meta.url)
 ];
 
 const database = new PGlite();
