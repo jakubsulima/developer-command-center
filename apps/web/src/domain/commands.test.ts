@@ -331,4 +331,31 @@ describe("komendy domenowe Workspace", () => {
     const succeeded = executeDomainCommand(running, { type: "set_ai_execution_status", executionId: "execution", status: "succeeded", changedAt: "2026-08-01T12:02:00.000Z" });
     expect(succeeded.aiExecutions[0]).toMatchObject({ status: "succeeded", completedAt: "2026-08-01T12:02:00.000Z" });
   });
+
+  it("egzekwuje typowane role relacji i pojedynczy cel", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      knowledge: [{ id: "note", type: "note" as const, title: "Notatka", detail: "" }, { id: "decision", type: "decision" as const, title: "Decyzja", detail: "" }]
+    };
+    expect(() => executeDomainCommand(state, { type: "link_knowledge", id: "bad-result", knowledgeItemId: "note", actionId: "action", meaning: "result", createdAt: "now" })).toThrow("knowledge_result_requires_artifact");
+    expect(() => executeDomainCommand(state, { type: "link_knowledge", id: "bad-target", knowledgeItemId: "note", actionId: "action", goalId: "goal", meaning: "material", createdAt: "now" })).toThrow("knowledge_link_target_required");
+    expect(() => executeDomainCommand(state, { type: "link_knowledge", id: "bad-decision", knowledgeItemId: "note", targetKnowledgeItemId: "decision", meaning: "decision", createdAt: "now" })).toThrow("knowledge_decision_requires_decision");
+  });
+
+  it("tworzy rezultat, relację i historię Celu atomowo oraz jest idempotentne", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      goals: [{ id: "goal", title: "Cel", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }],
+      actions: [{ id: "action", version: 1, title: "Wykonać krok", detail: "", goalId: "goal", status: "completed" as const, position: 0, isNext: false, pinnedToToday: false, checklist: [] }]
+    };
+    const command = { type: "record_action_result" as const, actionId: "action", result: { kind: "new" as const, title: "Gotowy wynik", detail: "Opis wyniku" }, knowledgeId: "artifact", linkId: "result-link", progressId: "progress-result", createdAt: "now" };
+    const next = executeDomainCommand(state, command);
+    expect(next.knowledge[0]).toMatchObject({ id: "artifact", type: "artifact", title: "Gotowy wynik" });
+    expect(next.knowledgeLinks).toEqual([expect.objectContaining({ knowledgeItemId: "artifact", actionId: "action", meaning: "result" })]);
+    expect(next.progressEntries[0]).toMatchObject({ goalId: "goal", actionId: "action", knowledgeItemId: "artifact", kind: "result" });
+    const retried = executeDomainCommand(next, command);
+    expect(retried.knowledge).toHaveLength(1);
+    expect(retried.knowledgeLinks).toHaveLength(1);
+    expect(retried.progressEntries).toHaveLength(1);
+  });
 });

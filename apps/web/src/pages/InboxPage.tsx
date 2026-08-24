@@ -9,6 +9,7 @@ import type { InboxItem, InboxKind, KnowledgeKind } from "../domain/types";
 import { CaptureComposer } from "../components/CaptureComposer";
 import { tomorrowAtLocalTime } from "../domain/inbox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
+import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 
 const modes: Array<{ id: InboxKind; label: string; icon: typeof TextCursorInput }> = [
   { id: "text", label: "Tekst", icon: TextCursorInput }, { id: "link", label: "Link", icon: Link2 }
@@ -18,6 +19,7 @@ type Intent = "goal" | "action" | "knowledge";
 
 export function KnowledgeInbox() {
   const { state, loading, capture, triageInboxIntent, setInboxStatus, releaseDueInbox } = useStore();
+  const inboxPage = useWorkspaceInfinitePage<InboxItem>("inbox", 50);
   const { notifyUndo } = useActionFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
   const [item, setItem] = useState<InboxItem>();
@@ -40,7 +42,8 @@ export function KnowledgeInbox() {
     release(); window.addEventListener("focus", release); return () => window.removeEventListener("focus", release);
   }, [releaseDueInbox]);
   useEffect(() => { const id = searchParams.get("item"); if (!id) return; requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-inbox-id="${CSS.escape(id)}"]`)?.focus()); }, [searchParams, state.inbox]);
-  const visible = state.inbox.filter((candidate) => candidate.status === view);
+  const inboxItems = mergePagedItems(state.inbox, inboxPage.data?.items ?? []);
+  const visible = inboxItems.filter((candidate) => candidate.status === view);
   const open = (candidate: InboxItem) => {
     setItem(candidate); setIntent(undefined); setError("");
     setForm({ title: candidate.content.slice(0, 100), outcome: "", firstAction: "", detail: candidate.content, goalId: "", areaId: "", pin: true, knowledgeKind: candidate.kind === "link" ? "resource" : "note" });
@@ -65,10 +68,13 @@ export function KnowledgeInbox() {
 
   return <>
     {captureOpen ? <Panel className="capture-page-card knowledge-capture-panel"><div className="knowledge-capture-head"><div><h2>Dodaj do Skrzynki</h2><p>Zapisz teraz, uporządkuj później.</p></div></div><CaptureComposer draftKey="knowledge-capture" id="capture-input" onSubmit={capture} /></Panel> : null}
-    <div className="inbox-tabs" role="tablist" aria-label="Widoki Skrzynki">{([{ id: "unprocessed", label: "Nowe" }, { id: "snoozed", label: "Odłożone" }, { id: "resolved", label: "Przetworzone" }, { id: "discarded", label: "Odrzucone" }] as const).map((tab) => <button role="tab" aria-selected={view === tab.id} key={tab.id} onClick={() => { searchParams.set("status", tab.id); searchParams.delete("item"); setSearchParams(searchParams); }}>{tab.label} <span>{state.inbox.filter((item) => item.status === tab.id).length}</span></button>)}</div>
+    <div className="inbox-tabs" role="tablist" aria-label="Widoki Skrzynki">{([{ id: "unprocessed", label: "Nowe" }, { id: "snoozed", label: "Odłożone" }, { id: "resolved", label: "Przetworzone" }, { id: "discarded", label: "Odrzucone" }] as const).map((tab) => <button role="tab" aria-selected={view === tab.id} key={tab.id} onClick={() => { searchParams.set("status", tab.id); searchParams.delete("item"); setSearchParams(searchParams); }}>{tab.label} <span>{inboxItems.filter((item) => item.status === tab.id).length}</span></button>)}</div>
     <div className="section-heading knowledge-inbox-heading"><h2>{view === "unprocessed" ? "Nowe" : view === "snoozed" ? "Odłożone" : view === "resolved" ? "Przetworzone" : "Odrzucone"}</h2><span>Oryginał pozostaje w historii Skrzynki</span></div>
-    {loading ? <ListSkeleton label="Ładowanie Skrzynki" /> : null}
+    {loading || inboxPage.isPending ? <ListSkeleton label="Ładowanie Skrzynki" /> : null}
     {visible.length ? <div className="inbox-list">{visible.map((candidate) => { const mode = legacyModes.find((entry) => entry.id === candidate.kind); const Icon = mode?.icon ?? Inbox; const key = `status:${candidate.id}`; return <Panel className="inbox-item" key={candidate.id} data-inbox-id={candidate.id} tabIndex={-1}><span className="inbox-kind"><Icon /></span><div><strong>{candidate.content}</strong><small>{new Date(candidate.createdAt).toLocaleString("pl-PL", { timeZone: state.workspaceTimezone })}{candidate.snoozedUntil ? ` · wróci ${new Date(candidate.snoozedUntil).toLocaleString("pl-PL", { timeZone: state.workspaceTimezone })}` : ""}</small>{mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}</div><Badge tone="neutral">{mode?.label}</Badge><div className="inbox-actions">{view === "unprocessed" ? <><Button variant="primary" onClick={() => open(candidate)}>Przetwórz</Button><Button variant="ghost" loading={mutation.isBusy(key)} aria-label="Odłóż do jutra" onClick={() => void mutation.run(key, () => changeStatus(candidate, "snoozed"))}><AlarmClock /></Button><Button variant="ghost" loading={mutation.isBusy(key)} aria-label="Odrzuć" onClick={() => void mutation.run(key, () => changeStatus(candidate, "discarded"))}><Trash2 /></Button></> : <Button loading={mutation.isBusy(key)} onClick={() => void mutation.run(key, async () => { await setInboxStatus(candidate.id, "unprocessed"); notifyUndo({ message: "Przywrócono do Skrzynki.", undo: () => setInboxStatus(candidate.id, candidate.status, candidate.snoozedUntil) }); })}><RotateCcw />Przywróć teraz</Button>}</div></Panel>; })}</div> : <EmptyState icon={<Inbox />} title="Brak elementów w tym widoku" detail={view === "unprocessed" ? "Dodaj link lub treść do Skrzynki. Uporządkujesz go później bez tracenia oryginału." : "Możesz wrócić do innego widoku Skrzynki."} />}
+    {inboxPage.isError && visible.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Skrzynki.</p> : null}
+    {visible.length && inboxPage.hasNextPage ? <div className="list-pagination"><Button loading={inboxPage.isFetchingNextPage} onClick={() => void inboxPage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
+    {visible.length && !inboxPage.hasNextPage && !inboxPage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
 
     <Modal open={Boolean(item)} closeDisabled={saving} title={intent ? intent === "goal" ? "Utwórz Cel" : intent === "action" ? "Dodaj Działanie" : "Zapisz w Bibliotece" : "Co chcesz z tym zrobić?"} onClose={close}>
       {!intent ? <div className="intent-list"><p className="modal-intro">Wybierz rezultat. Nie musisz znać typu danych ani modułu aplikacji.</p><button onClick={() => setIntent("goal")}><Flag /><span><strong>Utwórz Cel</strong><small>Gdy przechwycenie opisuje rezultat, do którego chcesz dojść.</small></span></button><button onClick={() => setIntent("action")}><ListPlus /><span><strong>Dodaj Działanie</strong><small>Gdy to konkretny krok do wykonania.</small></span></button><button onClick={() => setIntent("knowledge")}><Archive /><span><strong>Zapisz w Bibliotece</strong><small>Gdy chcesz zachować materiał, notatkę albo decyzję.</small></span></button><button disabled={Boolean(item && mutation.isBusy(`status:${item.id}`))} aria-busy={Boolean(item && mutation.isBusy(`status:${item.id}`))} onClick={() => item && void mutation.run(`status:${item.id}`, async () => { await changeStatus(item, "snoozed"); close(); })}><AlarmClock /><span><strong>Odłóż do jutra</strong><small>Element wróci do Skrzynki później.</small></span></button><button disabled={Boolean(item && mutation.isBusy(`status:${item.id}`))} aria-busy={Boolean(item && mutation.isBusy(`status:${item.id}`))} onClick={() => item && void mutation.run(`status:${item.id}`, async () => { await changeStatus(item, "discarded"); close(); })}><Trash2 /><span><strong>Odrzuć</strong><small>Oryginał pozostanie w historii odzyskiwania.</small></span></button>{item && mutation.error(`status:${item.id}`) ? <p className="inline-mutation-error" role="alert">{mutation.error(`status:${item.id}`)} <button type="button" onClick={() => void mutation.retry(`status:${item.id}`)?.()}>Spróbuj ponownie</button></p> : null}</div> : <>

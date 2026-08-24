@@ -8,17 +8,22 @@ import { Badge, Button, Panel } from "../components/ui";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { formatWorkspaceDateRange } from "../domain/activity";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
+import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
+import type { ReviewRecord } from "../domain/types";
 
 const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
 
 export function ReviewPage() {
   const { state, completeReview } = useStore();
+  const reviewsPage = useWorkspaceInfinitePage<ReviewRecord>("reviews", 20);
   const draft = usePersistentDraft("weekly-review-note", { note: "" });
   const weekly = useMemo(() => deriveWeeklyReview(state), [state]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const completedThisWeek = state.reviews.some((review) => review.type === "weekly" && new Date(review.completedAt) >= weekly.start && new Date(review.completedAt) < weekly.end);
-  const recentReviews = [...state.reviews].filter((review) => review.type === "weekly").reverse().slice(0, 4);
+  const reviewHistory = mergePagedItems(state.reviews, reviewsPage.data?.items ?? [])
+    .filter((review) => review.type === "weekly")
+    .sort((left, right) => right.completedAt.localeCompare(left.completedAt));
 
   const complete = async () => {
     if (saving) return;
@@ -78,7 +83,7 @@ export function ReviewPage() {
         </div>
 
         <aside className="review-side">
-          <Panel><h2>Historia tygodni</h2>{recentReviews.length ? recentReviews.map((review) => <div className="review-history-item" key={review.id}><strong>Podsumowanie zapisane</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Bez dodatkowej decyzji."}</p></div>) : <p className="muted-copy">Pierwsze zapisane podsumowanie pojawi się tutaj.</p>}</Panel>
+          <Panel><h2>Historia tygodni</h2>{reviewsPage.isPending ? <p className="muted-copy">Ładowanie historii…</p> : reviewHistory.length ? reviewHistory.map((review) => <div className="review-history-item" key={review.id}><strong>Podsumowanie zapisane</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Bez dodatkowej decyzji."}</p></div>) : <p className="muted-copy">Pierwsze zapisane podsumowanie pojawi się tutaj.</p>}{reviewsPage.isError && reviewHistory.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać dalszej historii.</p> : null}{reviewHistory.length && reviewsPage.hasNextPage ? <Button loading={reviewsPage.isFetchingNextPage} onClick={() => void reviewsPage.fetchNextPage()}>Załaduj starsze</Button> : null}</Panel>
           <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length}</strong><span>aktywnych Celów</span></p><p><strong>{state.actions.filter((action) => action.status === "blocked").length}</strong><span>blokad</span></p><p><strong>{state.inbox.filter((item) => item.status === "unprocessed").length}</strong><span>w Skrzynce</span></p></div></Panel>
         </aside>
       </div>

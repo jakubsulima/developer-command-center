@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 import { QuickAdd } from "./QuickAdd";
 import { Sheet } from "./ui/sheet";
 import { AppLoading } from "../auth/AuthRoot";
+import { AppErrorReporter } from "../lib/appErrorReporter";
 
 const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
@@ -21,27 +22,40 @@ const navigation = [
 ];
 
 export function AppShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
-  const { state, mode, loading, syncing, error, resetDemo, exportData, reload } = useStore();
+  const { state, mode, loading, resetDemo, exportData, reload, syncState } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
+  const syncing = syncState.status === "syncing";
+  const error = Object.values(syncState.errors)[0];
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const moreActive = ["/goals", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
 
   const downloadExport = async () => {
-    const data = await exportData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `command-center-export-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (exportState === "loading") return;
+    setExportState("loading");
+    try {
+      const data = await exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `command-center-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setExportState("idle");
+    } catch (caught) {
+      AppErrorReporter.report(caught, "export");
+      setExportState("error");
+    } finally {
+      setExportState((current) => current === "loading" ? "idle" : current);
+    }
   };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -92,7 +106,8 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
             <div className={`profile-menu-status ${error ? "error" : ""}`}>{error ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
             {error ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload(); }}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
             {mode === "demo" ? <button role="menuitem" onClick={() => { resetDemo(); setProfileMenuOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
-            <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>Eksportuj dane</span></button>
+            <button role="menuitem" disabled={exportState === "loading"} onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksportuj dane"}</span></button>
+            {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
             {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
           </div> : null}
           <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
@@ -130,7 +145,8 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Konto i dane</h3><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{error ? "Błąd synchronizacji" : mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><UserRound /></section>
         <div className="mobile-more-actions" aria-label="Akcje konta i danych">
           {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
-          <button type="button" onClick={() => void downloadExport()}><Download /><span>Eksport danych</span></button>
+          <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
+          {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
           {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
           {mode === "supabase" ? <button className="danger" type="button" onClick={() => void signOut()}><LogOut /><span>Wyloguj się</span></button> : null}
         </div></section>

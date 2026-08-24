@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
-import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
+import { Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import type { KnowledgeItem, KnowledgeKind } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
@@ -12,6 +12,10 @@ import { MultiCombobox } from "../components/MultiCombobox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
+import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
+import { knowledgeDefaultRelationMeaning } from "../domain/labels";
+import { entityCardVariants } from "../components/ui-variants";
+import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -25,6 +29,7 @@ type View = "active" | "archived" | "trashed";
 
 export function KnowledgePage() {
   const { state, loading, createKnowledge, setVisibility } = useStore();
+  const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { notifyUndo } = useActionFeedback();
@@ -51,7 +56,8 @@ export function KnowledgePage() {
     if (areaFilter && !state.areas.some((area) => area.id === areaFilter)) { next.delete("area"); changed = true; }
     if (changed) setParams(next, { replace: true });
   }, [areaFilter, goalFilter, kind, params, setParams, state.areas, state.goals]);
-  const results = state.knowledge.filter((item) => {
+  const knowledgeItems = mergePagedItems(state.knowledge, knowledgePage.data?.items ?? []);
+  const results = knowledgeItems.filter((item) => {
     const visible = view === "active" ? !item.archivedAt && !item.trashedAt : view === "archived" ? Boolean(item.archivedAt) && !item.trashedAt : Boolean(item.trashedAt);
     const links = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id);
     const linkedToGoal = !goalFilter || links.some((link) => link.goalId === goalFilter || state.actions.some((action) => action.id === link.actionId && action.goalId === goalFilter));
@@ -63,7 +69,7 @@ export function KnowledgePage() {
     setCreateSaving(true);
     setCreateError("");
     try {
-      await createKnowledge(form.kind, form.title, form.detail, undefined, form.sourceUrl || undefined, form.goalIds);
+      await createKnowledge({ kind: form.kind, title: form.title, detail: form.detail, sourceUrl: form.sourceUrl || undefined, relations: form.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { goalId } })) });
       setForm({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
       setModalOpen(false);
     } catch (caught) {
@@ -122,18 +128,18 @@ export function KnowledgePage() {
         </Tabs>
         <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
       </div>
-      {loading ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
+      {loading || knowledgePage.isPending ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (
         <div className="knowledge-library-surface"><div className="knowledge-list">
           {results.map((item) => {
-            const { icon: Icon, label } = kinds[item.type];
             const mutationKey = `visibility:${item.id}`;
-            const relationships = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title ?? state.knowledge.find((knowledge) => knowledge.id === link.targetKnowledgeItemId)?.title).filter(Boolean).join(" · ");
+            const relationCount = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).length;
+            const relationLabel = relationCount === 1 ? "1 powiązanie" : relationCount >= 2 && relationCount <= 4 ? `${relationCount} powiązania` : `${relationCount} powiązań`;
+            const helper = item.sourceInboxItemId ? "Źródło: Skrzynka" : item.detail.trim() || (relationCount ? relationLabel : null);
             return (
-              <Panel className="entity-card" key={item.id}>
-                <span className="knowledge-kind-icon" aria-hidden="true"><Icon /></span>
-                <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail || "Bez dodatkowego opisu"}</small>{relationships || item.sourceInboxItemId ? <span className="knowledge-row-meta">{relationships ? <small className="line-clamp-1">Powiązane: {relationships}</small> : null}{item.sourceInboxItemId ? <small>Źródło: Skrzynka</small> : null}</span> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
-                <Badge tone="neutral">{label}</Badge>
+              <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id}>
+                <KnowledgeKindBadge kind={item.type} />
+                <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <div className="knowledge-actions">
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
                 </div>
@@ -142,6 +148,9 @@ export function KnowledgePage() {
           })}
         </div></div>
       ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Notatki, materiały, decyzje, rezultaty i poszukiwania pojawią się tu po świadomym zapisaniu."} action={normalized || kind !== "all" || goalFilter || areaFilter ? <Button onClick={() => { setQuery(""); setParams({}); }}>Wyczyść filtry</Button> : <Button variant="primary" onClick={() => setModalOpen(true)}>Nowy element Wiedzy</Button>} />}
+      {knowledgePage.isError && results.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Wiedzy.</p> : null}
+      {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
+      {results.length && !knowledgePage.hasNextPage && !knowledgePage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
         const item = state.knowledge.find((candidate) => candidate.id === actionsItemId);
         if (!item) return null;
