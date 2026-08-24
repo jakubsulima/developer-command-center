@@ -24,21 +24,20 @@ const recurringPresets = [
   { name: "Opróżnij Inbox", unit: "week" as const, checklist: "Podejmij decyzję o każdym elemencie" }
 ];
 
-function TodayActionRow({ action, context, complete, reschedule, skip, togglePin, setNext, openMore, busy, error, retry }: {
+function TodayActionRow({ action, context, complete, reschedule, skip, togglePin, openMore, busy, error, retry }: {
   action: GoalAction;
   context: string;
   complete: (actionId: string) => Promise<void>;
   reschedule: (actionId: string, scheduledFor: string) => Promise<void>;
   skip: (action: GoalAction) => Promise<void>;
   togglePin: (action: GoalAction) => Promise<void>;
-  setNext: (action: GoalAction) => Promise<void>;
   openMore: (actionId: string) => void;
   busy: boolean;
   error?: string;
   retry?: () => Promise<void>;
 }) {
   return <div className="today-action">
-    <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => void complete(action.id)} onSetNext={() => void setNext(action)} onMore={() => openMore(action.id)} />
+    <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => void complete(action.id)} onMore={() => openMore(action.id)} />
     <div className="action-copy"><strong>{action.title}</strong><small>{context}{action.recurringTemplateId ? <> · <Repeat2 /> cykliczne</> : null}</small></div>
     {action.status === "blocked" ? <Badge tone="danger">Zablokowane</Badge> : null}
     <div className="today-row-actions">
@@ -52,7 +51,7 @@ function TodayActionRow({ action, context, complete, reschedule, skip, togglePin
 }
 
 export function TodayPage() {
-  const { state, createAction, setActionStatus, setNextAction, updateAction, createRecurringAction, updateRecurringAction, materializeRecurring, setRecurringStatus, addProgress, linkKnowledge, unlinkKnowledge } = useStore();
+  const { state, createAction, setActionStatus, updateAction, createRecurringAction, updateRecurringAction, materializeRecurring, setRecurringStatus, addProgress, linkKnowledge, unlinkKnowledge } = useStore();
   const { notifyUndo } = useActionFeedback();
   const actionMutation = useKeyedMutation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -153,7 +152,6 @@ export function TodayPage() {
   const contextFor = (action: GoalAction) => state.goals.find((goal) => goal.id === action.goalId)?.title ?? state.areas.find((area) => area.id === action.areaId)?.name ?? "Samodzielne Działanie";
   const reschedule = (actionId: string, scheduledFor: string) => actionMutation.run(`today:${actionId}`, () => updateAction(actionId, { scheduledFor }));
   const togglePin = (action: GoalAction) => actionMutation.run(`today:${action.id}`, async () => { await updateAction(action.id, { pinnedToToday: !action.pinnedToToday }); notifyUndo({ message: action.pinnedToToday ? "Odpięto od Dzisiaj." : "Przypięto do Dzisiaj.", undo: () => updateAction(action.id, { pinnedToToday: action.pinnedToToday }) }); });
-  const setNext = (action: GoalAction) => action.goalId ? actionMutation.run(`today:${action.id}`, () => setNextAction(action.goalId!, action.id)) : Promise.resolve();
   const skip = (action: GoalAction) => actionMutation.run(`today:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, action.status, action.blocker) }); });
   const changeSeriesStatus = (template: typeof state.recurringActionTemplates[number], status: "active" | "paused" | "archived") => actionMutation.run(`series:${template.id}`, async () => {
     const previous = template.status;
@@ -163,7 +161,7 @@ export function TodayPage() {
       undo: () => setRecurringStatus(template.id, previous)
     });
   });
-  const renderTodayAction = (action: GoalAction) => <TodayActionRow action={action} context={contextFor(action)} complete={complete} reschedule={reschedule} skip={skip} togglePin={togglePin} setNext={setNext} openMore={setActionMenuId} busy={actionMutation.isBusy(`today:${action.id}`)} error={actionMutation.error(`today:${action.id}`)} retry={actionMutation.retry(`today:${action.id}`)} />;
+  const renderTodayAction = (action: GoalAction) => <TodayActionRow action={action} context={contextFor(action)} complete={complete} reschedule={reschedule} skip={skip} togglePin={togglePin} openMore={setActionMenuId} busy={actionMutation.isBusy(`today:${action.id}`)} error={actionMutation.error(`today:${action.id}`)} retry={actionMutation.retry(`today:${action.id}`)} />;
   const submitAction = async (event: FormEvent) => { event.preventDefault(); if (actionSaving) return; setActionSaving(true); setActionError(""); try { await createAction({ ...actionForm, detail: actionForm.detail || undefined, goalId: actionForm.goalId || undefined, areaId: actionForm.areaId || undefined, scheduledFor: actionForm.scheduledFor || undefined }); setActionForm({ title: "", detail: "", goalId: "", areaId: "", scheduledFor: "", pinnedToToday: true }); setActionOpen(false); } catch (caught) { setActionError(caught instanceof Error ? caught.message : "Nie udało się dodać Działania."); } finally { setActionSaving(false); } };
 
   const hasTodayWork = sections.today.length || sections.overdue.length;

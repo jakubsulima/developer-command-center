@@ -197,7 +197,8 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(dialog).getAllByRole("button", { name: /Usuń powiązanie/ })).toHaveLength(2);
     await user.click(within(dialog).getByRole("button", { name: "Zapisz w Bibliotece" }));
     const created = screen.getByText("Decyzja o modelu danych").closest("section") as HTMLElement;
-    expect(within(created).getByText(/FinTrack API/)).toBeInTheDocument();
+    expect(within(created).getByText("2 powiązania")).toBeInTheDocument();
+    expect(within(created).queryByText("FinTrack API")).not.toBeInTheDocument();
   });
 
   it("edytuje treść i różnicę relacji Wiedzy w jednym zapisie", async () => {
@@ -210,8 +211,9 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(goals);
     await user.click(within(screen.getByRole("listbox", { name: "Powiązane Cele" })).getByRole("option", { name: "FinTrack API" }));
     await user.click(screen.getByRole("button", { name: "Zapisz zmiany" }));
-    expect(await screen.findByRole("link", { name: "FinTrack API" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Zbudować spokojny budżet domowy" })).not.toBeInTheDocument();
+    const relations = screen.getByRole("heading", { name: "Powiązania" }).closest("section") as HTMLElement;
+    expect(await within(relations).findByRole("link", { name: "FinTrack API" })).toBeInTheDocument();
+    expect(within(relations).queryByRole("link", { name: "Zbudować spokojny budżet domowy" })).not.toBeInTheDocument();
   });
 
   it("dołącza materiał do decyzji jako potwierdzenie", async () => {
@@ -221,6 +223,18 @@ describe("regresje nowego modelu Celów", () => {
     await user.selectOptions(screen.getByLabelText("Materiał potwierdzający decyzję"), "know-3");
     await user.click(screen.getByRole("button", { name: "Dołącz" }));
     expect(await screen.findByRole("link", { name: "PostgreSQL: constraints and normalization" })).toBeInTheDocument();
+  });
+
+  it("łączy jeden element Wiedzy z wieloma Projektami i pokazuje transfer kontekstu", async () => {
+    const user = userEvent.setup();
+    renderApp("/knowledge/know-3");
+    await screen.findByRole("heading", { name: "PostgreSQL: constraints and normalization" });
+    const panel = screen.getByRole("heading", { name: "Projekty i transfer wiedzy" }).closest("section") as HTMLElement;
+    expect(within(panel).getByRole("link", { name: "Finanse" })).toBeInTheDocument();
+    await user.selectOptions(within(panel).getByLabelText("Połącz z kolejnym Projektem"), "portfolio-v2");
+    await user.click(within(panel).getByRole("button", { name: "Połącz Projekt" }));
+    expect(await within(panel).findByRole("link", { name: "Portfolio v2" })).toBeInTheDocument();
+    expect(within(panel).getByText("Łączy 2 Projekty")).toBeInTheDocument();
   });
 
   it("archiwizuje Wiedzę i pozwala cofnąć zmianę", async () => {
@@ -316,6 +330,10 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
     const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
+    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj wiedzę" });
+    expect(relationToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(relationToggle);
+    expect(relationToggle).toHaveAttribute("aria-expanded", "true");
     await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
     await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
     expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();

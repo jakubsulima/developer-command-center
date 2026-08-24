@@ -14,6 +14,7 @@ import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
 import { knowledgeDefaultRelationMeaning } from "../domain/labels";
+import { entityCardVariants } from "../components/ui-variants";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -129,11 +130,13 @@ export function KnowledgePage() {
         <div className="knowledge-library-surface"><div className="knowledge-list">
           {results.map((item) => {
             const mutationKey = `visibility:${item.id}`;
-            const relationships = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => `${link.meaning === "result" ? "Rezultat Działania" : link.meaning === "decision" ? "Decyzja" : link.meaning === "material" ? "Materiał" : "Pozostałe"} · ${state.goals.find((goal) => goal.id === link.goalId)?.title ?? state.actions.find((action) => action.id === link.actionId)?.title ?? state.knowledge.find((knowledge) => knowledge.id === link.targetKnowledgeItemId)?.title ?? "Niedostępny obiekt"}`).filter(Boolean).join(" · ");
+            const relationCount = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).length;
+            const relationLabel = relationCount === 1 ? "1 powiązanie" : relationCount >= 2 && relationCount <= 4 ? `${relationCount} powiązania` : `${relationCount} powiązań`;
+            const helper = item.sourceInboxItemId ? "Źródło: Skrzynka" : item.detail.trim() || (relationCount ? relationLabel : null);
             return (
-              <Panel className="entity-card" key={item.id}>
+              <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id}>
                 <KnowledgeKindBadge kind={item.type} />
-                <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link><small className="line-clamp-2">{item.detail || "Bez dodatkowego opisu"}</small>{relationships || item.sourceInboxItemId ? <span className="knowledge-row-meta">{relationships ? <small className="line-clamp-1">Powiązane: {relationships}</small> : null}{item.sourceInboxItemId ? <small>Źródło: Skrzynka</small> : null}</span> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
+                <span className="knowledge-row-content"><Link className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })}><strong className="line-clamp-2">{item.title}</strong></Link>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <div className="knowledge-actions">
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
                 </div>
