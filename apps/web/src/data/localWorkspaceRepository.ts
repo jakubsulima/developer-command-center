@@ -2,6 +2,7 @@ import { executeDomainCommand, type DomainCommand } from "../domain/commands";
 import { ensureGoalModel } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
+import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
 import { emptyState } from "./empty";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
@@ -116,6 +117,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
   storage: globalThis.localStorage
 }): WorkspaceRepository {
   const { indexedDb, storage } = options;
+  let latestGoalReview: ReturnType<typeof createDemoAIGoalReview> | undefined;
 
   const load = async () => {
     const stored = indexedDb
@@ -181,6 +183,17 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async exportWorkspace() {
       return this.export();
+    },
+    async getLatestGoalReview() {
+      return latestGoalReview ? structuredClone(latestGoalReview) : undefined;
+    },
+    async requestGoalReview(_workspaceId, forceRefresh = false) {
+      if (latestGoalReview && !forceRefresh) return { ...structuredClone(latestGoalReview), cached: true };
+      latestGoalReview = createDemoAIGoalReview(await load() ?? structuredClone(emptyState));
+      return structuredClone(latestGoalReview);
+    },
+    async submitGoalReviewFeedback() {
+      // Demo zachowuje kontrakt bez wysyłania i trwałego śledzenia oceny.
     }
   };
 }

@@ -16,6 +16,11 @@ Artifact, Investigation), odwracalne Archive/Trash oraz weekly Review.
 Focus i Checkpoint pozostają danymi historycznymi: można je otworzyć w trybie
 read-only i wyeksportować, ale aktywny produkt nie tworzy nowych sesji.
 
+Ekran `Podsumowanie tygodnia` zawiera opcjonalny, uruchamiany ręcznie Przegląd
+Celów z AI. W trybie demo jest to deterministyczna symulacja, a w Supabase
+bezpieczna funkcja Edge korzystająca z OpenAI-compatible NVIDIA API/NIM. Model
+ma wyłącznie ograniczony kontekst aktywnych Celów i nie może wykonywać zmian.
+
 ## Uruchomienie z Supabase SaaS
 
 Wymagania: Node.js 24 i pnpm 10. Nie jest potrzebny lokalny Docker ani lokalny
@@ -52,6 +57,10 @@ pnpm supabase:plan
 pnpm supabase:deploy
 pnpm supabase:lint:remote
 ```
+
+Po konfiguracji sekretów NVIDIA funkcję AI wdraża się osobno zgodnie z sekcją
+„Przegląd AI” w `docs/deployment/managed-supabase.md`. Klucz NVIDIA ani secret
+key Supabase nie mogą trafić do aplikacji webowej.
 
 Pierwsze trzy komendy przed wdrożeniem są obowiązkową kontrolą. Produkcję można
 wdrażać ręcznie przez workflow `Wdrożenie migracji Supabase`, po wcześniejszym

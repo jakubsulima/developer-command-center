@@ -118,3 +118,36 @@ pnpm supabase:types > apps/web/src/lib/database.types.ts
 Następny krok implementacyjny to podanie wygenerowanego `Database` jako typu
 generycznego do `createClient`. Typy powinny być generowane po migracji staging,
 nie ręcznie przepisywane.
+
+## 7. Przegląd AI z NVIDIA
+
+Przegląd AI jest funkcją opt-in na ekranie tygodnia. Frontend wysyła tylko ID
+Workspace i sesyjny JWT; funkcja Edge pobiera ograniczony kontekst przez RLS.
+Pełny prompt, surowa odpowiedź i klucze nie są zapisywane w bazie ani logach.
+
+Skopiuj nazwy z `supabase/functions/.env.example` do sekretów projektu staging.
+Pierwszym kandydatem stagingowym jest `meta/muse-glimmer-30b` w trybie
+`NVIDIA_STRUCTURED_MODE=prompt`, ponieważ hostowany endpoint nie deklaruje
+natywnego structured output. Ustaw prawdziwy `NVIDIA_API_KEY`. Zarządzany
+runtime przekazuje funkcji klucze projektu automatycznie przez
+`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS` (z fallbackiem do legacy
+`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`), więc nie kopiuj ich do tego
+pliku. Żadna z tych wartości nie może trafić do `apps/web/.env.local`.
+
+```bash
+pnpm --filter @command/web exec supabase secrets set --env-file "$PWD/supabase/functions/.env.local" --project-ref <staging-project-ref>
+pnpm --filter @command/web exec supabase secrets list --project-ref <staging-project-ref>
+pnpm --filter @command/web exec supabase functions deploy ai-goal-review --project-ref <staging-project-ref> --workdir ../..
+```
+
+`supabase/config.toml` pozostawia `verify_jwt = true`. Wywołanie z PWA musi
+mieć sesyjny JWT w `Authorization: Bearer ...` i publishable key w `apikey`.
+Kill switch to `AI_GOAL_REVIEW_ENABLED=false`; jego zmiana nie wymaga nowego
+builda frontendu.
+
+Przed produkcją wykonaj na stagingu analizę małego i dużego portfolio, sprawdź
+cache oraz limit, błąd 401 bez JWT, brak dostępu drugiego użytkownika i logi pod
+kątem treści Celów oraz sekretów. Zweryfikuj też aktualne warunki retencji,
+region i dostępność wybranego modelu NVIDIA. Funkcja nie powinna być wdrażana
+na produkcję bez benchmarku jakości opisanego w
+`docs/planning/nvidia-ai-implementation.md`.

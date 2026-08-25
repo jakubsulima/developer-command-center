@@ -3,6 +3,7 @@ import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, Creat
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { SearchResult } from "../data/workspaceRepository";
+import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 
 export interface CreatedProjectReference {
   projectId: string;
@@ -51,6 +52,11 @@ export interface AppStore {
   mode: AuthMode;
   loading: boolean;
   syncState: SyncState;
+  aiGoalReview?: AIGoalReview;
+  aiGoalReviewStatus: "idle" | "loading" | "refreshing" | "ready" | "error";
+  aiGoalReviewError?: { code: string; message: string };
+  requestGoalReview: (forceRefresh?: boolean) => Promise<void>;
+  submitGoalReviewFeedback: (recommendationId: string | null, rating: AIGoalReviewFeedbackRating) => Promise<void>;
   search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
   updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;
