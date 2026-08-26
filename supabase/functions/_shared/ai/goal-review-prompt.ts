@@ -1,6 +1,6 @@
 import { goalPortfolioReviewJsonSchema } from "./goal-review-schema.ts";
 
-export const GOAL_REVIEW_PROMPT_VERSION = 3;
+export const GOAL_REVIEW_PROMPT_VERSION = 4;
 
 export function buildGoalReviewSystemPrompt(structuredMode: "guided_json" | "prompt") {
   const schemaInstruction = structuredMode === "prompt" ? `\nZwróć wyłącznie JSON zgodny z tym JSON Schema:\n${JSON.stringify(goalPortfolioReviewJsonSchema)}` : "\nZwróć wyłącznie obiekt JSON zgodny z wymuszonym schematem.";
