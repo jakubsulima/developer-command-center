@@ -1,6 +1,7 @@
 import type { DomainCommand } from "../domain/commands";
 import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, Project, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
+import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 
 export interface PageCursor {
   sortValue: string;
@@ -68,6 +69,9 @@ export interface WorkspaceRepository {
   search(query: string, limit?: number): Promise<SearchResult[]>;
   execute(command: WorkspaceCommand): Promise<CommandResult>;
   exportWorkspace(workspaceId: string): Promise<WorkspaceExport>;
+  getLatestGoalReview(workspaceId: string): Promise<AIGoalReview | undefined>;
+  requestGoalReview(workspaceId: string, forceRefresh?: boolean): Promise<AIGoalReview>;
+  submitGoalReviewFeedback(workspaceId: string, reviewId: string, recommendationId: string | null, rating: AIGoalReviewFeedbackRating): Promise<void>;
 }
 
 export interface SearchResult {

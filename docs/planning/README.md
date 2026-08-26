@@ -14,8 +14,9 @@ Tailwind/shadcn.
 
 Plan pierwszego pionu AI, z bezpiecznym adapterem NVIDIA API/NIM, znajduje się w
 dokumencie [AI z obsługą NVIDIA](./nvidia-ai-implementation.md). Zaczyna od
-propozycji triage Inboxu i zachowuje rozdział `AIProposal → approval →
-AIExecution`.
+tylko-do-odczytu przeglądu wszystkich aktywnych Celów i rekomendacji na kolejny
+tydzień. Mechanizm `AIProposal → approval → AIExecution` pozostaje przewidziany
+dopiero dla późniejszych funkcji wykonujących mutacje.
 
 Aktualnym źródłem decyzji produktowych jest dokument
 [Trwałe Projekty i proste Cele](./project-centered-hierarchy.md). Wcześniejszy

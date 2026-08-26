@@ -13,6 +13,8 @@ import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoal
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
+import type { AIGoalReview } from "../domain/aiGoalReview";
+import { AIGoalReviewError } from "../domain/aiGoalReview";
 
 const STORAGE_KEY = "command-center-state-v1";
 const loadRepository = () => import("../data/supabaseRepository");
@@ -106,6 +108,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }), []);
   const syncState = useSyncExternalStore(mutationCoordinator.subscribe, mutationCoordinator.getSyncState, mutationCoordinator.getSyncState);
+  const [aiGoalReview, setAIGoalReview] = useState<AIGoalReview>();
+  const [aiGoalReviewStatus, setAIGoalReviewStatus] = useState<"idle" | "loading" | "refreshing" | "ready" | "error">("idle");
+  const [aiGoalReviewError, setAIGoalReviewError] = useState<{ code: string; message: string }>();
+  const aiReviewSignatureRef = useRef<string | undefined>(undefined);
 
   const remoteQuery = useQuery({
     queryKey: ["workspace-state", user?.id],
@@ -157,6 +163,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [mutationCoordinator, remoteQuery.data]);
 
+  const aiReviewSignature = useMemo(() => JSON.stringify({
+    goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
+    criteria: state.goalCriteria,
+    actions: state.actions.filter((action) => action.goalId),
+    progress: state.progressEntries.slice(0, 250)
+  }), [state.actions, state.goalCriteria, state.goals, state.progressEntries]);
+
+  useEffect(() => {
+    if (aiGoalReview && aiReviewSignatureRef.current && aiReviewSignatureRef.current !== aiReviewSignature && !aiGoalReview.stale) {
+      setAIGoalReview({ ...aiGoalReview, stale: true });
+    }
+  }, [aiGoalReview, aiReviewSignature]);
+
+  useEffect(() => {
+    if (!state.workspaceId || aiGoalReviewStatus !== "idle") return;
+    let active = true;
+    const repositoryPromise = mode === "demo" ? Promise.resolve(localRepository) : import("../data/supabaseWorkspaceRepository").then((module) => module.createSupabaseWorkspaceRepository());
+    void repositoryPromise.then((repository) => repository.getLatestGoalReview(state.workspaceId!)).then((review) => {
+      if (!active || !review) return;
+      aiReviewSignatureRef.current = aiReviewSignature;
+      setAIGoalReview(review);
+      setAIGoalReviewStatus("ready");
+    }).catch(() => { /* AI pozostaje opcjonalne i nie blokuje Workspace. */ });
+    return () => { active = false; };
+  }, [aiGoalReviewStatus, aiReviewSignature, localRepository, mode, state.workspaceId]);
+
 
   const runRemote = useCallback(async (operation: () => Promise<void>, key = "workspace") => {
     mutationCoordinator.clearError(key);
@@ -189,6 +221,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mode,
     loading: mode === "supabase" ? remoteQuery.isPending : !localHydrated,
     syncState,
+    aiGoalReview,
+    aiGoalReviewStatus,
+    aiGoalReviewError,
+    async requestGoalReview(forceRefresh = false) {
+      const current = await ensureWorkspaceState();
+      const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (!workspaceId) throw new Error("Brak aktywnego Workspace.");
+      setAIGoalReviewStatus(aiGoalReview ? "refreshing" : "loading");
+      setAIGoalReviewError(undefined);
+      try {
+        const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+        const review = await repository.requestGoalReview(workspaceId, forceRefresh);
+        aiReviewSignatureRef.current = JSON.stringify({ goals: stateRef.current.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"), criteria: stateRef.current.goalCriteria, actions: stateRef.current.actions.filter((action) => action.goalId), progress: stateRef.current.progressEntries.slice(0, 250) });
+        setAIGoalReview(review);
+        setAIGoalReviewStatus("ready");
+      } catch (error) {
+        const code = error instanceof AIGoalReviewError ? error.code : (error as { code?: string })?.code ?? "PROVIDER_REJECTED";
+        const message = error instanceof Error ? error.message : "Nie udało się wygenerować Przeglądu AI.";
+        setAIGoalReviewError({ code, message });
+        setAIGoalReviewStatus("error");
+      }
+    },
+    async submitGoalReviewFeedback(recommendationId, rating) {
+      if (!aiGoalReview || !state.workspaceId) return;
+      const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+      await repository.submitGoalReviewFeedback(state.workspaceId, aiGoalReview.reviewId, recommendationId, rating);
+    },
     async search(query, limit = 20) {
       if (mode === "demo") return localRepository.search(query, limit);
       return (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().search(query, limit);
@@ -797,7 +856,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;

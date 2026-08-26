@@ -312,7 +312,7 @@ describe("regresje nowego modelu Celów", () => {
   it("pokazuje automatyczne podsumowanie tygodnia z sugestiami", async () => {
     renderApp("/review");
     expect(await screen.findByRole("heading", { name: "Podsumowanie tygodnia" })).toBeInTheDocument();
-    expect(screen.getByText("Automatyczne podsumowanie")).toBeInTheDocument();
+    expect(screen.getByText("Podsumowanie systemowe")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Co warto zrobić dalej" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Zamknij tydzień" })).toBeEnabled();
   });

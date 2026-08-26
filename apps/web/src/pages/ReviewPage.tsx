@@ -10,6 +10,7 @@ import { formatWorkspaceDateRange } from "../domain/activity";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import type { ReviewRecord } from "../domain/types";
+import { AIGoalReview } from "../components/AIGoalReview";
 
 const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
 
@@ -52,7 +53,7 @@ export function ReviewPage() {
       <div className="review-layout weekly-review-layout">
         <div className="review-main-column">
           <Panel className="review-main weekly-summary-card">
-            <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Automatyczne podsumowanie</small><h2>Ten tydzień w skrócie</h2><p>{weekly.generatedSummary}</p></span></div>
+            <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.generatedSummary}</p></span></div>
             <div className="weekly-metrics" aria-label="Wyniki tygodnia">
               <div><CheckCircle2 /><span><strong>{weekly.completedActions}</strong><small>ukończone</small></span></div>
               <div><Clock3 /><span><strong>{weekly.focusMinutes} min</strong><small>fokusu</small></span></div>
@@ -60,6 +61,8 @@ export function ReviewPage() {
               <div><ListChecks /><span><strong>{weekly.progressUpdates}</strong><small>aktualizacje</small></span></div>
             </div>
           </Panel>
+
+          <AIGoalReview />
 
           <Panel className="weekly-suggestions">
             <div className="section-heading"><div><span className="section-kicker"><Lightbulb />Sugestie</span><h2>Co warto zrobić dalej</h2></div><span>{weekly.suggestions.length} priorytety</span></div>

@@ -1,6 +1,7 @@
 import type { AppState, FocusSessionRecord, KnowledgeItem } from "../domain/types";
 import { getSupabase } from "../lib/supabase";
 import type { CommandResult, Page, PageCursor, SearchResult, WorkspaceCommand, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
+import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent, type AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 
 function objectPayload(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}: nieprawidłowy JSON`);
@@ -113,6 +114,44 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
     async exportWorkspace(workspaceId): Promise<WorkspaceExport> {
       const { exportWorkspaceRemote } = await import("./supabaseRepository");
       return exportWorkspaceRemote(workspaceId) as Promise<WorkspaceExport>;
+    },
+    async getLatestGoalReview(workspaceId) {
+      const { data, error } = await getSupabase().from("ai_goal_reviews")
+        .select("id,period_start,period_end,provider,model,review_json,analyzed_goal_ids,omitted_goal_ids,created_at,cache_expires_at")
+        .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) {
+        if (error.code === "42P01" || /ai_goal_reviews.*does not exist/i.test(error.message)) return undefined;
+        throw new AIGoalReviewError("WORKSPACE_NOT_AVAILABLE", "Nie udało się pobrać ostatniego Przeglądu AI.");
+      }
+      if (!data) return undefined;
+      return decodeAIGoalReview({
+        reviewId: data.id, status: "ready", cached: true,
+        stale: new Date(data.cache_expires_at).getTime() <= Date.now(), generatedAt: data.created_at,
+        periodStart: data.period_start, periodEnd: data.period_end, provider: data.provider, model: data.model,
+        analyzedGoalIds: data.analyzed_goal_ids, omittedGoalIds: data.omitted_goal_ids,
+        review: decodeAIGoalReviewContent(data.review_json)
+      });
+    },
+    async requestGoalReview(workspaceId, forceRefresh = false) {
+      const { data, error } = await getSupabase().functions.invoke("ai-goal-review", { body: { workspaceId, forceRefresh } });
+      if (error) {
+        const context = (error as { context?: Response }).context;
+        let code = "PROVIDER_REJECTED";
+        let message = "Nie udało się wygenerować Przeglądu AI.";
+        if (context) {
+          try {
+            const payload = await context.clone().json() as { error?: { code?: string; message?: string } };
+            code = payload.error?.code ?? code;
+            message = payload.error?.message ?? message;
+          } catch { /* zachowaj stabilny błąd */ }
+        }
+        throw new AIGoalReviewError(code, message);
+      }
+      return decodeAIGoalReview(data);
+    },
+    async submitGoalReviewFeedback(workspaceId, reviewId, recommendationId, rating: AIGoalReviewFeedbackRating) {
+      const { error } = await getSupabase().rpc("set_ai_goal_review_feedback", { target_workspace_id: workspaceId, target_review_id: reviewId, target_recommendation_id: recommendationId, target_rating: rating });
+      if (error) throw new AIGoalReviewError("WORKSPACE_NOT_AVAILABLE", "Nie udało się zapisać oceny.");
     }
   };
 }
