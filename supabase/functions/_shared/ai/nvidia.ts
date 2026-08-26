@@ -24,7 +24,11 @@ export function createNvidiaProvider(options: NvidiaOptions): AIProvider {
       try {
         const body: Record<string, unknown> = {
           model: options.model,
-          temperature: 0.15,
+          // Reasoning traces share max_tokens with the final answer. Disable
+          // them for this synchronous, schema-constrained transformation.
+          reasoning_effort: "none",
+          temperature: 0.95,
+          top_p: 1,
           max_tokens: request.maxOutputTokens,
           stream: false,
           messages: [

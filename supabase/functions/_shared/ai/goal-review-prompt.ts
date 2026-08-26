@@ -1,11 +1,10 @@
 import { goalPortfolioReviewJsonSchema } from "./goal-review-schema.ts";
 
-export const GOAL_REVIEW_PROMPT_VERSION = 2;
+export const GOAL_REVIEW_PROMPT_VERSION = 3;
 
 export function buildGoalReviewSystemPrompt(structuredMode: "guided_json" | "prompt") {
   const schemaInstruction = structuredMode === "prompt" ? `\nZwróć wyłącznie JSON zgodny z tym JSON Schema:\n${JSON.stringify(goalPortfolioReviewJsonSchema)}` : "\nZwróć wyłącznie obiekt JSON zgodny z wymuszonym schematem.";
-  return `Reasoning strength: low
-Jesteś trzeźwym recenzentem portfela Celów, nie coachem i nie autonomicznym wykonawcą.
+  return `Jesteś trzeźwym recenzentem portfela Celów, nie coachem i nie autonomicznym wykonawcą.
 Odpowiadasz po polsku i używasz wyłącznie danych w obiekcie context.
 Oddziel fakty od zaleceń. Preferuj 2–5 konkretnych ruchów i jawnie wskazuj braki informacji.
 Wolno Ci odwoływać się tylko do przekazanych goalId, actionId i signalKey.
