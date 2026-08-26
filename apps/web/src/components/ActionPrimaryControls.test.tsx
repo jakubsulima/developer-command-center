@@ -10,19 +10,16 @@ const action: GoalAction = {
 };
 
 describe("ActionPrimaryControls", () => {
-  it("udostępnia wspólne akcje Ukończ, Następne i Więcej", async () => {
+  it("udostępnia ukończenie i menu operacji", async () => {
     const user = userEvent.setup();
     const onToggleComplete = vi.fn();
-    const onSetNext = vi.fn();
     const onMore = vi.fn();
-    render(<ActionPrimaryControls action={action} busy={false} onToggleComplete={onToggleComplete} onSetNext={onSetNext} onMore={onMore} />);
+    render(<ActionPrimaryControls action={action} busy={false} onToggleComplete={onToggleComplete} onMore={onMore} />);
 
     await user.click(screen.getByRole("button", { name: "Ukończ: Opublikuj wynik" }));
-    await user.click(screen.getByRole("button", { name: "Ustaw następne" }));
     await user.click(screen.getByRole("button", { name: "Więcej opcji: Opublikuj wynik" }));
     expect(onToggleComplete).toHaveBeenCalledOnce();
-    expect(onSetNext).toHaveBeenCalledOnce();
     expect(onMore).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Ustaw następne" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: "Ustaw następne" })).not.toBeInTheDocument();
   });
 });

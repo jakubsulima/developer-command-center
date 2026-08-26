@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
 import { demoState } from "../data/demo";
@@ -9,19 +9,65 @@ import { ensureGoalModel } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
-import type { AppState, NewLearningGoalInput, NewProjectInput } from "../domain/types";
+import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
+import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
+import type { AIGoalReview } from "../domain/aiGoalReview";
+import { AIGoalReviewError } from "../domain/aiGoalReview";
 
 const STORAGE_KEY = "command-center-state-v1";
 const loadRepository = () => import("../data/supabaseRepository");
 
-function cloneDemoState() {
-  return ensureGoalModel(structuredClone(demoState));
+type MutationScope = { collection: keyof AppState; ids: string[] };
+
+function restoreMutationScopes(current: AppState, previous: AppState, scopes: MutationScope[]) {
+  let next = current;
+  for (const scope of scopes) {
+    const ids = new Set(scope.ids);
+    const previousItems = previous[scope.collection];
+    const currentItems = current[scope.collection];
+    if (!Array.isArray(previousItems) || !Array.isArray(currentItems)) continue;
+    const previousById = new Map((previousItems as Array<{ id: string }>).map((item) => [item.id, item]));
+    const currentIds = new Set((currentItems as Array<{ id: string }>).map((item) => item.id));
+    next = {
+      ...next,
+      [scope.collection]: [
+        ...(currentItems as Array<{ id: string }>).filter((item) => !ids.has(item.id) || previousById.has(item.id)).map((item) => previousById.get(item.id) ?? item),
+        ...(previousItems as Array<{ id: string }>).filter((item) => ids.has(item.id) && !currentIds.has(item.id))
+      ]
+    } as AppState;
+  }
+  return next;
 }
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+function runScopedCommand(
+  coordinator: WorkspaceMutationCoordinator<AppState>,
+  getState: () => AppState,
+  key: string,
+  command: Parameters<typeof executeDomainCommand>[1],
+  scopes: MutationScope[],
+  persist: () => Promise<void>
+) {
+  let previous: AppState;
+  return coordinator.run({
+    key,
+    apply: () => {
+      previous = getState();
+      const nextState = executeDomainCommand(previous, command);
+      return {
+        nextState,
+        rollback: (current) => restoreMutationScopes(current, previous, scopes),
+        reapply: (fresh) => executeDomainCommand(fresh, command)
+      };
+    },
+    persist
+  });
+}
+
+
+function cloneDemoState() {
+  return ensureGoalModel(structuredClone(demoState));
 }
 
 function loadDemoState(): AppState {
@@ -52,11 +98,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => mode === "demo" ? loadDemoState() : structuredClone(emptyState));
   const stateRef = useRef(state);
   stateRef.current = state;
-  const [syncing, setSyncing] = useState(false);
-  const [scratchpadStatus, setScratchpadStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [mutationError, setMutationError] = useState<string>();
   const [localHydrated, setLocalHydrated] = useState(legacyMigrationRef.current);
   const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
+  const mutationCoordinator = useMemo(() => new WorkspaceMutationCoordinator<AppState>({
+    getState: () => stateRef.current,
+    setState: (next) => {
+      stateRef.current = next;
+      setState(next);
+    }
+  }), []);
+  const syncState = useSyncExternalStore(mutationCoordinator.subscribe, mutationCoordinator.getSyncState, mutationCoordinator.getSyncState);
+  const [aiGoalReview, setAIGoalReview] = useState<AIGoalReview>();
+  const [aiGoalReviewStatus, setAIGoalReviewStatus] = useState<"idle" | "loading" | "refreshing" | "ready" | "error">("idle");
+  const [aiGoalReviewError, setAIGoalReviewError] = useState<{ code: string; message: string }>();
+  const aiReviewSignatureRef = useRef<string | undefined>(undefined);
 
   const remoteQuery = useQuery({
     queryKey: ["workspace-state", user?.id],
@@ -95,50 +150,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void localRepository.save(state)
       .then(() => {
         localStorage.removeItem(STORAGE_KEY);
-        setScratchpadStatus((current) => current === "saving" ? "saved" : current);
       })
       .catch((error: unknown) => {
-        setScratchpadStatus((current) => current === "saving" ? "error" : current);
-        setMutationError(errorMessage(error, "Nie udało się zapisać lokalnego Workspace."));
+        mutationCoordinator.recordError("workspace", error, "Nie udało się zapisać lokalnego Workspace.");
       });
-  }, [localHydrated, localRepository, mode, state]);
+  }, [localHydrated, localRepository, mode, mutationCoordinator, state]);
 
   useEffect(() => {
     if (remoteQuery.data) {
       const hydrated = ensureGoalModel(remoteQuery.data);
-      stateRef.current = hydrated;
-      setState(hydrated);
+      mutationCoordinator.refresh(hydrated);
     }
-  }, [remoteQuery.data]);
+  }, [mutationCoordinator, remoteQuery.data]);
+
+  const aiReviewSignature = useMemo(() => JSON.stringify({
+    goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
+    criteria: state.goalCriteria,
+    actions: state.actions.filter((action) => action.goalId),
+    progress: state.progressEntries.slice(0, 250)
+  }), [state.actions, state.goalCriteria, state.goals, state.progressEntries]);
 
   useEffect(() => {
-    if (mode !== "supabase" || !state.focus.running || !state.focus.sessionId) return;
-    const sessionId = state.focus.sessionId;
-    const scratchpad = state.focus.scratchpad;
-    const timer = window.setTimeout(() => {
-      void loadRepository()
-        .then((repository) => repository.updateScratchpadRemote(sessionId, scratchpad))
-        .then(() => setScratchpadStatus("saved"))
-        .catch((error: unknown) => {
-          setScratchpadStatus("error");
-          setMutationError(errorMessage(error, "Nie udało się zapisać scratchpadu."));
-        });
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [mode, state.focus.running, state.focus.scratchpad, state.focus.sessionId]);
+    if (aiGoalReview && aiReviewSignatureRef.current && aiReviewSignatureRef.current !== aiReviewSignature && !aiGoalReview.stale) {
+      setAIGoalReview({ ...aiGoalReview, stale: true });
+    }
+  }, [aiGoalReview, aiReviewSignature]);
 
-  const runRemote = useCallback(async (operation: () => Promise<void>) => {
-    setSyncing(true);
-    setMutationError(undefined);
+  useEffect(() => {
+    if (!state.workspaceId || aiGoalReviewStatus !== "idle") return;
+    let active = true;
+    const repositoryPromise = mode === "demo" ? Promise.resolve(localRepository) : import("../data/supabaseWorkspaceRepository").then((module) => module.createSupabaseWorkspaceRepository());
+    void repositoryPromise.then((repository) => repository.getLatestGoalReview(state.workspaceId!)).then((review) => {
+      if (!active || !review) return;
+      aiReviewSignatureRef.current = aiReviewSignature;
+      setAIGoalReview(review);
+      setAIGoalReviewStatus("ready");
+    }).catch(() => { /* AI pozostaje opcjonalne i nie blokuje Workspace. */ });
+    return () => { active = false; };
+  }, [aiGoalReviewStatus, aiReviewSignature, localRepository, mode, state.workspaceId]);
+
+
+  const runRemote = useCallback(async (operation: () => Promise<void>, key = "workspace") => {
+    mutationCoordinator.clearError(key);
     try {
       await operation();
     } catch (error) {
-      setMutationError(errorMessage(error, "Nie udało się zsynchronizować zmiany."));
+      mutationCoordinator.recordError(key, error, "Nie udało się zsynchronizować zmiany.");
       throw error;
-    } finally {
-      setSyncing(false);
     }
-  }, []);
+  }, [mutationCoordinator]);
 
   const ensureWorkspaceState = useCallback(async () => {
     const current = stateRef.current;
@@ -160,16 +220,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     state,
     mode,
     loading: mode === "supabase" ? remoteQuery.isPending : !localHydrated,
-    syncing,
-    scratchpadStatus,
-    error: mutationError ?? (remoteQuery.error instanceof Error ? remoteQuery.error.message : undefined),
+    syncState,
+    aiGoalReview,
+    aiGoalReviewStatus,
+    aiGoalReviewError,
+    async requestGoalReview(forceRefresh = false) {
+      const current = await ensureWorkspaceState();
+      const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (!workspaceId) throw new Error("Brak aktywnego Workspace.");
+      setAIGoalReviewStatus(aiGoalReview ? "refreshing" : "loading");
+      setAIGoalReviewError(undefined);
+      try {
+        const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+        const review = await repository.requestGoalReview(workspaceId, forceRefresh);
+        aiReviewSignatureRef.current = JSON.stringify({ goals: stateRef.current.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"), criteria: stateRef.current.goalCriteria, actions: stateRef.current.actions.filter((action) => action.goalId), progress: stateRef.current.progressEntries.slice(0, 250) });
+        setAIGoalReview(review);
+        setAIGoalReviewStatus("ready");
+      } catch (error) {
+        const code = error instanceof AIGoalReviewError ? error.code : (error as { code?: string })?.code ?? "PROVIDER_REJECTED";
+        const message = error instanceof Error ? error.message : "Nie udało się wygenerować Przeglądu AI.";
+        setAIGoalReviewError({ code, message });
+        setAIGoalReviewStatus("error");
+      }
+    },
+    async submitGoalReviewFeedback(recommendationId, rating) {
+      if (!aiGoalReview || !state.workspaceId) return;
+      const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+      await repository.submitGoalReviewFeedback(state.workspaceId, aiGoalReview.reviewId, recommendationId, rating);
+    },
+    async search(query, limit = 20) {
+      if (mode === "demo") return localRepository.search(query, limit);
+      return (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().search(query, limit);
+    },
     async createGoal(input) {
-      const previous = await ensureWorkspaceState();
+      await ensureWorkspaceState();
       const goalId = crypto.randomUUID();
       const actionId = input.firstActionTitle?.trim() ? crypto.randomUUID() : undefined;
       const criteria = (input.criteria ?? []).filter((title) => title.trim()).map((title) => ({ id: crypto.randomUUID(), title, completed: false }));
       const createdAt = new Date().toISOString();
-      const next = executeDomainCommand(previous, {
+      const command = {
         type: "create_goal",
         goalId,
         actionId,
@@ -182,183 +271,164 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         templateId: input.templateId,
         criteria,
         createdAt
+      } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [
+        { collection: "goals", ids: [goalId] },
+        { collection: "actions", ids: actionId ? [actionId] : [] },
+        { collection: "goalCriteria", ids: criteria.map((item) => item.id) }
+      ], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createGoalRemote(stateRef.current.workspaceId!, goalId, actionId, input, criteria, goalId), `goal:${goalId}`);
       });
-      stateRef.current = next;
-      setState(next);
-      if (mode === "demo") return goalId;
-      try {
-        await runRemote(async () => (await loadRepository()).createGoalRemote(previous.workspaceId!, goalId, actionId, input, criteria, goalId));
-        return goalId;
-      } catch (error) {
-        stateRef.current = previous;
-        setState(previous);
-        throw error;
-      }
+      return goalId;
     },
     async updateGoal(goalId, changes) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "update_goal", goalId, ...changes, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, changes)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "update_goal", goalId, ...changes, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, changes), `goal:${goalId}`);
+      });
     },
     async createAction(input) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "create_action", id, ...input, createdAt }));
-      if (mode === "demo") return id;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).createActionRemote(state.workspaceId!, id, input));
-        return id;
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const command = { type: "create_action", id, ...input, createdAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${id}`, command, [{ collection: "actions", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createActionRemote(stateRef.current.workspaceId!, id, input), `action:${id}`);
+      });
+      return id;
     },
     async updateAction(actionId, changes) {
-      const previous = state;
-      const changedAt = new Date().toISOString();
-      const expectedVersion = previous.actions.find((action) => action.id === actionId)?.version;
-      setState((current) => executeDomainCommand(current, { type: "update_action", actionId, expectedVersion, ...changes, changedAt }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).updateActionRemote(actionId, expectedVersion ?? 1, changes));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      await ensureWorkspaceState();
+      let expectedVersion = 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `action:${actionId}`,
+        apply: () => {
+          const previousAction = stateRef.current.actions.find((action) => action.id === actionId);
+          expectedVersion = previousAction?.version ?? 1;
+          const changedAt = new Date().toISOString();
+          const nextState = executeDomainCommand(stateRef.current, { type: "update_action", actionId, expectedVersion, ...changes, changedAt });
+          const optimisticAction = nextState.actions.find((action) => action.id === actionId);
+          return {
+            nextState,
+            rollback: (current: AppState) => previousAction ? { ...current, actions: current.actions.map((action) => action.id === actionId ? previousAction : action) } : current,
+            reapply: (fresh: AppState) => optimisticAction ? { ...fresh, actions: fresh.actions.map((action) => action.id === actionId ? optimisticAction : action) } : fresh
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            await runRemote(async () => (await loadRepository()).updateActionRemote(actionId, expectedVersion, changes), `action:${actionId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? ensureGoalModel(refreshed.data) : undefined;
+        }
+      });
     },
     async setActionStatus(actionId, status, blocker) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "set_action_status", actionId, status, blocker, changedAt }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setActionStatusRemote(actionId, status, blocker));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const command = { type: "set_action_status", actionId, status, blocker, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${actionId}`, command, [{ collection: "actions", ids: [actionId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setActionStatusRemote(actionId, status, blocker), `action:${actionId}`);
+      });
     },
     async setNextAction(goalId, actionId) {
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "set_next_action", goalId, actionId }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const command = { type: "set_next_action", goalId, actionId } as const;
+      const affected = stateRef.current.actions.filter((action) => action.goalId === goalId && (action.isNext || action.id === actionId)).map((action) => action.id);
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}:next-action`, command, [{ collection: "actions", ids: affected }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId), `goal:${goalId}:next-action`);
+      });
     },
     async addProgress(goalId, kind, content, actionId, knowledgeItemId) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "add_progress", id, goalId, kind, content, actionId, knowledgeItemId, createdAt }));
-      if (mode === "demo") return;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).addProgressRemote(state.workspaceId!, id, goalId, kind, content, actionId, knowledgeItemId));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const command = { type: "add_progress", id, goalId, kind, content, actionId, knowledgeItemId, createdAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `progress:${id}`, command, [{ collection: "progressEntries", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).addProgressRemote(stateRef.current.workspaceId!, id, goalId, kind, content, actionId, knowledgeItemId), `progress:${id}`);
+      });
     },
     async createArea(name, description) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "create_area", id, name, description, createdAt }));
-      if (mode === "demo") return id;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).createAreaRemote(state.workspaceId!, id, name, description));
-        return id;
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const command = { type: "create_area", id, name, description, createdAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${id}`, command, [{ collection: "areas", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description), `area:${id}`);
+      });
+      return id;
     },
     async updateArea(areaId, changes) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "update_area", areaId, ...changes, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).updateAreaRemote(areaId, changes)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "update_area", areaId, ...changes, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${areaId}`, command, [{ collection: "areas", ids: [areaId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateAreaRemote(areaId, changes), `area:${areaId}`);
+      });
     },
     async createGoalTemplate(name, kind, defaultActions) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "create_goal_template", id, name, kind, defaultActions, createdAt }));
-      if (mode === "demo") return id;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).createGoalTemplateRemote(state.workspaceId!, id, name, kind, defaultActions));
-        return id;
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const command = { type: "create_goal_template", id, name, kind, defaultActions, createdAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal-template:${id}`, command, [{ collection: "goalTemplates", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createGoalTemplateRemote(stateRef.current.workspaceId!, id, name, kind, defaultActions), `goal-template:${id}`);
+      });
+      return id;
     },
     async updateGoalTemplate(templateId, changes) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "update_goal_template", templateId, ...changes, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).updateGoalTemplateRemote(templateId, changes)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "update_goal_template", templateId, ...changes, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal-template:${templateId}`, command, [{ collection: "goalTemplates", ids: [templateId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateGoalTemplateRemote(templateId, changes), `goal-template:${templateId}`);
+      });
     },
     async setGoalStatus(goalId, status, reason) {
-      const previous = state;
       const changedAt = new Date().toISOString();
       const progressId = crypto.randomUUID();
       const progressContent = status === "achieved" ? "Cel oznaczono jako osiągnięty po świadomym potwierdzeniu." : status === "abandoned" ? `Cel porzucono. Powód: ${reason?.trim()}` : status === "paused" ? "Cel wstrzymano." : "Cel wznowiono.";
-      setState((current) => executeDomainCommand(current, { type: "set_goal_status", goalId, status, reason, progressId, progressContent, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).setGoalStatusRemote(goalId, status, reason, progressId, progressContent)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "set_goal_status", goalId, status, reason, progressId, progressContent, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }, { collection: "progressEntries", ids: [progressId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setGoalStatusRemote(goalId, status, reason, progressId, progressContent), `goal:${goalId}`);
+      });
     },
     async setGoalVisibility(goalId, visibility) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "set_goal_visibility", goalId, visibility, changedAt }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setGoalVisibilityRemote(goalId, visibility));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const command = { type: "set_goal_visibility", goalId, visibility, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setGoalVisibilityRemote(goalId, visibility), `goal:${goalId}`);
+      });
     },
     async setAreaVisibility(areaId, visibility) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "set_area_visibility", areaId, visibility, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).setAreaVisibilityRemote(areaId, visibility)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "set_area_visibility", areaId, visibility, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${areaId}`, command, [{ collection: "areas", ids: [areaId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setAreaVisibilityRemote(areaId, visibility), `area:${areaId}`);
+      });
     },
     async setGoalTemplateVisibility(templateId, visibility) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "set_goal_template_visibility", templateId, visibility, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).setGoalTemplateVisibilityRemote(templateId, visibility)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "set_goal_template_visibility", templateId, visibility, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal-template:${templateId}`, command, [{ collection: "goalTemplates", ids: [templateId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setGoalTemplateVisibilityRemote(templateId, visibility), `goal-template:${templateId}`);
+      });
     },
     async setRecurringStatus(templateId, status) {
-      const previous = state;
       const changedAt = new Date().toISOString();
-      setState((current) => executeDomainCommand(current, { type: "set_recurring_status", templateId, status, changedAt }));
-      if (mode === "demo") return;
-      try { await runRemote(async () => (await loadRepository()).setRecurringStatusRemote(templateId, status)); }
-      catch (error) { setState(previous); throw error; }
+      const command = { type: "set_recurring_status", templateId, status, changedAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `routine:${templateId}`, command, [{ collection: "recurringActionTemplates", ids: [templateId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setRecurringStatusRemote(templateId, status), `routine:${templateId}`);
+      });
     },
     async createRecurringAction(input) {
       const id = crypto.randomUUID();
@@ -379,22 +449,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now
       };
-      const previous = stateRef.current;
-      const next = executeDomainCommand(previous, { type: "create_recurring_template", template });
-      stateRef.current = next;
-      setState(next);
-      if (mode === "demo") return id;
-      if (!previous.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).createRecurringTemplateRemote(previous.workspaceId!, template));
-        return id;
-      } catch (error) {
-        stateRef.current = previous;
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `routine:${id}`, { type: "create_recurring_template", template }, [{ collection: "recurringActionTemplates", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createRecurringTemplateRemote(stateRef.current.workspaceId!, template), `routine:${id}`);
+      });
+      return id;
     },
     async updateRecurringAction(templateId, changes, updateFutureActions = true) {
+      await ensureWorkspaceState();
       const previous = stateRef.current;
       const changedAt = new Date().toISOString();
       const current = previous.recurringActionTemplates.find((item) => item.id === templateId);
@@ -403,67 +466,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...changes,
         checklist: changes.checklist?.filter(Boolean).map((title) => ({ title: title.trim() }))
       };
-      const next = executeDomainCommand(previous, {
+      const command = {
         type: "update_recurring_template",
         templateId,
         changes: normalized,
         updateFutureActions,
         effectiveFrom: changes.startsOn ?? new Date().toISOString().slice(0, 10),
         changedAt
+      } as const;
+      const affectedActions = updateFutureActions
+        ? previous.actions.filter((action) => action.recurringTemplateId === templateId).map((action) => action.id)
+        : [];
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `routine:${templateId}`, command, [
+        { collection: "recurringActionTemplates", ids: [templateId] },
+        { collection: "actions", ids: affectedActions }
+      ], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateRecurringTemplateRemote(templateId, changes, updateFutureActions, command.effectiveFrom), `routine:${templateId}`);
       });
-      stateRef.current = next;
-      setState(next);
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).updateRecurringTemplateRemote(templateId, changes, updateFutureActions, changes.startsOn ?? new Date().toISOString().slice(0, 10)));
-      } catch (error) {
-        stateRef.current = previous;
-        setState(previous);
-        throw error;
-      }
     },
     async materializeRecurring(today = new Date().toISOString().slice(0, 10)) {
-      const previous = stateRef.current;
-      const next = materializeRecurringActions(previous, today);
-      const created = next.actions.filter((action) => !previous.actions.some((current) => current.id === action.id) && action.recurringTemplateId && action.occurrenceDate);
-      stateRef.current = next;
-      setState(next);
-      if (mode === "demo" || !previous.workspaceId) return;
-      try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await Promise.all(created.map((action) => repository.materializeRecurringOccurrenceRemote(previous.workspaceId!, action.recurringTemplateId!, crypto.randomUUID(), action.occurrenceDate!, crypto.randomUUID())));
-        });
-      } catch (error) {
-        stateRef.current = previous;
-        setState(previous);
-        throw error;
-      }
+      await ensureWorkspaceState();
+      let created: AppState["actions"] = [];
+      await mutationCoordinator.run({
+        key: "routine:materialize",
+        apply: () => {
+          const previous = stateRef.current;
+          const next = materializeRecurringActions(previous, today);
+          created = next.actions.filter((action) => !previous.actions.some((current) => current.id === action.id) && action.recurringTemplateId && action.occurrenceDate);
+          const createdIds = new Set(created.map((action) => action.id));
+          return {
+            nextState: next,
+            rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "actions", ids: [...createdIds] }]),
+            reapply: (fresh: AppState) => materializeRecurringActions(fresh, today)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo" || !stateRef.current.workspaceId) return;
+          await runRemote(async () => {
+            const repository = await loadRepository();
+            await Promise.all(created.map((action) => repository.materializeRecurringOccurrenceRemote(stateRef.current.workspaceId!, action.recurringTemplateId!, crypto.randomUUID(), action.occurrenceDate!, crypto.randomUUID())));
+          }, "routine:materialize");
+        }
+      });
     },
     async linkKnowledge(knowledgeItemId, target, meaning = "reference") {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt }));
-      if (mode === "demo") return;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).linkKnowledgeRemote(state.workspaceId!, id, knowledgeItemId, target, meaning));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge-link:${id}`, { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt }, [{ collection: "knowledgeLinks", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).linkKnowledgeRemote(stateRef.current.workspaceId!, id, knowledgeItemId, target, meaning), `knowledge-link:${id}`);
+      });
     },
     async unlinkKnowledge(linkId) {
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "unlink_knowledge", linkId }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).unlinkKnowledgeRemote(linkId));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge-link:${linkId}`, { type: "unlink_knowledge", linkId }, [{ collection: "knowledgeLinks", ids: [linkId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).unlinkKnowledgeRemote(linkId), `knowledge-link:${linkId}`);
+      });
     },
     async triageInboxIntent(inboxItemId, input) {
       const decidedAt = new Date().toISOString();
@@ -472,21 +530,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } : input.kind === "action" ? { ...input, actionId: crypto.randomUUID() } : {
         ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId ? crypto.randomUUID() : undefined
       };
-      const previous = state;
-      setState((current) => executeDomainCommand(current, { type: "triage_inbox_intent", inboxItemId, intent, decidedAt }));
-      if (mode === "demo") return;
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-      try {
-        await runRemote(async () => (await loadRepository()).triageInboxIntentRemote(state.workspaceId!, inboxItemId, intent, inboxItemId));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const scopes: MutationScope[] = [{ collection: "inbox", ids: [inboxItemId] }];
+      if (intent.kind === "goal") scopes.push({ collection: "goals", ids: [intent.goalId] }, { collection: "actions", ids: intent.actionId ? [intent.actionId] : [] });
+      if (intent.kind === "action") scopes.push({ collection: "actions", ids: [intent.actionId] });
+      if (intent.kind === "knowledge") scopes.push({ collection: "knowledge", ids: [intent.knowledgeId] }, { collection: "knowledgeLinks", ids: intent.linkId ? [intent.linkId] : [] });
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `inbox:${inboxItemId}`, { type: "triage_inbox_intent", inboxItemId, intent, decidedAt }, scopes, async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).triageInboxIntentRemote(stateRef.current.workspaceId!, inboxItemId, intent, inboxItemId), `inbox:${inboxItemId}`);
+      });
     },
     async createProject(input: NewProjectInput) {
       const id = crypto.randomUUID();
       const reference: CreatedProjectReference = { projectId: id, workItemId: `${id}-work-item` };
-      const nextState = executeDomainCommand(state, {
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const command = {
         type: "create_project",
         id,
         title: input.title,
@@ -495,77 +554,72 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         firstWorkItem: { id: `${id}-work-item`, title: input.firstWorkItemTitle, detail: input.firstWorkItemDescription },
         effortBudgetMinutes: input.effortBudgetMinutes,
         wipOverrideReason: input.wipOverrideReason
+      } as const;
+      let savedReference = reference;
+      await mutationCoordinator.run({
+        key: `project:${id}`,
+        apply: () => {
+          const previous = stateRef.current;
+          return {
+            nextState: executeDomainCommand(previous, command),
+            rollback: (currentState: AppState) => restoreMutationScopes(currentState, previous, [{ collection: "projects", ids: [id] }]),
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          await runRemote(async () => {
+            const repository = await loadRepository();
+            const projectId = await repository.createProjectRemote(stateRef.current.workspaceId!, input, id);
+            const refreshed = await remoteQuery.refetch();
+            const savedProject = refreshed.data?.projects.find((project) => project.id === projectId);
+            if (savedProject?.workItems[0]) savedReference = { projectId, workItemId: savedProject.workItems[0].id };
+          }, `project:${id}`);
+        }
       });
-      setState(nextState);
-      if (mode === "demo") return reference;
-      const workspaceId = state.workspaceId;
-      if (!workspaceId) return reference;
-      try {
-        let savedReference = reference;
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          const projectId = await repository.createProjectRemote(workspaceId, input, id);
-          const refreshed = await remoteQuery.refetch();
-          const savedProject = refreshed.data?.projects.find((project) => project.id === projectId);
-          if (savedProject?.workItems[0]) savedReference = { projectId, workItemId: savedProject.workItems[0].id };
-        });
-        return savedReference;
-      } catch (error) {
-        setState((current) => ({ ...current, projects: current.projects.filter((item) => item.id !== id) }));
-        throw error;
-      }
+      return savedReference;
     },
     async setCommitmentStatus(projectId, status) {
-      const previousProjects = state.projects;
-      setState((current) => executeDomainCommand(current, { type: "set_commitment_status", projectId, status }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setCommitmentStatusRemote(projectId, status));
-      } catch (error) {
-        setState((current) => ({ ...current, projects: previousProjects }));
-        throw error;
-      }
+      await ensureWorkspaceState();
+      const command = { type: "set_commitment_status", projectId, status } as const;
+      const affected = stateRef.current.projects.filter((project) => project.id === projectId || project.primary || project.commitmentStatus === "active").map((project) => project.id);
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `project:${projectId}:commitment`, command, [{ collection: "projects", ids: affected }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setCommitmentStatusRemote(projectId, status), `project:${projectId}:commitment`);
+      });
     },
     setPrimaryCommitment(projectId) {
       setState((current) => executeDomainCommand(current, { type: "set_primary_commitment", projectId }));
     },
-    setWorkItemStatus(projectId, workItemId, status, blocker) {
-      setState((current) => executeDomainCommand(current, { type: "set_work_item_status", projectId, workItemId, status, blocker }));
-    },
-    updateCheckpoint(checkpointId, input) {
-      setState((current) => executeDomainCommand(current, { type: "update_checkpoint", checkpointId, ...input, updatedAt: new Date().toISOString() }));
-    },
-    promoteScratchpad(sessionId, target, title, content) {
-      setState((current) => executeDomainCommand(current, { type: "promote_scratchpad", sessionId, target, targetId: crypto.randomUUID(), title, content, createdAt: new Date().toISOString() }));
-    },
     async createLearningGoal(input: NewLearningGoalInput) {
       const id = crypto.randomUUID();
       const goal = { id, title: input.title.trim(), criterion: input.criterion.trim(), status: "shaped" as const, skills: [input.skill.trim()] };
-      setState((current) => ({ ...current, learningGoals: [...current.learningGoals, goal] }));
-      if (mode === "demo") return;
-      const workspaceId = state.workspaceId;
-      if (!workspaceId) return;
-      try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await repository.createLearningGoalRemote(workspaceId, input, id);
-          await remoteQuery.refetch();
-        });
-      } catch (error) {
-        setState((current) => ({ ...current, learningGoals: current.learningGoals.filter((item) => item.id !== id) }));
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      await mutationCoordinator.run({
+        key: `learning-goal:${id}`,
+        apply: () => {
+          const previous = stateRef.current;
+          return {
+            nextState: { ...previous, learningGoals: [...previous.learningGoals, goal] },
+            rollback: (currentState: AppState) => restoreMutationScopes(currentState, previous, [{ collection: "learningGoals", ids: [id] }]),
+            reapply: (fresh: AppState) => ({ ...fresh, learningGoals: [...fresh.learningGoals, goal] })
+          };
+        },
+        persist: async () => {
+          if (mode !== "demo") await runRemote(async () => {
+            const repository = await loadRepository();
+            await repository.createLearningGoalRemote(stateRef.current.workspaceId!, input, id);
+            await remoteQuery.refetch();
+          }, `learning-goal:${id}`);
+        }
+      });
     },
     async setLearningGoalStatus(goalId, status, reason) {
-      const previous = state.learningGoals.find((goal) => goal.id === goalId);
-      setState((current) => executeDomainCommand(current, { type: "set_learning_goal_status", goalId, status, reason, changedAt: new Date().toISOString() }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setLearningGoalStatusRemote(goalId, status, reason));
-      } catch (error) {
-        if (previous) setState((current) => ({ ...current, learningGoals: current.learningGoals.map((goal) => goal.id === goalId ? previous : goal) }));
-        throw error;
-      }
+      await ensureWorkspaceState();
+      const command = { type: "set_learning_goal_status", goalId, status, reason, changedAt: new Date().toISOString() } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `learning-goal:${goalId}`, command, [{ collection: "learningGoals", ids: [goalId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setLearningGoalStatusRemote(goalId, status, reason), `learning-goal:${goalId}`);
+      });
     },
     async capture(content, kind = "text") {
       const normalized = normalizeCapture(content, kind);
@@ -573,85 +627,122 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       kind = normalized.kind;
       const optimisticId = crypto.randomUUID();
       const optimisticItem = { id: optimisticId, kind, content: trimmed, createdAt: new Date().toISOString(), status: "unprocessed" as const };
-      setState((current) => ({ ...current, inbox: [optimisticItem, ...current.inbox] }));
-      if (mode === "demo") return;
-      const workspaceId = state.workspaceId;
-      if (!workspaceId) {
-        const error = new Error("Brak aktywnego Workspace.");
-        setMutationError(error.message);
-        throw error;
-      }
-      try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          const saved = await repository.captureRemote(workspaceId, trimmed, kind, optimisticId);
-          setState((current) => ({ ...current, inbox: current.inbox.map((item) => item.id === optimisticId ? saved : item) }));
-        });
-      } catch (error) {
-        setState((current) => ({ ...current, inbox: current.inbox.filter((item) => item.id !== optimisticId) }));
-        throw error;
-      }
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      await mutationCoordinator.run({
+        key: `inbox:${optimisticId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          return {
+            nextState: { ...previous, inbox: [optimisticItem, ...previous.inbox] },
+            rollback: (currentState: AppState) => restoreMutationScopes(currentState, previous, [{ collection: "inbox", ids: [optimisticId] }]),
+            reapply: (fresh: AppState) => ({ ...fresh, inbox: fresh.inbox.some((item) => item.id === optimisticId) ? fresh.inbox : [optimisticItem, ...fresh.inbox] })
+          };
+        },
+        persist: async () => {
+          if (mode !== "demo") await runRemote(async () => { await (await loadRepository()).captureRemote(stateRef.current.workspaceId!, trimmed, kind, optimisticId); }, `inbox:${optimisticId}`);
+        }
+      });
     },
     async resolveInbox(id) {
-      setState((current) => ({ ...current, inbox: current.inbox.map((item) => item.id === id ? { ...item, status: "resolved" } : item) }));
-      if (mode === "demo") return;
+      await ensureWorkspaceState();
       try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await repository.resolveInboxRemote(id);
+        await mutationCoordinator.run({
+          key: `inbox:${id}`,
+          apply: () => {
+            const previous = stateRef.current;
+            return {
+              nextState: { ...previous, inbox: previous.inbox.map((item) => item.id === id ? { ...item, status: "resolved" } : item) },
+              rollback: (currentState: AppState) => restoreMutationScopes(currentState, previous, [{ collection: "inbox", ids: [id] }]),
+              reapply: (fresh: AppState) => ({ ...fresh, inbox: fresh.inbox.map((item) => item.id === id ? { ...item, status: "resolved" } : item) })
+            };
+          },
+          persist: async () => {
+            if (mode !== "demo") await runRemote(async () => { await (await loadRepository()).resolveInboxRemote(id); }, `inbox:${id}`);
+          }
         });
       } catch {
-        setState((current) => ({ ...current, inbox: current.inbox.map((item) => item.id === id ? { ...item, status: "unprocessed" } : item) }));
+        // The coordinator records the keyed error; this legacy action keeps its void-style API.
       }
     },
     triageInbox(id, target, title, detail, projectId) {
       setState((current) => executeDomainCommand(current, { type: "triage_inbox", inboxItemId: id, target, targetId: crypto.randomUUID(), title, detail, projectId, decidedAt: new Date().toISOString() }));
     },
     async setInboxStatus(id, status, snoozedUntil) {
-      const previous = state.inbox.find((item) => item.id === id);
-      setState((current) => executeDomainCommand(current, { type: "set_inbox_status", inboxItemId: id, status, snoozedUntil, changedAt: new Date().toISOString() }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setInboxStatusRemote(id, status, snoozedUntil));
-      } catch (error) {
-        if (previous) setState((current) => ({ ...current, inbox: current.inbox.map((item) => item.id === id ? previous : item) }));
-        throw error;
-      }
+      await ensureWorkspaceState();
+      const command = { type: "set_inbox_status", inboxItemId: id, status, snoozedUntil, changedAt: new Date().toISOString() } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `inbox:${id}`, command, [{ collection: "inbox", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setInboxStatusRemote(id, status, snoozedUntil), `inbox:${id}`);
+      });
     },
     async releaseDueInbox(now = new Date()) {
       const previous = stateRef.current;
       const released = releaseDueInboxItems(previous, now);
       if (released === previous) return;
-      setState(released);
-      if (mode === "demo" || !previous.workspaceId) return;
-      try { await runRemote(async () => { await (await loadRepository()).releaseDueInboxItemsRemote(previous.workspaceId!); }); }
-      catch (error) { setState(previous); throw error; }
-    },
-    async createKnowledge(kind, title, detail, goalId, sourceUrl, goalIds = []) {
-      const id = crypto.randomUUID();
-      const previous = state;
-      const targets = [...new Set([...(goalId ? [goalId] : []), ...goalIds])];
-      const linkSpecs = targets.map((targetGoalId) => ({ id: crypto.randomUUID(), goalId: targetGoalId }));
-      setState((current) => {
-        const created = executeDomainCommand(current, { type: "create_knowledge", id, kind, title, detail, sourceUrl, createdAt: new Date().toISOString() });
-        return linkSpecs.reduce((next, link) => executeDomainCommand(next, { type: "link_knowledge", id: link.id, knowledgeItemId: id, goalId: link.goalId, meaning: kind === "decision" ? "decision" : kind === "artifact" ? "result" : "reference", createdAt: new Date().toISOString() }), created);
-      });
-      if (mode === "supabase") {
-        if (!state.workspaceId) throw new Error("Brak aktywnego Workspace.");
-        try {
-          await runRemote(async () => {
-            const repository = await loadRepository();
-            await repository.createKnowledgeRemote(state.workspaceId!, id, kind, title, detail, sourceUrl, linkSpecs, kind === "decision" ? "decision" : kind === "artifact" ? "result" : "reference");
-          });
-        } catch (error) {
-          setState(previous);
-          throw error;
+      const affected = previous.inbox.filter((item) => item.status === "snoozed" && item.snoozedUntil && new Date(item.snoozedUntil).getTime() <= now.getTime()).map((item) => item.id);
+      await mutationCoordinator.run({
+        key: "inbox:release-due",
+        apply: () => {
+          const base = stateRef.current;
+          const next = releaseDueInboxItems(base, now);
+          return {
+            nextState: next,
+            rollback: (current: AppState) => restoreMutationScopes(current, base, [{ collection: "inbox", ids: affected }]),
+            reapply: (fresh: AppState) => releaseDueInboxItems(fresh, now)
+          };
+        },
+        persist: async () => {
+          if (mode !== "demo" && stateRef.current.workspaceId) await runRemote(async () => { await (await loadRepository()).releaseDueInboxItemsRemote(stateRef.current.workspaceId!); }, "inbox:release-due");
         }
-      }
+      });
+    },
+    async createKnowledge(input: CreateKnowledgeInput) {
+      const id = crypto.randomUUID();
+      const relations = (input.relations ?? []).map((relation) => ({ ...relation, id: relation.id ?? crypto.randomUUID() }));
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const scopes: MutationScope[] = [{ collection: "knowledge", ids: [id] }, { collection: "knowledgeLinks", ids: relations.map((relation) => relation.id!) }];
+      const applyCreate = (base: AppState) => {
+        const createdAt = new Date().toISOString();
+        const created = executeDomainCommand(base, { type: "create_knowledge", id, kind: input.kind, title: input.title, detail: input.detail, sourceUrl: input.sourceUrl, projectId: input.projectId, sourceInboxItemId: input.sourceInboxItemId, createdAt });
+        return relations.reduce((next, relation) => executeDomainCommand(next, { type: "link_knowledge", id: relation.id!, knowledgeItemId: id, ...relation.target, meaning: relation.meaning, createdAt }), created);
+      };
+      await mutationCoordinator.run({
+        key: `knowledge:${id}`,
+        apply: () => {
+          const base = stateRef.current;
+          return {
+            nextState: applyCreate(base),
+            rollback: (currentState: AppState) => restoreMutationScopes(currentState, base, scopes),
+            reapply: (fresh: AppState) => applyCreate(fresh)
+          };
+        },
+        persist: async () => {
+          if (mode !== "demo") await runRemote(async () => await (await loadRepository()).createKnowledgeRemote(stateRef.current.workspaceId!, id, input, relations), `knowledge:${id}`);
+        }
+      });
       return id;
     },
+    async recordActionResult(actionId: string, result: ActionResultInput) {
+      const previous = stateRef.current;
+      const existingLink = previous.knowledgeLinks.find((link) => link.actionId === actionId && link.meaning === "result");
+      if (existingLink) return existingLink.knowledgeItemId;
+      const action = previous.actions.find((candidate) => candidate.id === actionId);
+      if (!action) throw new Error("action_not_found");
+      const knowledgeId = result.kind === "existing" ? result.knowledgeItemId : crypto.randomUUID();
+      const linkId = crypto.randomUUID();
+      const progressId = action.goalId ? crypto.randomUUID() : undefined;
+      const createdAt = new Date().toISOString();
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const scopes: MutationScope[] = [{ collection: "knowledge", ids: result.kind === "new" ? [knowledgeId] : [] }, { collection: "knowledgeLinks", ids: [linkId] }, { collection: "progressEntries", ids: progressId ? [progressId] : [] }];
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${actionId}:result`, { type: "record_action_result", actionId, result, knowledgeId, linkId, progressId, createdAt }, scopes, async () => {
+        if (mode !== "demo") await runRemote(async () => await (await loadRepository()).recordActionResultRemote(stateRef.current.workspaceId!, actionId, result, knowledgeId, linkId, progressId), `action:${actionId}:result`);
+      });
+      return knowledgeId;
+    },
     async updateKnowledge(knowledgeId, changes) {
-      const previous = state;
+      const previous = stateRef.current;
       const changedAt = new Date().toISOString();
       const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
         id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
@@ -659,149 +750,88 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
       const { goalIds: _goalIds, ...knowledgeChanges } = changes;
       void _goalIds;
-      setState((current) => executeDomainCommand(current, { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, knowledgeChanges, goalLinks));
-      } catch (error) {
-        setState(previous);
-        throw error;
-      }
+      const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge:${knowledgeId}`, { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt }, [
+        { collection: "knowledge", ids: [knowledgeId] },
+        { collection: "knowledgeLinks", ids: linkIds }
+      ], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, knowledgeChanges, goalLinks), `knowledge:${knowledgeId}`);
+      });
     },
     async setVisibility(entityType, entityId, visibility) {
-      const previousProject = entityType === "project" ? state.projects.find((item) => item.id === entityId) : undefined;
-      const previousKnowledge = entityType === "knowledge" ? state.knowledge.find((item) => item.id === entityId) : undefined;
-      setState((current) => executeDomainCommand(current, { type: "set_visibility", entityType, entityId, visibility, changedAt: new Date().toISOString() }));
-      if (mode === "demo") return;
-      try {
-        await runRemote(async () => (await loadRepository()).setEntityVisibilityRemote(entityId, visibility));
-      } catch (error) {
-        if (previousProject) setState((current) => ({ ...current, projects: current.projects.map((item) => item.id === entityId ? previousProject : item) }));
-        if (previousKnowledge) setState((current) => ({ ...current, knowledge: current.knowledge.map((item) => item.id === entityId ? previousKnowledge : item) }));
-        throw error;
-      }
-    },
-    async startFocus(requestedWorkItemId) {
-      const workItemId = requestedWorkItemId ?? state.focus.workItemId;
-      const project = state.projects.find((item) => item.workItems.some((workItem) => workItem.id === workItemId));
-      if (state.focus.running || !workItemId || !project) return false;
-      const optimisticSessionId = crypto.randomUUID();
-      const startedAt = Date.now();
-      setState((current) => executeDomainCommand(current, {
-        type: "start_focus",
-        sessionId: optimisticSessionId,
-        projectId: project.id,
-        workItemId,
-        startedAt: new Date(startedAt).toISOString()
-      }));
-      if (mode === "demo") return true;
-      const workspaceId = state.workspaceId;
-      if (!workspaceId) return false;
-      try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          const session = await repository.startFocusRemote(workspaceId, workItemId, optimisticSessionId);
-          setState((current) => ({
-            ...current,
-            focus: { ...current.focus, sessionId: session.id, startedAt: session.startedAt },
-            focusSessions: current.focusSessions.map((item) => item.id === optimisticSessionId ? { ...item, id: session.id, startedAt: new Date(session.startedAt).toISOString() } : item)
-          }));
-        });
-        return true;
-      } catch {
-        setState((current) => ({ ...current, focusSessions: current.focusSessions.filter((item) => item.id !== optimisticSessionId), focus: { ...current.focus, running: false, sessionId: undefined, startedAt: undefined } }));
-        return false;
-      }
-    },
-    async pauseFocus(checkpoint) {
-      const sessionId = state.focus.sessionId;
-      if (!sessionId) return false;
-      const optimisticCheckpointId = crypto.randomUUID();
-      const endedAt = new Date().toISOString();
-      const reason = checkpoint.reason ?? "paused";
-      setState((current) => {
-        const ended = executeDomainCommand(current, {
-          type: "end_focus",
-          sessionId,
-          checkpointId: optimisticCheckpointId,
-          reason,
-          currentState: checkpoint.currentState,
-          nextAction: checkpoint.nextAction,
-          endedAt,
-          branch: checkpoint.branch,
-          file: checkpoint.file,
-          sourceUrl: checkpoint.sourceUrl,
-          blocker: checkpoint.blocker,
-          note: checkpoint.note
-        });
-        return {
-          ...ended,
-          evidence: checkpoint.evidence ? [{ id: crypto.randomUUID(), learningGoalId: checkpoint.evidence.learningGoalId, title: checkpoint.evidence.title, detail: checkpoint.evidence.feedback, result: checkpoint.evidence.result, assessmentMethod: "self_review", accepted: true, createdAt: endedAt }, ...ended.evidence] : ended.evidence
-        };
+      await ensureWorkspaceState();
+      const command = { type: "set_visibility", entityType, entityId, visibility, changedAt: new Date().toISOString() } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `${entityType}:${entityId}:visibility`, command, [{ collection: entityType === "project" ? "projects" : "knowledge", ids: [entityId] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setEntityVisibilityRemote(entityId, visibility), `${entityType}:${entityId}:visibility`);
       });
-      if (mode === "demo") return true;
-      try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await repository.endFocusRemote(sessionId, reason, checkpoint.currentState, checkpoint.nextAction);
-          if (checkpoint.evidence && state.workspaceId) await repository.recordLearningEvidenceRemote(state.workspaceId, sessionId, checkpoint.evidence);
-          await remoteQuery.refetch();
-        });
-        return true;
-      } catch {
-        await remoteQuery.refetch();
-        return false;
-      }
-    },
-    updateScratchpad(scratchpad) {
-      setScratchpadStatus("saving");
-      setState((current) => ({ ...current, focus: { ...current.focus, scratchpad } }));
     },
     async setAIProposal(aiProposal) {
-      const previous = state.aiProposal;
-      const pendingProposal = state.aiProposals.find((proposal) => proposal.status === "pending");
-      setState((current) => pendingProposal ? executeDomainCommand(current, {
+      await ensureWorkspaceState();
+      const pendingProposal = stateRef.current.aiProposals.find((proposal) => proposal.status === "pending");
+      const proposalId = stateRef.current.aiProposalId;
+      const executionId = aiProposal === "approved" ? crypto.randomUUID() : undefined;
+      const command = pendingProposal ? {
         type: "decide_ai_proposal",
         proposalId: pendingProposal.id,
         decision: aiProposal === "approved" ? "approved" : "rejected",
-        executionId: aiProposal === "approved" ? crypto.randomUUID() : undefined,
+        executionId,
         decidedAt: new Date().toISOString()
-      }) : { ...current, aiProposal });
-      const proposalId = state.aiProposalId;
-      if (mode === "demo" || !proposalId) return;
+      } as const : undefined;
+      const proposal = pendingProposal;
+      if (!command || !proposal || mode === "demo" || !proposalId) {
+        setState((current) => command ? executeDomainCommand(current, command) : { ...current, aiProposal });
+        return;
+      }
       try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await repository.decideAIProposalRemote(proposalId, aiProposal);
+        await mutationCoordinator.run({
+          key: `ai-proposal:${proposalId}`,
+          apply: () => {
+            const previous = stateRef.current;
+            return {
+              nextState: executeDomainCommand(previous, command),
+              rollback: (current: AppState) => ({
+                ...restoreMutationScopes(current, previous, [
+                  { collection: "aiProposals", ids: [proposal.id] },
+                  { collection: "aiExecutions", ids: executionId ? [executionId] : [] }
+                ]),
+                aiProposal: previous.aiProposal
+              }),
+              reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+            };
+          },
+          persist: async () => {
+            await runRemote(async () => await (await loadRepository()).decideAIProposalRemote(proposalId, aiProposal), `ai-proposal:${proposalId}`);
+          }
         });
       } catch {
-        setState((current) => ({ ...current, aiProposal: previous }));
+        // The coordinator keeps the keyed error visible without leaking a rejected click promise.
       }
-    },
-    executeAIExecution(executionId) {
-      const changedAt = new Date().toISOString();
-      setState((current) => {
-        const running = executeDomainCommand(current, { type: "set_ai_execution_status", executionId, status: "running", changedAt });
-        return executeDomainCommand(running, { type: "set_ai_execution_status", executionId, status: "succeeded", changedAt: new Date().toISOString() });
-      });
     },
     async completeReview(summary = "", type = "weekly", answers = {}) {
       const completedAt = new Date().toISOString();
       const reviewId = crypto.randomUUID();
-      setState((current) => executeDomainCommand(current, { type: "complete_review", reviewId, reviewType: type, templateVersion: 1, answers, summary, completedAt }));
-      const workspaceId = state.workspaceId;
-      if (mode === "demo" || !workspaceId || !user) return true;
+      const command = { type: "complete_review", reviewId, reviewType: type, templateVersion: 1, answers, summary, completedAt } as const;
+      const current = await ensureWorkspaceState();
       try {
-        await runRemote(async () => {
-          const repository = await loadRepository();
-          await repository.completeReviewRemote(workspaceId, summary);
+        await mutationCoordinator.run({
+          key: `review:${reviewId}`,
+          apply: () => {
+            const previous = stateRef.current;
+            return {
+              nextState: executeDomainCommand(previous, command),
+              rollback: (currentState: AppState) => ({
+                ...restoreMutationScopes(currentState, previous, [{ collection: "reviews", ids: [reviewId] }]),
+                reviewCompletedAt: previous.reviewCompletedAt
+              }),
+              reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+            };
+          },
+          persist: async () => {
+            if (mode !== "demo" && current.workspaceId && user) await runRemote(async () => await (await loadRepository()).completeReviewRemote(stateRef.current.workspaceId!, summary), `review:${reviewId}`);
+          }
         });
         return true;
       } catch {
-        setState((current) => {
-          const reviews = current.reviews.filter((review) => review.id !== reviewId);
-          return { ...current, reviews, reviewCompletedAt: reviews.at(-1)?.completedAt };
-        });
         return false;
       }
     },
@@ -826,7 +856,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [ensureWorkspaceState, localHydrated, localRepository, mode, mutationError, remoteQuery, runRemote, scratchpadStatus, state, syncing, user]);
+  }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;

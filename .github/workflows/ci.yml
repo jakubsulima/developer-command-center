@@ -53,6 +53,9 @@ jobs:
           # użytkownikom musi otrzymać VITE_DATA_BACKEND=supabase i publiczną konfigurację.
           VITE_DATA_BACKEND: demo
 
+      - name: Kontrola budżetu bundle
+        run: pnpm check:bundle
+
   dependency-audit:
     name: Audyt zależności
     runs-on: ubuntu-latest

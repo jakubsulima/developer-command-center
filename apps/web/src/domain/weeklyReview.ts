@@ -57,8 +57,10 @@ export function weekBounds(now = new Date(), timeZone = "Europe/Warsaw") {
 export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyReviewSummary {
   const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
   const activity = selectWorkspaceActivity(state, now);
-  const { completedActions, knowledgeAdded, progressUpdates } = activity;
-  const focusMinutes = Math.round(state.focusSessions.reduce((total, session) => {
+  const completedActions = state.weeklySummary?.completedActions ?? activity.completedActions;
+  const knowledgeAdded = state.weeklySummary?.knowledgeAdded ?? activity.knowledgeAdded;
+  const progressUpdates = state.weeklySummary?.progressUpdates ?? activity.progressUpdates;
+  const focusMinutes = state.weeklySummary?.focusMinutes ?? Math.round(state.focusSessions.reduce((total, session) => {
     if (!session.endedAt || !within(session.endedAt, start, end)) return total;
     return total + Math.max(0, new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60_000;
   }, 0));

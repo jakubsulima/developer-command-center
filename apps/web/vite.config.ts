@@ -32,6 +32,7 @@ export default defineConfig({
       }
     })
   ],
+  build: { manifest: true },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
@@ -39,13 +40,13 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/main.tsx", "src/**/*.test.{ts,tsx}", "src/test/**", "src/domain/types.ts", "src/pages/TodayPage 2.tsx"],
+      exclude: ["src/main.tsx", "src/**/*.test.{ts,tsx}", "src/test/**", "src/domain/types.ts"],
       thresholds: {
-        // Ratchet from the verified repository baseline; raise these as tests grow.
-        statements: 63,
-        branches: 59,
+        // Ratchet from the verified post-migration baseline; never lower these.
+        statements: 65,
+        branches: 60,
         functions: 55,
-        lines: 75
+        lines: 76
       }
     }
   }

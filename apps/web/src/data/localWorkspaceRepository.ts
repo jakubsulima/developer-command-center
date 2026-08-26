@@ -1,7 +1,10 @@
 import { executeDomainCommand, type DomainCommand } from "../domain/commands";
 import { ensureGoalModel } from "../domain/goals";
 import type { AppState } from "../domain/types";
+import { deriveWeeklyReview } from "../domain/weeklyReview";
+import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
 import { emptyState } from "./empty";
+import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
 const DATABASE_NAME = "developer-command-center";
 const STORE_NAME = "workspace";
@@ -15,10 +18,9 @@ interface StoredWorkspace {
   state: AppState;
 }
 
-export interface WorkspaceRepository {
+export interface WorkspaceRepository extends CoreWorkspaceRepository {
   load(): Promise<AppState | null>;
   save(state: AppState): Promise<void>;
-  execute(command: DomainCommand): Promise<AppState>;
   export(): Promise<{ format: string; version: number; exportedAt: string; state: AppState }>;
   clear(): Promise<void>;
 }
@@ -30,6 +32,50 @@ interface LocalRepositoryOptions {
 
 function envelope(state: AppState): StoredWorkspace {
   return { version: SCHEMA_VERSION, savedAt: new Date().toISOString(), state: structuredClone(state) };
+}
+
+function toWorkspaceCore(state: AppState): WorkspaceCore {
+  const weekly = deriveWeeklyReview(state);
+  return {
+    workspaceId: state.workspaceId,
+    workspaceTimezone: state.workspaceTimezone,
+    areas: structuredClone(state.areas),
+    goalTemplates: structuredClone(state.goalTemplates),
+    goals: structuredClone(state.goals),
+    goalCriteria: structuredClone(state.goalCriteria),
+    actions: structuredClone(state.actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status))),
+    projects: structuredClone(state.projects),
+    recurringActionTemplates: structuredClone(state.recurringActionTemplates),
+    knowledgeLinks: structuredClone(state.knowledgeLinks),
+    counts: {
+      inbox: state.inbox.filter((item) => item.status === "unprocessed").length,
+      knowledge: state.knowledge.filter((item) => !item.archivedAt && !item.trashedAt).length,
+      openActions: state.actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length,
+      start: state.actions.filter((action) => action.pinnedToToday && !["completed", "cancelled", "skipped"].includes(action.status)).length
+    },
+    weeklySummary: {
+      completedActions: weekly.completedActions,
+      focusMinutes: weekly.focusMinutes,
+      knowledgeAdded: weekly.knowledgeAdded,
+      progressUpdates: weekly.progressUpdates,
+      recentReviews: structuredClone(state.reviews.slice(0, 4))
+    }
+  };
+}
+
+function pageItems(state: AppState, collection: WorkspacePageQuery["collection"], goalId?: string): WorkspacePageItem[] {
+  if (collection === "inbox") return state.inbox;
+  if (collection === "knowledge") return state.knowledge;
+  if (collection === "goal-progress") return state.progressEntries.filter((entry) => !goalId || entry.goalId === goalId);
+  if (collection === "completed-actions") return state.actions.filter((action) => action.status === "completed");
+  return state.reviews;
+}
+
+function pageSortValue(item: WorkspacePageItem, collection: WorkspacePageQuery["collection"]) {
+  if (collection === "completed-actions") return (item as AppState["actions"][number]).completedAt ?? (item as AppState["actions"][number]).updatedAt ?? "";
+  if (collection === "reviews") return (item as AppState["reviews"][number]).completedAt;
+  if (collection === "goal-progress") return (item as AppState["progressEntries"][number]).createdAt;
+  return (item as AppState["inbox"][number] | AppState["knowledge"][number]).createdAt ?? (item as AppState["knowledge"][number]).updatedAt ?? "";
 }
 
 function openDatabase(factory: IDBFactory) {
@@ -71,6 +117,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
   storage: globalThis.localStorage
 }): WorkspaceRepository {
   const { indexedDb, storage } = options;
+  let latestGoalReview: ReturnType<typeof createDemoAIGoalReview> | undefined;
 
   const load = async () => {
     const stored = indexedDb
@@ -89,7 +136,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
   return {
     load,
     save,
-    async execute(command) {
+    async execute(command: DomainCommand) {
       const current = await load() ?? structuredClone(emptyState);
       const next = executeDomainCommand(current, command);
       await save(next);
@@ -106,6 +153,47 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     async clear() {
       if (indexedDb) await writeIndexedDb(indexedDb, null);
       else storage.removeItem(FALLBACK_KEY);
+    },
+    async loadCore() {
+      return toWorkspaceCore(await load() ?? structuredClone(emptyState));
+    },
+    async loadPage(query: WorkspacePageQuery) {
+      const state = await load() ?? structuredClone(emptyState);
+      const items = pageItems(state, query.collection, query.goalId);
+      return pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection));
+    },
+    async loadKnowledgeItem(id: string) {
+      return (await load())?.knowledge.find((item) => item.id === id);
+    },
+    async loadLegacyFocusSession(id: string) {
+      return (await load())?.focusSessions.find((session) => session.id === id);
+    },
+    async search(query: string, limit = 20): Promise<SearchResult[]> {
+      const normalized = query.trim().toLocaleLowerCase();
+      if (normalized.length < 2) return [];
+      const state = await load() ?? structuredClone(emptyState);
+      const results: SearchResult[] = [
+        ...state.goals.filter((item) => `${item.title} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "goal" as const, title: item.title, detail: item.outcome, route: `/goals/${item.id}` })),
+        ...state.actions.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "action" as const, title: item.title, detail: item.detail, route: `/actions/${item.id}` })),
+        ...state.knowledge.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
+        ...state.projects.filter((item) => `${item.name} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.outcome, route: `/projects/${item.id}` })),
+        ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: `/knowledge?section=inbox&item=${item.id}` }))
+      ];
+      return results.slice(0, Math.min(20, Math.max(1, limit)));
+    },
+    async exportWorkspace() {
+      return this.export();
+    },
+    async getLatestGoalReview() {
+      return latestGoalReview ? structuredClone(latestGoalReview) : undefined;
+    },
+    async requestGoalReview(_workspaceId, forceRefresh = false) {
+      if (latestGoalReview && !forceRefresh) return { ...structuredClone(latestGoalReview), cached: true };
+      latestGoalReview = createDemoAIGoalReview(await load() ?? structuredClone(emptyState));
+      return structuredClone(latestGoalReview);
+    },
+    async submitGoalReviewFeedback() {
+      // Demo zachowuje kontrakt bez wysyłania i trwałego śledzenia oceny.
     }
   };
 }
