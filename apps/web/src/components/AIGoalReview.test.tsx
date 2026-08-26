@@ -23,6 +23,8 @@ describe("AIGoalReview", () => {
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
     expect(await screen.findByText("Zakres analizy")).toBeInTheDocument();
     expect(screen.getByText("Symulacja")).toBeInTheDocument();
+    const target = screen.getAllByLabelText("Dotyczy")[0]!;
+    expect(within(target).getByRole("link", { name: /Zbudować spokojny budżet domowy/i })).toHaveAttribute("href", "/goals/goal-budget");
   });
 
   it("draft AI nie zapisuje się przed zatwierdzeniem", async () => {
