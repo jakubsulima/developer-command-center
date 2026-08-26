@@ -13,6 +13,16 @@ function trimBaseUrl(value: string) {
   return value.replace(/\/+$/, "");
 }
 
+function sglangJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sglangJsonSchema);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== "uniqueItems")
+      .map(([key, nested]) => [key, sglangJsonSchema(nested)]),
+  );
+}
+
 export function createNvidiaProvider(options: NvidiaOptions): AIProvider {
   const fetchImpl = options.fetchImpl ?? fetch;
   return {
@@ -36,9 +46,13 @@ export function createNvidiaProvider(options: NvidiaOptions): AIProvider {
             { role: "user", content: JSON.stringify({ context: request.input }) },
           ],
         };
-        // NVIDIA NIM accepts guided generation through the `nvext` extension.
+        // Hosted Nemotron runs on SGLang, which expects the OpenAI-compatible
+        // response_format shape instead of the older nvext.guided_json field.
         // In prompt mode the same schema is embedded by goal-review-prompt.ts.
-        if (options.structuredMode === "guided_json") body.nvext = { guided_json: request.jsonSchema };
+        if (options.structuredMode === "guided_json") body.response_format = {
+          type: "json_schema",
+          json_schema: { name: "goal_portfolio_review", schema: sglangJsonSchema(request.jsonSchema) },
+        };
         const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json" };
         if (options.authMode === "api-key") headers["x-api-key"] = options.apiKey;
         else headers.authorization = `Bearer ${options.apiKey}`;
