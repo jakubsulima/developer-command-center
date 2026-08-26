@@ -1,21 +1,23 @@
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { InboxPage } from "../pages/InboxPage";
-import { KnowledgePage } from "../pages/KnowledgePage";
-import { GoalsPage } from "../pages/GoalsPage";
-import { GoalDetailPage } from "../pages/GoalDetailPage";
+import { AppLoading } from "../auth/AuthRoot";
 import { StartPage } from "../pages/StartPage";
-import { LegacyFocusHistoryPage } from "../pages/LegacyFocusHistoryPage";
-import { KnowledgeDetailPage } from "../pages/KnowledgeDetailPage";
 import { ActionFeedbackProvider } from "../components/ActionFeedback";
-import { ActionDetailPage } from "../pages/ActionDetailPage";
-import { RoutinesPage } from "../pages/RoutinesPage";
-import { ProjectsPage } from "../pages/ProjectsPage";
-import { ProjectDetailPage } from "../pages/ProjectDetailPage";
-import { ReviewPage } from "../pages/ReviewPage";
 import { ScrollToTop } from "../components/ScrollToTop";
-import { useEffect } from "react";
 import { useStore } from "./useStore";
 import { markStartupPhase } from "../lib/startupMetrics";
+
+const InboxPage = lazy(() => import("../pages/InboxPage").then((module) => ({ default: module.InboxPage })));
+const KnowledgePage = lazy(() => import("../pages/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
+const GoalsPage = lazy(() => import("../pages/GoalsPage").then((module) => ({ default: module.GoalsPage })));
+const GoalDetailPage = lazy(() => import("../pages/GoalDetailPage").then((module) => ({ default: module.GoalDetailPage })));
+const LegacyFocusHistoryPage = lazy(() => import("../pages/LegacyFocusHistoryPage").then((module) => ({ default: module.LegacyFocusHistoryPage })));
+const KnowledgeDetailPage = lazy(() => import("../pages/KnowledgeDetailPage").then((module) => ({ default: module.KnowledgeDetailPage })));
+const ActionDetailPage = lazy(() => import("../pages/ActionDetailPage").then((module) => ({ default: module.ActionDetailPage })));
+const RoutinesPage = lazy(() => import("../pages/RoutinesPage").then((module) => ({ default: module.RoutinesPage })));
+const ProjectsPage = lazy(() => import("../pages/ProjectsPage").then((module) => ({ default: module.ProjectsPage })));
+const ProjectDetailPage = lazy(() => import("../pages/ProjectDetailPage").then((module) => ({ default: module.ProjectDetailPage })));
+const ReviewPage = lazy(() => import("../pages/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 
 export function App() {
   const { loading } = useStore();
@@ -23,7 +25,7 @@ export function App() {
   return (
     <ActionFeedbackProvider>
       <ScrollToTop />
-      <Routes>
+      <Suspense fallback={<AppLoading label="Ładowanie widoku…" />}><Routes>
         <Route path="/" element={<StartPage />} />
         <Route path="/routines" element={<RoutinesPage />} />
         <Route path="/focus" element={<Navigate to="/" replace />} />
@@ -40,7 +42,7 @@ export function App() {
         <Route path="/review" element={<ReviewPage />} />
         <Route path="/history/focus/:sessionId" element={<LegacyFocusHistoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      </Routes></Suspense>
     </ActionFeedbackProvider>
   );
 }

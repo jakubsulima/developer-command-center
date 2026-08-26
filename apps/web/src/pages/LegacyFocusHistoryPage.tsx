@@ -1,13 +1,28 @@
 import { ArrowLeft, Clock3, History } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 import { useStore } from "../app/useStore";
+import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import { AppShell } from "../components/AppShell";
 import { EmptyState, Panel } from "../components/ui";
+import { useMemo } from "react";
 
 export function LegacyFocusHistoryPage() {
-  const { state } = useStore();
+  const { state, mode } = useStore();
+  const { user } = useAuth();
   const { sessionId } = useParams();
-  const session = state.focusSessions.find((item) => item.id === sessionId);
+  const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
+  const localSession = state.focusSessions.find((item) => item.id === sessionId);
+  const legacyQuery = useQuery({
+    queryKey: ["legacy-focus-session", sessionId, mode, user?.id],
+    enabled: Boolean(sessionId && !localSession),
+    queryFn: async () => (mode === "demo"
+      ? await localRepository.loadLegacyFocusSession(sessionId!)
+      : await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadLegacyFocusSession(sessionId!)) ?? null
+  });
+  const session = localSession ?? legacyQuery.data;
+  if (!localSession && legacyQuery.isPending) return <AppShell><EmptyState icon={<History />} title="Ładowanie historii" detail="Pobieram zachowany zapis Focus…" /></AppShell>;
   if (!session) return <AppShell><EmptyState icon={<History />} title="Nie znaleziono historycznego wpisu" detail="Ta dawna sesja nie istnieje w bieżącym Workspace." /></AppShell>;
   const goal = state.goals.find((item) => item.id === session.projectId);
   const action = state.actions.find((item) => item.id === session.workItemId);

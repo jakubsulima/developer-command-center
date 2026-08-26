@@ -16,7 +16,10 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260807120000_projects_as_persistent_contexts.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260809130312_harden_public_release_boundaries.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260820182555_link_knowledge_as_decision_evidence.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260820182703_index_knowledge_evidence_fk.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260820182703_index_knowledge_evidence_fk.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260823070000_explicit_knowledge_relations.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260824054519_workspace_core_and_pages.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -38,8 +41,8 @@ describe("migracje Supabase", () => {
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
-    expect(tableCount).toBe(28);
-    expect(rlsCount).toBe(28);
+    expect(tableCount).toBe(31);
+    expect(rlsCount).toBe(31);
   });
 
   it("nie wystawia tabel bez polityk ani uprzywilejowanych funkcji publicznych", async () => {
@@ -341,5 +344,90 @@ describe("migracje Supabase", () => {
     await database.exec("reset role");
 
     await expect(database.query("insert into public.ai_executions (workspace_id, proposal_id, requested_by, idempotency_key) values ($1, $2, $3, $4)", [otherWorkspace, proposalId, otherUser, "a2000000-0000-0000-0000-000000000099"])).rejects.toThrow("ai_executions_proposal_workspace_fkey");
+  });
+
+  it("atomowo tworzy relacje Wiedzy i rezultat Działania z idempotencją oraz RLS", async () => {
+    const user = "b1000000-0000-0000-0000-000000000001";
+    const otherUser = "b2000000-0000-0000-0000-000000000002";
+    const goalId = "b1000000-0000-0000-0000-000000000010";
+    const actionId = "b1000000-0000-0000-0000-000000000011";
+    const artifactId = "b1000000-0000-0000-0000-000000000012";
+    const relationId = "b1000000-0000-0000-0000-000000000013";
+    const createCommandId = "b1000000-0000-0000-0000-000000000014";
+    const invalidId = "b1000000-0000-0000-0000-000000000015";
+    const invalidCommandId = "b1000000-0000-0000-0000-000000000016";
+    const resultActionId = "b1000000-0000-0000-0000-000000000017";
+    const resultId = "b1000000-0000-0000-0000-000000000018";
+    const resultLinkId = "b1000000-0000-0000-0000-000000000019";
+    const progressId = "b1000000-0000-0000-0000-000000000020";
+    const resultCommandId = "b1000000-0000-0000-0000-000000000021";
+    const existingActionId = "b1000000-0000-0000-0000-000000000022";
+    const existingLinkId = "b1000000-0000-0000-0000-000000000023";
+    const existingCommandId = "b1000000-0000-0000-0000-000000000024";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace Knowledge"}', '{"workspace_name":"Other Knowledge"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Cel Wiedzy', 'Rezultat')", [goalId, workspace]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title) values ($1, $2, $3, 'Akcja źródłowa'), ($4, $2, $3, 'Akcja z nowym rezultatem'), ($5, $2, $3, 'Akcja z istniejącym rezultatem')", [actionId, workspace, goalId, resultActionId, existingActionId]);
+
+    const actionRelation = JSON.stringify([{ id: relationId, meaning: "result", target: { actionId } }]);
+    expect(await scalar<string>("select public.create_knowledge_with_relations($1, $2, 'artifact', 'Kanoniczny rezultat', 'Treść', null, null, null, $3::jsonb, $4)::text", [workspace, artifactId, actionRelation, createCommandId])).toBe(artifactId);
+    expect(await scalar<string>("select public.create_knowledge_with_relations($1, $2, 'artifact', 'Inny tytuł', 'Inna treść', null, null, null, $3::jsonb, $4)::text", [workspace, artifactId, actionRelation, createCommandId])).toBe(artifactId);
+    expect(await scalar<string>("select title from public.entities where id = $1", [artifactId])).toBe("Kanoniczny rezultat");
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and meaning = 'result'", [artifactId])).toBe(1);
+
+    await expect(database.query("select public.create_knowledge_with_relations($1, $2, 'note', 'Niedozwolona notatka', '', null, null, null, $3::jsonb, $4)", [workspace, invalidId, actionRelation, invalidCommandId])).rejects.toThrow("knowledge_result_requires_artifact");
+    expect(await scalar<number>("select count(*)::int from public.entities where id = $1", [invalidId])).toBe(0);
+
+    const newResultInput = JSON.stringify({ kind: "new", title: "Rezultat z RPC", detail: "Zapisany atomowo" });
+    expect(await scalar<string>("select public.record_action_result($1, $2, $3::jsonb, $4, $5, $6, $7)::text", [workspace, resultActionId, newResultInput, resultId, resultLinkId, progressId, resultCommandId])).toBe(resultId);
+    expect(await scalar<string>("select public.record_action_result($1, $2, '{\"kind\":\"new\",\"title\":\"Nie nadpisuj\",\"detail\":\"\"}'::jsonb, $3, $4, $5, $6)::text", [workspace, resultActionId, resultId, resultLinkId, progressId, resultCommandId])).toBe(resultId);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where action_id = $1 and meaning = 'result'", [resultActionId])).toBe(1);
+    expect(await scalar<number>("select count(*)::int from public.progress_entries where action_id = $1 and knowledge_entity_id = $2 and kind = 'result'", [resultActionId, resultId])).toBe(1);
+
+    const existingInput = JSON.stringify({ kind: "existing" });
+    expect(await scalar<string>("select public.record_action_result($1, $2, $3::jsonb, $4, $5, null, $6)::text", [workspace, existingActionId, existingInput, artifactId, existingLinkId, existingCommandId])).toBe(artifactId);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where action_id = $1 and meaning = 'result'", [existingActionId])).toBe(1);
+
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [otherUser]);
+    await expect(database.query("select public.record_action_result($1, $2, '{\"kind\":\"new\",\"title\":\"Obcy\"}'::jsonb, $3, $4, null, $5)", [workspace, resultActionId, "b2000000-0000-0000-0000-000000000010", "b2000000-0000-0000-0000-000000000011", "b2000000-0000-0000-0000-000000000012"])).rejects.toThrow("workspace_access_denied");
+    await database.exec("reset role");
+  });
+
+  it("buduje ograniczony kontekst AI i izoluje wyniki oraz feedback między Workspace", async () => {
+    const user = "c1000000-0000-0000-0000-000000000001";
+    const otherUser = "c2000000-0000-0000-0000-000000000002";
+    const goalId = "c1000000-0000-0000-0000-000000000010";
+    const runId = "c1000000-0000-0000-0000-000000000011";
+    const reviewId = "c1000000-0000-0000-0000-000000000012";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace AI"}', '{"workspace_name":"Other AI"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome, updated_at) values ($1, $2, 'Cel AI', 'Jawny rezultat', now() - interval '15 days')", [goalId, workspace]);
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const context = await scalar<{ goals: Array<{ id: string; signals: Array<{ signalKey: string }> }> }>("select public.get_ai_goal_review_context($1, 28)", [workspace]);
+    expect(context.goals).toHaveLength(1);
+    expect(context.goals[0]?.signals.map((signal) => signal.signalKey)).toContain(`goal:${goalId}:missing-next-action`);
+    expect(context.goals[0]?.signals.map((signal) => signal.signalKey)).toContain(`goal:${goalId}:missing-criteria`);
+    await expect(database.query("insert into public.ai_runs (workspace_id,user_id,capability,provider,model,prompt_version,schema_version,status) values ($1,$2,'goal_portfolio_review','nvidia','model',1,1,'running')", [workspace, user])).rejects.toThrow();
+    await database.exec("reset role");
+
+    await database.query("insert into public.ai_runs (id,workspace_id,user_id,capability,provider,model,prompt_version,schema_version,status) values ($1,$2,$3,'goal_portfolio_review','nvidia','model',1,1,'succeeded')", [runId, workspace, user]);
+    const reviewJson = JSON.stringify({ schemaVersion: 1, headline: "Kierunek", summary: "Podsumowanie", overallStatus: "attention", recommendations: [{ id: "rec-1", title: "Krok", reason: "Powód", suggestedNextStep: "Ruch", horizon: "now", confidence: "high", goalIds: [goalId], actionIds: [], signalKeys: [`goal:${goalId}:missing-next-action`] }], checks: [], goalAssessments: [] });
+    await database.query("insert into public.ai_goal_reviews (id,workspace_id,created_by,run_id,period_start,period_end,source_snapshot_at,context_hash,prompt_version,schema_version,provider,model,review_json,analyzed_goal_ids,cache_expires_at) values ($1,$2,$3,$4,current_date-28,current_date,now(),repeat('a',64),1,1,'nvidia','model',$5::jsonb,array[$6::uuid],now()+interval '1 day')", [reviewId, workspace, user, runId, reviewJson, goalId]);
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    expect(await scalar<number>("select count(*)::int from public.ai_goal_reviews")).toBe(1);
+    await database.query("select public.set_ai_goal_review_feedback($1,$2,'rec-1','helpful')", [workspace, reviewId]);
+    await database.query("select public.set_ai_goal_review_feedback($1,$2,'rec-1','not_helpful')", [workspace, reviewId]);
+    expect(await scalar<string>("select rating from public.ai_goal_review_feedback where review_id = $1", [reviewId])).toBe("not_helpful");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [otherUser]);
+    expect(await scalar<number>("select count(*)::int from public.ai_goal_reviews")).toBe(0);
+    expect(await scalar<unknown>("select public.get_ai_goal_review_context($1, 28)", [workspace])).toBeNull();
+    await expect(database.query("select public.set_ai_goal_review_feedback($1,$2,'rec-1','helpful')", [workspace, reviewId])).rejects.toThrow("workspace_not_available");
+    await database.exec("reset role");
   });
 });

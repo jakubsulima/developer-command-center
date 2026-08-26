@@ -127,13 +127,15 @@ export function GoalsPage() {
         const blocked = state.actions.some((action) => action.goalId === goal.id && action.status === "blocked");
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
         const overdue = state.actions.some((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status));
-        return <Panel className={`${entityCardVariants()} goal-card entity-card`} key={goal.id}>
+        const card = <>
           <div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{kindLabels[goal.kind]}</Badge><span>{statusLabels[goal.status]}</span></div>
-          <h2 className="line-clamp-2">{goal.title}</h2><p className="line-clamp-2">{goal.outcome}</p>
-          <div className="goal-card-context"><span><Layers3 />{areaName ?? "Bez Projektu"}</span><span><Flag />{next?.title ?? "Brak następnego Działania"}</span></div>
+          <h2 className="line-clamp-2">{goal.title}</h2>
+          {areaName || next ? <div className="goal-card-context">{areaName ? <span><Layers3 />{areaName}</span> : null}{next ? <span><Flag />{next.title}</span> : null}</div> : null}
           <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
-          {status === "archived" || status === "trashed" ? <Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button> : <Link className="button button-secondary goal-card-open entity-card-open" to={routeForEntity({ type: "goal", id: goal.id })}>Otwórz cel <ArrowRight /></Link>}
-        </Panel>;
+        </>;
+        return status === "archived" || status === "trashed"
+          ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
+          : <Link className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} to={routeForEntity({ type: "goal", id: goal.id })} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</Link>;
       })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Zacznij od rezultatu, który jest dla Ciebie ważny. Pierwszy krok możesz dodać od razu albo później." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? <Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Utwórz pierwszy cel</Button> : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>

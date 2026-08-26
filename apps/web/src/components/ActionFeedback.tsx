@@ -57,6 +57,7 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
             <span className="undo-notice-icon">{notice.error || notice.kind === "error" ? <AlertCircle /> : <CheckCircle2 />}</span>
             <span><strong>{notice.message}</strong>{notice.error && <small>Cofnięcie nie powiodło się: {notice.error}</small>}</span>
             {notice.kind === "undo" ? <Button variant="ghost" loading={notice.working} onClick={() => void undo(notice)}><RotateCcw />Cofnij</Button> : null}
+            {notice.action ? <Button variant="ghost" onClick={() => { void notice.action?.onClick(); dismiss(notice.id); }}>{notice.action.label}</Button> : null}
             <button className="icon-button" aria-label="Zamknij komunikat" onClick={() => dismiss(notice.id)}><X /></button>
           </section>
         ))}

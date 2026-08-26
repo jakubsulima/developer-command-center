@@ -1,19 +1,9 @@
 import { createContext } from "react";
-import type { ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxKind, InboxStatus, KnowledgeKind, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule, WorkItemStatus } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
-import type { DraftSaveStatus } from "../hooks/usePersistentDraft";
-
-export interface CheckpointInput {
-  reason?: FocusEndReason;
-  currentState: string;
-  nextAction: string;
-  branch?: string;
-  file?: string;
-  sourceUrl?: string;
-  blocker?: string;
-  note?: string;
-  evidence?: { learningGoalId: string; title: string; result: "supports" | "reveals_gap" | "inconclusive"; feedback: string };
-}
+import type { SyncState } from "./workspaceMutationCoordinator";
+import type { SearchResult } from "../data/workspaceRepository";
+import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 
 export interface CreatedProjectReference {
   projectId: string;
@@ -61,9 +51,13 @@ export interface AppStore {
   state: AppState;
   mode: AuthMode;
   loading: boolean;
-  syncing: boolean;
-  scratchpadStatus: DraftSaveStatus;
-  error?: string;
+  syncState: SyncState;
+  aiGoalReview?: AIGoalReview;
+  aiGoalReviewStatus: "idle" | "loading" | "refreshing" | "ready" | "error";
+  aiGoalReviewError?: { code: string; message: string };
+  requestGoalReview: (forceRefresh?: boolean) => Promise<void>;
+  submitGoalReviewFeedback: (recommendationId: string | null, rating: AIGoalReviewFeedbackRating) => Promise<void>;
+  search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
   updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;
   createAction: (input: NewActionInput) => Promise<string>;
@@ -83,15 +77,12 @@ export interface AppStore {
   createRecurringAction: (input: NewRecurringActionInput) => Promise<string>;
   updateRecurringAction: (templateId: string, changes: Partial<NewRecurringActionInput>, updateFutureActions?: boolean) => Promise<void>;
   materializeRecurring: (today?: string) => Promise<void>;
-  linkKnowledge: (knowledgeItemId: string, target: { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }, meaning?: "material" | "result" | "decision" | "reference") => Promise<void>;
+  linkKnowledge: (knowledgeItemId: string, target: KnowledgeRelationTarget, meaning?: KnowledgeRelationMeaning) => Promise<void>;
   unlinkKnowledge: (linkId: string) => Promise<void>;
   triageInboxIntent: (inboxItemId: string, intent: NewInboxTriageIntent) => Promise<void>;
   createProject: (input: NewProjectInput) => Promise<CreatedProjectReference>;
   setCommitmentStatus: (projectId: string, status: CommitmentStatus) => Promise<void>;
   setPrimaryCommitment: (projectId: string) => void;
-  setWorkItemStatus: (projectId: string, workItemId: string, status: WorkItemStatus, blocker?: string) => void;
-  updateCheckpoint: (checkpointId: string, input: Omit<CheckpointInput, "reason" | "evidence">) => void;
-  promoteScratchpad: (sessionId: string, target: "note" | "decision" | "inbox", title: string, content: string) => void;
   createLearningGoal: (input: NewLearningGoalInput) => Promise<void>;
   setLearningGoalStatus: (goalId: string, status: "draft" | "shaped" | "achieved" | "abandoned", reason?: string) => Promise<void>;
   capture: (content: string, kind?: InboxKind) => Promise<void>;
@@ -99,14 +90,11 @@ export interface AppStore {
   triageInbox: (id: string, target: KnowledgeKind, title: string, detail: string, projectId?: string) => void;
   setInboxStatus: (id: string, status: InboxStatus, snoozedUntil?: string) => Promise<void>;
   releaseDueInbox: (now?: Date) => Promise<void>;
-  createKnowledge: (kind: KnowledgeKind, title: string, detail: string, goalId?: string, sourceUrl?: string, goalIds?: string[]) => Promise<string>;
+  createKnowledge: (input: CreateKnowledgeInput) => Promise<string>;
+  recordActionResult: (actionId: string, result: ActionResultInput) => Promise<string>;
   updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; goalIds?: string[] }) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
-  startFocus: (workItemId?: string) => Promise<boolean>;
-  pauseFocus: (checkpoint: CheckpointInput) => Promise<boolean>;
-  updateScratchpad: (value: string) => void;
   setAIProposal: (status: AppState["aiProposal"]) => Promise<void>;
-  executeAIExecution: (executionId: string) => void;
   completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string>) => Promise<boolean>;
   exportData: () => Promise<unknown>;
   reload: () => Promise<void>;

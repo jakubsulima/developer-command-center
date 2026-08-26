@@ -1,4 +1,4 @@
-import type { ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, Project, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, Project, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 
 export type InboxTriageIntent =
@@ -152,7 +152,15 @@ export type DomainCommand = {
   goalId?: string;
   actionId?: string;
   recurringTemplateId?: string;
-  meaning: "material" | "result" | "decision" | "reference";
+  meaning: KnowledgeRelationMeaning;
+  createdAt: string;
+} | {
+  type: "record_action_result";
+  actionId: string;
+  result: ActionResultInput;
+  knowledgeId: string;
+  linkId: string;
+  progressId?: string;
   createdAt: string;
 } | {
   type: "unlink_knowledge";
@@ -285,6 +293,22 @@ export type DomainCommand = {
   note?: string;
 };
 
+export function relationTargetCount(target: KnowledgeRelationTarget | { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }) {
+  return [target.targetKnowledgeItemId, target.areaId, target.goalId, target.actionId, target.recurringTemplateId].filter(Boolean).length;
+}
+
+export function validateKnowledgeRelation(knowledgeType: KnowledgeKind, meaning: KnowledgeRelationMeaning, target: KnowledgeRelationTarget | { targetKnowledgeItemId?: string; areaId?: string; goalId?: string; actionId?: string; recurringTemplateId?: string }) {
+  if (relationTargetCount(target) !== 1) throw new Error("knowledge_link_target_required");
+  if (meaning === "result" && knowledgeType !== "artifact") throw new Error("knowledge_result_requires_artifact");
+  if (meaning === "decision" && knowledgeType !== "decision") throw new Error("knowledge_decision_requires_decision");
+}
+
+function validateExistingKnowledgeRelations(state: AppState, knowledgeId: string, nextType: KnowledgeKind) {
+  for (const link of state.knowledgeLinks.filter((candidate) => candidate.knowledgeItemId === knowledgeId)) {
+    validateKnowledgeRelation(nextType, link.meaning, link);
+  }
+}
+
 function initials(title: string) {
   return title.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
@@ -401,8 +425,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   }
 
   if (command.type === "link_knowledge") {
-    if (!state.knowledge.some((item) => item.id === command.knowledgeItemId)) throw new Error("knowledge_item_not_found");
-    if ([command.targetKnowledgeItemId, command.areaId, command.goalId, command.actionId, command.recurringTemplateId].filter(Boolean).length !== 1) throw new Error("knowledge_link_target_required");
+    const source = state.knowledge.find((item) => item.id === command.knowledgeItemId);
+    if (!source) throw new Error("knowledge_item_not_found");
+    validateKnowledgeRelation(source.type, command.meaning, command);
     if (command.targetKnowledgeItemId && !state.knowledge.some((item) => item.id === command.targetKnowledgeItemId)) throw new Error("knowledge_target_not_found");
     if (command.targetKnowledgeItemId === command.knowledgeItemId) throw new Error("knowledge_self_link_not_allowed");
     const duplicate = state.knowledgeLinks.some((link) => link.knowledgeItemId === command.knowledgeItemId
@@ -421,6 +446,42 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       meaning: command.meaning,
       createdAt: command.createdAt
     }] };
+  }
+
+  if (command.type === "record_action_result") {
+    const action = state.actions.find((candidate) => candidate.id === command.actionId);
+    if (!action) throw new Error("action_not_found");
+    const existingResult = state.knowledgeLinks.find((link) => link.actionId === action.id && link.meaning === "result");
+    if (existingResult) return state;
+    const knowledgeId = command.knowledgeId;
+    const resultKnowledgeId = command.result.kind === "existing" ? command.result.knowledgeItemId : knowledgeId;
+    let next = state;
+    let resultTitle: string;
+    if (command.result.kind === "new") {
+      resultTitle = command.result.title.trim();
+      next = executeDomainCommand(next, {
+        type: "create_knowledge", id: knowledgeId, kind: "artifact", title: resultTitle,
+        detail: command.result.detail, sourceUrl: command.result.sourceUrl, createdAt: command.createdAt,
+      });
+    } else {
+      const existing = next.knowledge.find((item) => item.id === resultKnowledgeId);
+      if (!existing) throw new Error("knowledge_not_found");
+      if (existing.type !== "artifact") throw new Error("knowledge_result_requires_artifact");
+      if (existing.archivedAt || existing.trashedAt) throw new Error("knowledge_result_must_be_active");
+      resultTitle = existing.title;
+    }
+    next = executeDomainCommand(next, {
+      type: "link_knowledge", id: command.linkId, knowledgeItemId: resultKnowledgeId,
+      actionId: action.id, meaning: "result", createdAt: command.createdAt
+    });
+    if (action.goalId && command.progressId) {
+      next = executeDomainCommand(next, {
+        type: "add_progress", id: command.progressId, goalId: action.goalId, actionId: action.id,
+        knowledgeItemId: resultKnowledgeId,
+        kind: "result", content: `Rezultat: ${resultTitle}`, createdAt: command.createdAt
+      });
+    }
+    return next;
   }
 
   if (command.type === "create_recurring_template") {
@@ -643,6 +704,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   }
 
   if (command.type === "create_knowledge") {
+    if (state.knowledge.some((item) => item.id === command.id)) return state;
     const title = command.title.trim();
     if (!title) throw new Error("knowledge_title_required");
     const sourceUrl = normalizeHttpUrl(command.sourceUrl);
@@ -668,6 +730,8 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const item = state.knowledge.find((candidate) => candidate.id === command.knowledgeId);
     if (!item) throw new Error("knowledge_not_found");
     if (command.title !== undefined && !command.title.trim()) throw new Error("knowledge_title_required");
+    const nextType = command.kind ?? item.type;
+    validateExistingKnowledgeRelations(state, item.id, nextType);
     const knowledge = state.knowledge.map((candidate) => candidate.id === command.knowledgeId ? {
       ...candidate,
       type: command.kind ?? candidate.type,
@@ -682,7 +746,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         id: link.id,
         knowledgeItemId: command.knowledgeId,
         goalId: link.goalId,
-        meaning: (command.kind ?? item.type) === "decision" ? "decision" as const : (command.kind ?? item.type) === "artifact" ? "result" as const : "reference" as const,
+        meaning: nextType === "decision" ? "decision" as const : nextType === "artifact" ? "result" as const : "reference" as const,
         createdAt: command.changedAt
       }))
     ];
