@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import type { AIGoalReviewRecommendation } from "../domain/aiGoalReview";
+import { humanizeEntityReferences } from "../domain/humanizeAIText";
 import { Modal } from "./Modal";
 import { Badge, Button, Panel } from "./ui";
 import { useActionFeedback } from "./action-feedback-context";
@@ -21,10 +22,6 @@ function signalLabel(key: string) {
   if (key.includes(":inactive:")) return `brak aktywności od ${key.split(":").at(-1)} dni`;
   if (key.includes(":too-many-open-actions:")) return `${key.split(":").at(-1)} otwartych Działań`;
   return "sygnał z danych Workspace";
-}
-
-function humanizeEntityReferences(text: string, labels: Array<[string, string]>) {
-  return labels.reduce((result, [id, label]) => result.includes(id) ? result.replaceAll(id, `„${label}”`) : result, text);
 }
 
 function errorCopy(code?: string) {
