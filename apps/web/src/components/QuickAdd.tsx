@@ -1,5 +1,5 @@
-import { ArrowLeft, BookMarked, CalendarClock, ChevronDown, Flag, ListPlus, Plus, Repeat2, SlidersHorizontal, Sparkles } from "lucide-react";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { BookMarked, CalendarClock, ChevronDown, Flag, ListPlus, Plus, Repeat2, SlidersHorizontal, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { parseQuickAddCommand, type QuickAddMode } from "../domain/quickAdd";
@@ -32,7 +32,6 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
   const draft = usePersistentDraft("global-quick-add", emptyDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [mobileExpanded, setMobileExpanded] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const modeCopy = copy[draft.value.mode];
   const scheduledFor = draft.value.scheduledFor ?? "";
@@ -43,14 +42,18 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
 
   const setMode = (mode: QuickAddMode) => {
     setError("");
-    setMobileExpanded(true);
     draft.setValue((current) => ({ ...current, mode, context: mode === "knowledge" ? "" : current.context }));
     window.requestAnimationFrame(() => contentRef.current?.focus());
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => contentRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [draft.value.mode, open]);
+
   const close = () => {
     setError("");
-    setMobileExpanded(false);
     onClose();
   };
 
@@ -94,14 +97,12 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
 
   return (
     <Modal open={open} title="Dodaj" className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving}>
-      <form className={`quick-add ${mobileExpanded ? "mobile-expanded" : "mobile-chooser"}`} onSubmit={(event) => void submit(event)}>
-        <div className="create-hub-intro"><span><Sparkles /></span><div><strong>Jedno miejsce do tworzenia</strong><p>Wybierz typ. Najważniejsze pola zobaczysz od razu, reszta pozostanie pod ręką.</p></div></div>
+      <form className="quick-add" onSubmit={(event) => void submit(event)}>
+        <div className="create-hub-intro"><span><Sparkles /></span><div><strong>Jedno miejsce do tworzenia</strong><p>Działanie jest domyślne. Typ możesz zmienić nad polem, a reszta pozostaje pod ręką.</p></div></div>
         <div className="quick-add-choice-heading"><strong>Co chcesz dodać?</strong><small>Wybierz typ, a pokażę odpowiednie pola.</small></div>
         <div className="quick-add-modes" role="group" aria-label="Co chcesz dodać?">
           {modes.map(({ id, label, icon: Icon }) => <button type="button" aria-pressed={draft.value.mode === id} key={id} onClick={() => setMode(id)}><span><Icon /></span><small>{label}</small></button>)}
         </div>
-
-        <div className="quick-add-stage-header"><button type="button" aria-label="Wróć do wyboru typu" onClick={() => setMobileExpanded(false)}><ArrowLeft /></button><span><small>Wybrany typ</small><strong>{modes.find((mode) => mode.id === draft.value.mode)?.label}</strong></span></div>
         <div className="quick-add-mode-panel" key={draft.value.mode}>
           <div className="quick-add-mode-heading"><span>{modeCopy.label}</span><small>{modeCopy.detail}</small></div>
           <div className="quick-add-composer"><textarea ref={contentRef} id="quick-add-content" aria-label={modeCopy.label} rows={3} autoFocus required placeholder={modeCopy.placeholder} value={draft.value.content} onChange={(event) => updateContent(event.target.value)} onKeyDown={(event) => {

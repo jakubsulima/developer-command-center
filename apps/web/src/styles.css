@@ -345,7 +345,7 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .guided-form .modal-intro { @apply [margin:0_0_2px]; }
 .creation-hub-modal { @apply [width:min(660px,_100%)]; @apply [background:radial-gradient(circle_at_85%_0,_rgba(37,99,235,.16),_transparent_30%),_var(--popover)]; }
 .quick-add { @apply [display:grid]; @apply [gap:14px]; }
-.quick-add-choice-heading, .quick-add-stage-header { @apply [display:none]; }
+.quick-add-choice-heading { @apply [display:none]; }
 .create-hub-intro { @apply [display:grid]; @apply [grid-template-columns:38px_minmax(0,_1fr)]; @apply [align-items:center]; @apply [gap:11px]; @apply [padding:12px]; @apply [border:1px_solid_rgba(96,165,250,.25)]; @apply [border-radius:12px]; @apply [background:rgba(7,17,31,.42)]; }
 .create-hub-intro > span { @apply [width:38px]; @apply [height:38px]; @apply [display:grid]; @apply [place-items:center]; @apply [border:1px_solid_#315b97]; @apply [border-radius:11px]; @apply [background:linear-gradient(145deg,_#163b6b,_#0d284d)]; @apply [color:#bfdbfe]; @apply [box-shadow:0_8px_22px_rgba(37,99,235,.17)]; }
 .create-hub-intro > span svg { @apply [width:18px]; }
@@ -1160,34 +1160,6 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
   .creation-hub-modal .create-hub-intro,
   .creation-hub-modal .quick-add-hint,
   .creation-hub-modal .quick-add-recurring { @apply [display:none]; }
-  .modal.creation-hub-modal:has(.quick-add.mobile-chooser) { @apply [padding:9px]; }
-  .creation-hub-modal:has(.quick-add.mobile-chooser) .modal-head { @apply [min-height:34px]; @apply [margin-bottom:4px]; @apply [padding:0_0_2px_3px]; }
-  .creation-hub-modal:has(.quick-add.mobile-chooser) .modal-head .icon-button { @apply [width:34px]; @apply [min-width:34px]; @apply [height:34px]; @apply [min-height:34px]; }
-  .creation-hub-modal .quick-add.mobile-chooser { @apply [gap:6px]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-choice-heading { @apply [display:none]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes { @apply [grid-template-columns:repeat(3,_minmax(0,_1fr))]; @apply [gap:4px]; @apply [padding:0]; @apply [border:0]; @apply [background:transparent]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes > button { @apply [min-height:54px]; @apply [display:grid]; @apply [grid-template-columns:1fr]; @apply [justify-items:center]; @apply [align-content:center]; @apply [gap:3px]; @apply [padding:4px_2px]; @apply [border-color:var(--border)]; @apply [background:rgba(7,_17,_31,_.4)]; @apply [text-align:center]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes > button[aria-pressed="true"] { @apply [border-color:var(--border)]; @apply [color:var(--secondary-foreground)]; @apply [background:rgba(7,_17,_31,_.4)]; @apply [box-shadow:none]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes > button[aria-pressed="true"] > span { @apply [color:var(--ring)]; @apply [background:var(--secondary)]; @apply [box-shadow:none]; @apply [transform:none]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes > button > span { @apply [grid-column:1]; @apply [grid-row:1]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-modes > button > small { @apply [grid-column:1]; @apply [grid-row:2]; @apply [font-size:10px]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-mode-panel,
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-hint,
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-footer { @apply [display:none]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-recurring { @apply [min-height:44px]; @apply [display:grid]; @apply [grid-template-columns:26px_minmax(0,_1fr)]; @apply [gap:8px]; @apply [padding:5px_9px]; @apply [border-radius:8px]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-recurring > span:first-child { @apply [width:26px]; @apply [height:26px]; @apply [border-radius:7px]; @apply [background:var(--secondary)]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-recurring small,
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-recurring > svg { @apply [display:none]; }
-  .creation-hub-modal .quick-add.mobile-chooser .quick-add-recurring strong { @apply [font-size:11px]; }
-  .creation-hub-modal .quick-add.mobile-expanded .quick-add-modes { @apply [display:none]; }
-  .creation-hub-modal .quick-add.mobile-expanded .quick-add-stage-header { @apply [display:flex]; @apply [align-items:center]; @apply [gap:9px]; }
-  .creation-hub-modal .quick-add-stage-header > button { @apply [width:38px]; @apply [height:38px]; @apply [display:grid]; @apply [place-items:center]; @apply [padding:0]; @apply [border:1px_solid_var(--border)]; @apply [border-radius:9px]; @apply [background:var(--secondary)]; @apply [color:var(--secondary-foreground)]; }
-  .creation-hub-modal .quick-add-stage-header > button svg { @apply [width:17px]; @apply [height:17px]; }
-  .creation-hub-modal .quick-add-stage-header small,
-  .creation-hub-modal .quick-add-stage-header strong { @apply [display:block]; }
-  .creation-hub-modal .quick-add-stage-header small { @apply [color:var(--muted-foreground)]; @apply [font-size:9px]; @apply [text-transform:uppercase]; @apply [letter-spacing:.06em]; }
-  .creation-hub-modal .quick-add-stage-header strong { @apply [margin-top:1px]; @apply [font-size:13px]; }
-  .modal.creation-hub-modal:has(.quick-add.mobile-expanded) { @apply [animation:mobile-quick-add-expand_.24s_cubic-bezier(.16,_1,_.3,_1)]; }
   .creation-hub-modal .quick-add-modes { @apply [gap:3px]; @apply [padding:3px]; @apply [border-radius:11px]; }
   .creation-hub-modal .quick-add-modes > button { @apply [min-height:50px]; @apply [gap:3px]; @apply [padding-block:4px]; @apply [border-radius:8px]; }
   .creation-hub-modal .quick-add-modes > button > span { @apply [width:24px]; @apply [height:24px]; }
@@ -1234,10 +1206,6 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
-  @keyframes mobile-quick-add-expand {
-    from { opacity: .72; clip-path: inset(26% 0 0 round 16px); transform: translateY(12px) scale(.985); }
-    to { opacity: 1; clip-path: inset(0 round 16px); transform: translateY(0) scale(1); }
-  }
 }
 
 .draft-row { @apply [min-height:42px]; @apply [display:flex]; @apply [align-items:center]; @apply [justify-content:space-between]; @apply [gap:12px]; @apply [margin-top:12px]; }
@@ -2577,13 +2545,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .inbox-tabs button, .filter-pills button, .knowledge-views button,
   .knowledge-section-tabs button, .project-tabs button,
   .capture-mode-row button, .quick-choice-row button, .quick-add-date-choices button,
-  .quick-add-modes > button, .quick-add-stage-header > button,
+  .quick-add-modes > button,
   .knowledge-add-trigger, .knowledge-actions .button, .input-with-icon button,
   .search-wrap > button, .profile-popover > button {
     min-height: 44px;
   }
   .icon-button, .today-row-actions > a, .icon-date,
-  .quick-add-stage-header > button, .knowledge-add-trigger,
+  .knowledge-add-trigger,
   .knowledge-actions .button, .input-with-icon button, .search-wrap > button {
     min-width: 44px;
     width: 44px;
@@ -2597,7 +2565,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
   .knowledge-capture-panel .capture-mode-row > div button,
   .creation-hub-modal .quick-add-modes > button,
-  .creation-hub-modal .quick-add-stage-header > button {
+  .creation-hub-modal .quick-add-modes > button {
     min-height: 44px;
   }
 }
