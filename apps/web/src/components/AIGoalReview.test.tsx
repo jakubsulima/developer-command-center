@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { App } from "../app/App";
 import { StoreProvider } from "../app/store";
+import { humanizeEntityReferences } from "../domain/humanizeAIText";
 
 function renderReview() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -13,6 +14,20 @@ function renderReview() {
 }
 
 describe("AIGoalReview", () => {
+  it("zamienia techniczne odwołania AI na nazwy czytelne dla użytkownika", () => {
+    const labels: Array<[string, string]> = [["goal-1", "Płynna praca w terminalu"]];
+
+    expect(humanizeEntityReferences("Czy goalId goal-1 ma przekroczyć próg aktywności?", labels))
+      .toBe("Czy Cel „Płynna praca w terminalu” ma przekroczyć próg aktywności?");
+    expect(humanizeEntityReferences("Sygnały missing_criteria i missing_next_action blokują postęp.", labels))
+      .toBe("Sygnały brak kryteriów sukcesu i brak następnego Działania blokują postęp.");
+    expect(humanizeEntityReferences("Brak missing_next_action. completed7Days: 1; progress entry.", labels))
+      .toBe("Brak następnego Działania. Działania ukończone w ostatnich 7 dniach: 1; wpis postępu.");
+    expect(humanizeEntityReferences("Brak missing_next_action mimo 1 completed7Days.", labels))
+      .toBe("Brak następnego Działania mimo jednego Działania ukończonego w ostatnich 7 dniach.");
+    expect(humanizeEntityReferences("Sygnały stallują postęp.", labels)).toBe("Sygnały wstrzymują postęp.");
+  });
+
   it("wymaga świadomej zgody i pokazuje deterministyczną symulację", async () => {
     const user = userEvent.setup();
     renderReview();
