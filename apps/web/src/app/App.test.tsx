@@ -71,6 +71,40 @@ describe("goal-centric workspace", () => {
     expect(await screen.findByRole("heading", { name: "Zdrowie" })).toBeInTheDocument();
   });
 
+  it("oddziela bieżące Cele i Działania od historii Projektu", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-history", name: "Projekt z historią", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    state.goals = [
+      { id: "goal-current", title: "Bieżący Cel", outcome: "Nadal trwa", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project-history", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+      { id: "goal-history", title: "Osiągnięty Cel", outcome: "Gotowy rezultat", kind: "custom", status: "achieved", visibility: "active", priority: "normal", areaId: "project-history", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-02T08:00:00.000Z" }
+    ];
+    state.actions = [
+      { id: "action-current", version: 1, goalId: "goal-current", areaId: "project-history", title: "Otwarte Działanie", detail: "", status: "ready", position: 0, isNext: true, pinnedToToday: false, checklist: [], createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+      { id: "action-history", version: 1, goalId: "goal-history", areaId: "project-history", title: "Ukończone Działanie", detail: "", status: "completed", position: 1, isNext: false, pinnedToToday: false, checklist: [], createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-02T08:00:00.000Z" }
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-history");
+    await screen.findByRole("heading", { name: "Projekt z historią" });
+    const goals = screen.getByRole("region", { name: "Cele" });
+    const actions = screen.getByRole("region", { name: "Działania" });
+
+    expect(within(goals).getByText("Bieżący Cel")).toBeInTheDocument();
+    expect(within(goals).queryByText("Osiągnięty Cel")).not.toBeInTheDocument();
+    expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
+    expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
+    expect(screen.getByText("Bieżące Cele").previousElementSibling).toHaveTextContent("1");
+
+    await user.click(within(goals).getByRole("button", { name: /Historia/ }));
+    await user.click(within(actions).getByRole("button", { name: /Historia/ }));
+
+    expect(within(goals).getByText("Osiągnięty Cel")).toBeInTheDocument();
+    expect(within(goals).queryByText("Bieżący Cel")).not.toBeInTheDocument();
+    expect(within(actions).getByText("Ukończone Działanie")).toBeInTheDocument();
+    expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
+  });
+
   it("tworzy, edytuje i wzbogaca własną serię cykliczną", async () => {
     const user = userEvent.setup();
     renderApp("/routines");
