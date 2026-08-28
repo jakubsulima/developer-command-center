@@ -56,6 +56,11 @@ jobs:
       - name: Kontrola budżetu bundle
         run: pnpm check:bundle
 
+      - name: Raport wydajności i audyt UI
+        run: |
+          pnpm performance:audit-ui
+          pnpm performance:report -- --baseline docs/performance/plan-06-baseline.json
+
   dependency-audit:
     name: Audyt zależności
     runs-on: ubuntu-latest

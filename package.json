@@ -15,6 +15,8 @@
     "dev": "pnpm --filter @command/web dev",
     "build": "pnpm --filter @command/web build",
     "check:bundle": "pnpm --filter @command/web check:bundle",
+    "performance:report": "pnpm --filter @command/web performance:report",
+    "performance:audit-ui": "pnpm --filter @command/web performance:audit-ui",
     "test": "pnpm --filter @command/web test",
     "test:coverage": "pnpm --filter @command/web test:coverage",
     "typecheck": "pnpm --filter @command/web typecheck",

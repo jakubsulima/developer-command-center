@@ -1,4 +1,5 @@
 import { AppErrorReporter } from "./appErrorReporter";
+import { performanceNow, recordPerformanceTiming, viewportBucket } from "./performanceMetrics";
 
 export type StartupPhase = "auth-module-ready" | "session-resolved" | "workspace-resolved" | "app-interactive";
 
@@ -7,7 +8,23 @@ const externalTimings = new Map<string, number>();
 let reportEmitted = false;
 
 function clock() {
-  return typeof performance === "undefined" ? Date.now() : performance.now();
+  return performanceNow();
+}
+
+let firstInteractionProbeInstalled = false;
+
+function installFirstInteractionProbe() {
+  if (typeof window === "undefined" || firstInteractionProbeInstalled) return;
+  firstInteractionProbeInstalled = true;
+  const capture = () => {
+    const startedAt = clock();
+    const finish = () => recordPerformanceTiming("workspace-first-interaction", clock() - startedAt, { viewport: viewportBucket() });
+    window.removeEventListener("pointerdown", capture, true);
+    window.removeEventListener("keydown", capture, true);
+    window.requestAnimationFrame(finish);
+  };
+  window.addEventListener("pointerdown", capture, { capture: true, passive: true });
+  window.addEventListener("keydown", capture, { capture: true, passive: true });
 }
 
 function emitReport() {
@@ -34,6 +51,7 @@ function phaseDuration(from: StartupPhase, to: StartupPhase) {
 export function markStartupPhase(phase: StartupPhase) {
   if (phases.has(phase)) return;
   phases.set(phase, clock());
+  if (phase === "workspace-resolved") installFirstInteractionProbe();
   if (phase === "app-interactive") queueMicrotask(emitReport);
 }
 

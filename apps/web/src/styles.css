@@ -238,7 +238,6 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .focus-header h2 { @apply [margin-bottom:2px]; @apply [font-size:26px]; @apply [line-height:32px]; }
 .focus-header p { @apply [margin-bottom:0]; @apply [font-size:13px]; }
 .focus-header p a { @apply [color:var(--secondary-foreground)]; @apply [text-decoration:underline]; @apply [text-underline-offset:3px]; }
-.separator-dot { @apply [padding:0_8px]; @apply [color:var(--muted-foreground)]; }
 .focus-details { @apply [display:grid]; @apply [grid-template-columns:1.35fr_.9fr]; @apply [gap:20px]; @apply [margin-top:18px]; }
 .next-step, .checkpoint-action button { @apply [width:100%]; @apply [min-height:64px]; @apply [display:flex]; @apply [align-items:center]; @apply [gap:12px]; @apply [padding:10px_12px]; @apply [text-align:left]; @apply [border:1px_solid_var(--border)]; @apply [border-radius:8px]; @apply [background:var(--secondary)]; }
 .next-step:hover, .checkpoint-action button:hover { @apply [border-color:var(--input)]; @apply [background:var(--accent)]; }

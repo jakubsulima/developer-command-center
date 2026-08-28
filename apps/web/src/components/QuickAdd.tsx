@@ -8,6 +8,7 @@ import { useActionFeedback } from "./action-feedback-context";
 import { DraftStatus } from "./DraftStatus";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
+import { finishPerformanceTiming } from "../lib/performanceMetrics";
 
 const emptyDraft = { mode: "action" as QuickAddMode, content: "", context: "", scheduledFor: "", pinnedToToday: true };
 
@@ -48,7 +49,10 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
 
   useEffect(() => {
     if (!open) return;
-    const frame = window.requestAnimationFrame(() => contentRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      contentRef.current?.focus();
+      finishPerformanceTiming("quick-add", "quick-add-open");
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [draft.value.mode, open]);
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare, UserRound } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -7,10 +7,12 @@ import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { QuickAdd } from "./QuickAdd";
 import { Sheet } from "./ui/sheet";
 import { AppLoading } from "../auth/AuthRoot";
 import { AppErrorReporter } from "../lib/appErrorReporter";
+import { beginPerformanceTiming } from "../lib/performanceMetrics";
+
+const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 
 const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
@@ -36,6 +38,10 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const moreActive = ["/goals", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const openQuickAdd = useCallback(() => {
+    beginPerformanceTiming("quick-add");
+    setQuickAddOpen(true);
+  }, []);
 
   const downloadExport = async () => {
     if (exportState === "loading") return;
@@ -66,12 +72,12 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
-        setQuickAddOpen(true);
+        openQuickAdd();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [openQuickAdd]);
   useEffect(() => {
     if (!profileMenuOpen) return;
     const closeOutside = (event: PointerEvent) => {
@@ -119,7 +125,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button aria-label="Otwórz szybkie dodawanie" onClick={() => setQuickAddOpen(true)}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button aria-label="Otwórz szybkie dodawanie" onClick={openQuickAdd}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error ? "sync-error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
@@ -130,11 +136,11 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab ${quickAddOpen ? "active" : ""}`} aria-expanded={quickAddOpen} onClick={() => setQuickAddOpen(true)} aria-label="Otwórz centrum dodawania"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
+        <button className={`capture-fab ${quickAddOpen ? "active" : ""}`} aria-expanded={quickAddOpen} onClick={openQuickAdd} aria-label="Otwórz centrum dodawania"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
         <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
-      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+      <Suspense fallback={null}><QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Praca</h3><nav className="mobile-more-links" aria-label="Nawigacja pracy">

@@ -9,9 +9,11 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppErrorReporter } from "./lib/appErrorReporter";
 import { AuthGate } from "./auth/AuthGate";
 import { AuthRoot } from "./auth/AuthRoot";
+import { installPerformanceMetrics } from "./lib/performanceMetrics";
 import "./styles.css";
 
 AppErrorReporter.install();
+installPerformanceMetrics();
 
 const queryClient = new QueryClient({
   defaultOptions: {

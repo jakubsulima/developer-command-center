@@ -1,0 +1,14 @@
+{
+  "plan": "06",
+  "capturedAt": "2026-08-28",
+  "build": "pre-plan-06",
+  "bundle": {
+    "entryJsGzip": 112253,
+    "entryCssGzip": 32568
+  },
+  "runtime": {
+    "desktop": {},
+    "mobile": {}
+  },
+  "notes": "Baseline z lokalnego Vite production build; runtime wymaga scenariusza smoke na profilu desktop i 390×844."
+}
