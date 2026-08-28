@@ -6,11 +6,10 @@ Fundament bezpieczeństwa zapisu, draftów, undo i potwierdzania ryzykownych
 operacji jest już obecny. Dalszy rozwój nie kontynuuje modelu
 `Commitment → Focus Session → Checkpoint`.
 
-Aktualny plan poprawy użyteczności mobilnej znajduje się w dokumencie
-[Plan poprawek mobilnych i produktywności](./mobile-productivity-remediation-2026-08-19.md).
-Najpierw domyka on dostęp do wszystkich sekcji, poprawne deep linki i reset
-przewinięcia, a dopiero później skraca formularze i porządkuje warstwę
-Tailwind/shadcn.
+Zamknięty audyt użyteczności mobilnej znajduje się w dokumencie
+[Plan poprawek mobilnych i produktywności](./mobile-productivity-remediation-2026-08-19.md)
+i służy już tylko jako historia decyzji. Bieżące prace prowadzone są według
+krótkich planów wdrożeniowych, w tym [uproszczenia szczegółu Celu i języka](./plan-05-goal-detail-and-language.md).
 
 Plan pierwszego pionu AI, z bezpiecznym adapterem NVIDIA API/NIM, znajduje się w
 dokumencie [AI z obsługą NVIDIA](./nvidia-ai-implementation.md). Zaczyna od

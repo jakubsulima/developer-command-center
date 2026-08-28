@@ -129,7 +129,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const proposals = dataOrThrow(proposalsResult, "AI proposals") as ProposalRow[];
   const reviews = dataOrThrow(reviewsResult, "Reviews") as ReviewRow[];
   const unifiedGoals = dataOrThrow(unifiedGoalsResult, "Cele") as GoalRow[];
-  const areas = dataOrThrow(areasResult, "Obszary") as AreaRow[];
+  const areas = dataOrThrow(areasResult, "Projekty") as AreaRow[];
   const templates = dataOrThrow(templatesResult, "Szablony Celów") as GoalTemplateRow[];
   const criteria = dataOrThrow(criteriaResult, "Kryteria Celów") as GoalCriterionRow[];
   const actionRows = dataOrThrow(actionsResult, "Działania") as ActionRow[];
@@ -457,14 +457,14 @@ export async function addProgressRemote(workspaceId: string, id: string, goalId:
 }
 
 export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string) {
-  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Obszaru");
+  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Projektu");
 }
 
 export async function updateAreaRemote(areaId: string, changes: { name?: string; description?: string }) {
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (changes.name !== undefined) payload.name = changes.name.trim();
   if (changes.description !== undefined) payload.description = changes.description.trim();
-  dataOrThrow(await getSupabase().from("areas").update(payload).eq("id", areaId).select("id").single(), "Edycja Obszaru");
+  dataOrThrow(await getSupabase().from("areas").update(payload).eq("id", areaId).select("id").single(), "Edycja Projektu");
 }
 
 export async function createGoalTemplateRemote(workspaceId: string, id: string, name: string, kind: GoalKind, defaultActions?: Array<{ title: string; detail?: string }>) {
@@ -494,7 +494,7 @@ export async function setGoalVisibilityRemote(goalId: string, visibility: "activ
 }
 
 export async function setAreaVisibilityRemote(areaId: string, visibility: "active" | "archived" | "trashed") {
-  dataOrThrow(await getSupabase().from("areas").update({ archived_at: visibility === "archived" ? new Date().toISOString() : null, trashed_at: visibility === "trashed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", areaId).select("id").single(), "Zmiana widoczności Obszaru");
+  dataOrThrow(await getSupabase().from("areas").update({ archived_at: visibility === "archived" ? new Date().toISOString() : null, trashed_at: visibility === "trashed" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", areaId).select("id").single(), "Zmiana widoczności Projektu");
 }
 
 export async function setGoalTemplateVisibilityRemote(templateId: string, visibility: "active" | "archived" | "trashed") {

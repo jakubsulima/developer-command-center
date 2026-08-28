@@ -1,8 +1,12 @@
 # Plan poprawek mobilnych i produktywności
 
 Data audytu: 19 sierpnia 2026  
-Status: plan do realizacji  
+Status: wykonany — dokument historyczny
 Widoki referencyjne: `390 × 844` oraz granicznie `320 × 700`
+
+Zakres audytu i wynikające z niego poprawki zostały wdrożone w kolejnych
+planach produktowych. Dokument pozostaje punktem odniesienia dla decyzji z
+19 sierpnia 2026, ale nie jest już kolejką aktywnych prac.
 
 ## Cel
 

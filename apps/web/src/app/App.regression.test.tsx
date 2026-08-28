@@ -359,12 +359,16 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
     const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
-    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj wiedzę" });
+    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Wiedza · 0" });
     expect(relationToggle).toHaveAttribute("aria-expanded", "false");
     await user.click(relationToggle);
     expect(relationToggle).toHaveAttribute("aria-expanded", "true");
     await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
     await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
     expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();
+    const unlink = within(actionKnowledge).getByRole("button", { name: "Odłącz PostgreSQL: constraints and normalization od Działania" });
+    unlink.focus();
+    await user.keyboard("{Enter}");
+    expect(within(actionKnowledge).queryByText("PostgreSQL: constraints and normalization")).not.toBeInTheDocument();
   });
 });

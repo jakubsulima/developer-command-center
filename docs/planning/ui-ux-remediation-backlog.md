@@ -2,7 +2,7 @@
 
 Data: 5 sierpnia 2026
 Źródło: [Audyt UI/UX](../audits/2026-08-04-ui/AUDYT-UI-UX.md)
-Status: propozycja do akceptacji przed publikacją w issue trackerze
+Status: historyczny — zastąpiony wdrożonym kierunkiem Projekt–Cel
 
 ## Cel i zasady realizacji
 

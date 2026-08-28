@@ -1242,6 +1242,18 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .sheet-backdrop { @apply [align-items:flex-end]; @apply [padding:0]; }
 .sheet-content { @apply [max-height:calc(100dvh-8px)]; @apply [border-radius:16px_16px_0_0]; }
 .goal-health-grid { @apply [grid-template-columns:repeat(3,_minmax(0,_1fr))]; }
+.goal-next-step { @apply [margin-bottom:16px]; @apply [border-color:rgba(96,_165,_250,_.48)]; @apply [background:linear-gradient(145deg,rgba(23,_62,_112,_.3),rgba(11,_25,_43,_.78))]; }
+.goal-next-step > .section-heading { @apply [margin-bottom:8px]; }
+.goal-next-step > .section-heading h2 { @apply [margin-top:4px]; }
+.next-action-card { @apply [margin:0_-2px]; }
+.next-action-card > .goal-action { @apply [padding:12px_10px]; @apply [border:1px_solid_rgba(96,_165,_250,_.34)]; @apply [border-radius:10px]; @apply [background:rgba(7,_18,_32,_.52)]; }
+.next-action-empty { @apply [display:grid]; @apply [gap:4px]; @apply [margin:0_0_2px]; @apply [padding:14px]; @apply [border:1px_dashed_var(--border)]; @apply [border-radius:10px]; @apply [color:var(--secondary-foreground)]; }
+.next-action-empty span { @apply [color:var(--muted-foreground)]; @apply [font-size:13px]; }
+.quick-progress { @apply [display:grid]; @apply [grid-template-columns:180px_minmax(0,_1fr)]; @apply [align-items:start]; @apply [gap:16px]; @apply [margin-top:14px]; @apply [padding-top:14px]; @apply [border-top:1px_solid_var(--border)]; }
+.quick-progress h3 { @apply [margin:0]; @apply [font-size:14px]; }
+.quick-progress p { @apply [margin:4px_0_0]; @apply [font-size:12px]; }
+.quick-progress .progress-form { @apply [margin-top:0]; }
+.action-list-empty { @apply [margin:12px_0_0]; }
 
 @media (max-width: 640px) {
   .draft-row { @apply [align-items:flex-start]; @apply [flex-direction:column]; }
@@ -1253,6 +1265,14 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
   .detail-section { @apply [padding:16px]; }
   .action-detail-actions { @apply [display:grid]; @apply [grid-template-columns:1fr]; }
   .action-detail-actions .button { @apply [width:100%]; }
+}
+
+@media (max-width: 720px) {
+  .quick-progress { @apply [grid-template-columns:1fr]; @apply [gap:8px]; }
+  .next-action-card > .goal-action { @apply [padding:10px_4px]; }
+  .next-action-card .action-copy strong, .next-action-card .action-copy small { @apply [display:-webkit-box]; @apply [overflow:hidden]; @apply [-webkit-box-orient:vertical]; }
+  .next-action-card .action-copy strong { @apply [-webkit-line-clamp:2]; }
+  .next-action-card .action-copy small { @apply [-webkit-line-clamp:1]; }
 }
 
 /* Explicit Knowledge semantics */
@@ -1614,7 +1634,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .entity-card-open::after { @apply [inset:-2px]; }
   .goal-card h2, .project-card h2 { @apply [font-size:clamp(18px,_5vw,_22px)]; }
   .goal-card-top, .goal-card-context span, .goal-card-signals, .project-context-metrics small, .results-summary { @apply [font-size:12px]; }
-  .goal-health-grid { @apply [grid-template-columns:repeat(3,_minmax(0,_1fr))]; }
+  .goal-health-grid { @apply [grid-template-columns:repeat(2,_minmax(0,_1fr))]; }
+  .goal-health-grid > div:last-child { @apply [grid-column:1_/_-1]; @apply [padding-left:0]; @apply [padding-right:0]; }
   .routine-overview { @apply [grid-template-columns:repeat(3,_minmax(0,_1fr))]; @apply [gap:6px]; @apply [margin-top:-4px]; }.routine-overview > div { @apply [min-height:60px]; @apply [gap:7px]; @apply [padding:9px]; }.routine-overview > div > svg { @apply [width:16px]; }.routine-overview strong { @apply [font-size:16px]; }.routine-overview small { @apply [font-size:10px]; }
   .routine-toolbar { @apply [align-items:flex-start]; @apply [flex-direction:column]; }.routine-toolbar .filter-pills { @apply [width:100%]; @apply [overflow-x:auto]; @apply [flex-wrap:nowrap]; }.routine-toolbar .button { @apply [flex:1]; }
   .routine-card { @apply [padding:14px]; }.routine-card-head { @apply [grid-template-columns:36px_minmax(0,_1fr)]; }.routine-card-head > .badge { @apply [grid-column:2]; @apply [justify-self:start]; }.routine-card-icon { @apply [width:36px]; @apply [height:36px]; }
