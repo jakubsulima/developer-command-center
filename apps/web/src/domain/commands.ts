@@ -2,9 +2,9 @@ import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, Focus
 import { normalizeHttpUrl } from "./http-url";
 
 export type InboxTriageIntent =
-  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string }
-  | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean }
-  | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; sourceUrl?: string };
+  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
+  | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
+  | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string };
 
 export type DomainCommand = {
   type: "triage_inbox_intent";
@@ -22,6 +22,7 @@ export type DomainCommand = {
   kind: GoalKind;
   areaId?: string;
   templateId?: string;
+  targetDate?: string;
   criteria?: Array<{ id: string; title: string; completed: boolean }>;
   createdAt: string;
 } | {
@@ -381,23 +382,27 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     let next = state;
     if (command.intent.kind === "goal") next = executeDomainCommand(next, {
       type: "create_goal", goalId: command.intent.goalId, actionId: command.intent.actionId,
-      title: command.intent.title, outcome: command.intent.outcome, firstActionTitle: command.intent.firstActionTitle,
-      kind: "custom", createdAt: command.decidedAt
+      title: command.intent.title, outcome: command.intent.outcome, firstActionTitle: command.intent.firstActionTitle, targetDate: command.intent.targetDate,
+      areaId: command.intent.areaId, kind: "custom", createdAt: command.decidedAt
     });
     if (command.intent.kind === "action") next = executeDomainCommand(next, {
       type: "create_action", id: command.intent.actionId, title: command.intent.title, detail: command.intent.detail,
-      goalId: command.intent.goalId, areaId: command.intent.areaId, pinnedToToday: command.intent.pinnedToToday, createdAt: command.decidedAt
+      goalId: command.intent.goalId, areaId: command.intent.areaId, pinnedToToday: command.intent.pinnedToToday, scheduledFor: command.intent.targetDate, createdAt: command.decidedAt
     });
     if (command.intent.kind === "knowledge") {
       next = executeDomainCommand(next, {
         type: "create_knowledge", id: command.intent.knowledgeId, kind: command.intent.knowledgeKind,
-        title: command.intent.title, detail: command.intent.detail, sourceUrl: command.intent.sourceUrl,
+        title: command.intent.title, detail: command.intent.detail, sourceUrl: command.intent.sourceUrl, projectId: command.intent.projectId,
         sourceInboxItemId: source.id,
         createdAt: command.decidedAt
       });
       if (command.intent.goalId) next = executeDomainCommand(next, {
         type: "link_knowledge", id: command.intent.linkId ?? `${command.intent.knowledgeId}-${command.intent.goalId}`,
         knowledgeItemId: command.intent.knowledgeId, goalId: command.intent.goalId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : "material", createdAt: command.decidedAt
+      });
+      if (!command.intent.goalId && command.intent.projectId) next = executeDomainCommand(next, {
+        type: "link_knowledge", id: command.intent.linkId ?? `${command.intent.knowledgeId}-${command.intent.projectId}`,
+        knowledgeItemId: command.intent.knowledgeId, areaId: command.intent.projectId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : "material", createdAt: command.decidedAt
       });
     }
     return { ...next, inbox: next.inbox.map((item) => item.id === source.id ? { ...item, status: "resolved", resolvedToIds: [...(item.resolvedToIds ?? []), targetId], snoozedUntil: undefined } : item) };
@@ -651,6 +656,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         priority: "normal",
         areaId: command.areaId,
         templateId: command.templateId,
+        targetDate: command.targetDate,
         createdAt: command.createdAt,
         updatedAt: command.createdAt
       }],

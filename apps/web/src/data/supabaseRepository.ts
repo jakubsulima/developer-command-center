@@ -647,7 +647,7 @@ const exportTables = [
   "workspace_members", "entities", "projects", "requirements", "commitments", "work_items",
   "inbox_items", "focus_sessions", "context_checkpoints", "skills", "learning_goals",
   "learning_goal_skills", "learning_evidence", "entity_links", "reviews", "ai_proposals",
-  "ai_executions", "ai_runs", "ai_goal_reviews", "ai_goal_review_feedback", "activity_events"
+  "ai_executions", "ai_runs", "ai_goal_reviews", "ai_goal_review_feedback", "ai_inbox_triage_proposals", "ai_inbox_triage_feedback", "activity_events"
 ] as const;
 
 export async function exportWorkspaceRemote(workspaceId: string) {

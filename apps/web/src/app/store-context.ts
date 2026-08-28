@@ -4,6 +4,7 @@ import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { SearchResult } from "../data/workspaceRepository";
 import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 
 export interface CreatedProjectReference {
   projectId: string;
@@ -43,9 +44,9 @@ export interface NewRecurringActionInput {
 }
 
 export type NewInboxTriageIntent =
-  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string }
-  | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean }
-  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; sourceUrl?: string };
+  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
+  | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
+  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string };
 
 export interface AppStore {
   state: AppState;
@@ -57,6 +58,8 @@ export interface AppStore {
   aiGoalReviewError?: { code: string; message: string };
   requestGoalReview: (forceRefresh?: boolean) => Promise<void>;
   submitGoalReviewFeedback: (recommendationId: string | null, rating: AIGoalReviewFeedbackRating) => Promise<void>;
+  requestInboxTriageProposal: (inboxItemId: string, forceRefresh?: boolean) => Promise<AIInboxTriageProposal>;
+  submitInboxTriageFeedback: (proposalId: string, rating: AIInboxTriageFeedbackRating) => Promise<void>;
   search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
   updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;

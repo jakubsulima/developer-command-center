@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Archive, CalendarClock, CalendarDays, Check, ChevronRight, CircleAlert, Layers3, Plus, Repeat2, SkipForward, Sparkles, TrendingUp } from "lucide-react";
+import { Archive, CalendarClock, CalendarDays, Check, ChevronRight, CircleAlert, Layers3, ListPlus, Plus, Repeat2, SkipForward, Sparkles, TrendingUp } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -14,6 +14,7 @@ import { describeActionContext, resolveActionContext, type ActionContext } from 
 import { formatWorkspaceDateRange } from "../domain/activity";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
+import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
 const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
@@ -50,9 +51,16 @@ export function StartPage() {
   const [actionForm, setActionForm] = useState({ title: "", detail: "", goalId: "", areaId: "", scheduledFor: "", pinnedToToday: true });
   const currentDate = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const summary = useMemo(() => deriveHomeSummary(state), [state]);
+  const firstFlow = getFirstFlowSnapshot();
+  const hasCompletedAction = state.actions.some((action) => action.status === "completed");
+  const showFirstFlow = !hasCompletedAction && (summary.isPristineWorkspace || firstFlow.stage !== "unknown");
   const showAll = (key: string) => searchParams.get("show") === key;
 
   useEffect(() => { void materializeOnMount.current(currentDate); }, [currentDate]);
+  useEffect(() => {
+    if (summary.isPristineWorkspace) recordFirstFlowStage("empty-workspace");
+    if (hasCompletedAction && firstFlow.stage !== "unknown") recordFirstFlowStage("first-action-completed");
+  }, [firstFlow.stage, hasCompletedAction, summary.isPristineWorkspace]);
 
   const complete = (actionId: string) => mutation.run(`start:${actionId}`, async () => {
     const action = state.actions.find((candidate) => candidate.id === actionId);
@@ -74,6 +82,7 @@ export function StartPage() {
     setActionError("");
     try {
       await createAction({ ...actionForm, detail: actionForm.detail || undefined, goalId: actionForm.goalId || undefined, areaId: actionForm.areaId || undefined, scheduledFor: actionForm.scheduledFor || undefined });
+      if (showFirstFlow) recordFirstFlowStage("action-created");
       setActionForm({ title: "", detail: "", goalId: "", areaId: "", scheduledFor: "", pinnedToToday: true });
       setActionOpen(false);
     } catch (caught) {
@@ -90,12 +99,15 @@ export function StartPage() {
   const attentionItems = showAll("attention") ? summary.attentionSignals : summary.attentionSignals.slice(0, 2);
   const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
   const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
+  const firstOpenAction = state.actions.find((action) => !["completed", "cancelled", "skipped"].includes(action.status));
   const recommendationCta = summary.recommendation.kind === "next_action" || summary.recommendation.kind === "today_action"
     ? "Otwórz Działanie"
     : summary.recommendation.kind === "goal_without_next_action" ? "Ustal następny krok" : "Przejdź do decyzji";
 
   return <AppShell>
     <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} action={hasWork ? <Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button> : undefined} />
+
+    {showFirstFlow ? <Panel className="first-flow-panel" aria-labelledby="first-flow-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Pierwsza minuta</span><h2 id="first-flow-title">Jeden użyteczny wynik</h2></div><Badge tone="neutral">bez touru modułów</Badge></div><p>Zacznij od rzeczy, którą naprawdę chcesz zrobić. Przechwyć myśl, zamień ją w jedno Działanie, zobacz je tutaj i oznacz jako ukończone.</p><ol className="first-flow-steps"><li className={summary.isPristineWorkspace ? "current" : "done"}>Przechwyć myśl</li><li className={state.inbox.length ? "current" : ""}>Utwórz Działanie</li><li className={state.actions.length ? "current" : ""}>Ukończ na Starcie</li></ol>{summary.isPristineWorkspace ? <Link className="button button-primary" to="/knowledge?section=inbox&capture=true"><Archive />Przechwyć teraz</Link> : state.inbox.some((item) => item.status === "unprocessed") ? <Link className="button button-primary" to="/knowledge?section=inbox&status=unprocessed"><ListPlus />Utwórz Działanie</Link> : firstOpenAction ? <Link className="button button-primary" to={routeForEntity({ type: "action", id: firstOpenAction.id, goalId: firstOpenAction.goalId })}>Otwórz pierwsze Działanie<ChevronRight /></Link> : null}</Panel> : null}
 
     {summary.recommendation.kind !== "calm" ? <Panel className={`start-recommendation ${summary.recommendation.kind === "next_action" ? "start-next-recommendation" : ""}`} aria-labelledby="start-recommendation-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Priorytet</span><h2 id="start-recommendation-title">Najważniejsze teraz</h2></div><Badge tone="warning">{summary.recommendation.kind === "next_action" ? "Następne Działanie" : "Jedna decyzja"}</Badge></div><div className="recommendation-content"><div><strong>{summary.recommendation.title}</strong>{summary.recommendation.context ? <small className="recommendation-context">{summary.recommendation.context}</small> : null}<p>{summary.recommendation.detail}</p></div><Link className="button button-primary" to={summary.recommendation.to}>{recommendationCta}<ChevronRight /></Link></div></Panel> : null}
 

@@ -23,6 +23,7 @@ export interface WorkspaceMutation<State> {
 export interface WorkspaceMutationCoordinatorOptions<State> {
   getState: () => State;
   setState: (state: State) => void;
+  onError?: (key: string, error: unknown) => void;
 }
 
 interface PendingMutation<State> {
@@ -94,6 +95,7 @@ export class WorkspaceMutationCoordinator<State> {
       this.clearError(mutation.key);
       this.emit();
     } catch (caught) {
+      this.options.onError?.(mutation.key, caught);
       this.pending.delete(id);
       const rolledBack = application.rollback(this.options.getState());
       const reconciled = await mutation.reconcile?.().catch(() => undefined);

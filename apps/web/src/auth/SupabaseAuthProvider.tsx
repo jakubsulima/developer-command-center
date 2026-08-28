@@ -5,6 +5,7 @@ import { getSupabase } from "../lib/supabase";
 import { AuthContext, demoUser, type AuthContextValue, type CurrentUser } from "./auth-context";
 import { clearUnscopedPrivateBrowserState } from "./private-browser-state";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
+import { clearFirstFlowSnapshot } from "../lib/firstFlow";
 
 function mapUser(user: User): CurrentUser {
   const fullName = typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name.trim() : "";
@@ -41,6 +42,7 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
       if (event === "SIGNED_OUT") {
         queryClient.removeQueries({ queryKey: ["workspace-state"] });
         clearUnscopedPrivateBrowserState();
+        clearFirstFlowSnapshot();
         setUser(null);
       }
       else if (session?.user) setUser(mapUser(session.user));
@@ -79,6 +81,7 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
       await getSupabase().auth.signOut({ scope: "local" });
       queryClient.removeQueries({ queryKey: ["workspace-state"] });
       clearUnscopedPrivateBrowserState();
+      clearFirstFlowSnapshot();
       setUser(null);
     },
     continueInDemo() {

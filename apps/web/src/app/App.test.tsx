@@ -120,4 +120,23 @@ describe("goal-centric workspace", () => {
     expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
     expect(screen.getAllByRole("button", { name: "Dodaj Działanie" })).toHaveLength(1);
   });
+
+  it("pokazuje propozycję AI i nie zmienia Skrzynki przed zatwierdzeniem", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("command-center-state-v1", JSON.stringify({
+      ...emptyState,
+      inbox: [{ id: "inbox-ai", kind: "text", content: "Zrob budzet domowy", createdAt: "2026-08-27T09:00:00.000Z", status: "unprocessed" }]
+    }));
+    renderApp("/knowledge?section=inbox");
+    await user.click(await screen.findByRole("button", { name: "Przetwórz" }));
+    const dialog = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
+    await user.click(within(dialog).getByRole("button", { name: "Zaproponuj przez AI" }));
+    const preview = await screen.findByRole("dialog", { name: "Podgląd propozycji AI" });
+    expect(within(preview).getByText("Działanie")).toBeInTheDocument();
+    expect(within(preview).getAllByText("Zrob budzet domowy").length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: /Nowe/ })).toHaveTextContent("1");
+    await user.click(within(preview).getByRole("button", { name: "Zatwierdź" }));
+    expect(await screen.findByRole("heading", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Podgląd propozycji AI" })).not.toBeInTheDocument();
+  });
 });

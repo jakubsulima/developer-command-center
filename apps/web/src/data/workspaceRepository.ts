@@ -2,6 +2,7 @@ import type { DomainCommand } from "../domain/commands";
 import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, Project, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 
 export interface PageCursor {
   sortValue: string;
@@ -72,6 +73,9 @@ export interface WorkspaceRepository {
   getLatestGoalReview(workspaceId: string): Promise<AIGoalReview | undefined>;
   requestGoalReview(workspaceId: string, forceRefresh?: boolean): Promise<AIGoalReview>;
   submitGoalReviewFeedback(workspaceId: string, reviewId: string, recommendationId: string | null, rating: AIGoalReviewFeedbackRating): Promise<void>;
+  getLatestInboxTriageProposal(workspaceId: string, inboxItemId: string): Promise<AIInboxTriageProposal | undefined>;
+  requestInboxTriageProposal(workspaceId: string, inboxItemId: string, forceRefresh?: boolean): Promise<AIInboxTriageProposal>;
+  submitInboxTriageFeedback(workspaceId: string, proposalId: string, rating: AIInboxTriageFeedbackRating): Promise<void>;
 }
 
 export interface SearchResult {

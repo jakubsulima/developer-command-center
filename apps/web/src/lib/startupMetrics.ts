@@ -1,3 +1,5 @@
+import { AppErrorReporter } from "./appErrorReporter";
+
 export type StartupPhase = "auth-module-ready" | "session-resolved" | "workspace-resolved" | "app-interactive";
 
 const phases = new Map<StartupPhase, number>();
@@ -9,7 +11,7 @@ function clock() {
 }
 
 function emitReport() {
-  if (reportEmitted || !import.meta.env.DEV) return;
+  if (reportEmitted) return;
   reportEmitted = true;
   const start = phases.get("auth-module-ready") ?? phases.values().next().value ?? clock();
   const elapsed = Object.fromEntries([...phases].map(([phase, timestamp]) => [phase, Math.round(timestamp - start)]));
@@ -18,7 +20,9 @@ function emitReport() {
     sessionToWorkspace: phaseDuration("session-resolved", "workspace-resolved"),
     workspaceToInteractive: phaseDuration("workspace-resolved", "app-interactive")
   };
-  console.info("[command.startup]", { phases: elapsed, between, external: Object.fromEntries(externalTimings) });
+  const external = Object.fromEntries(externalTimings);
+  if (import.meta.env.DEV) console.info("[command.startup]", { phases: elapsed, between, external });
+  else AppErrorReporter.reportStartup(elapsed, between, external);
 }
 
 function phaseDuration(from: StartupPhase, to: StartupPhase) {

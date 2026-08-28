@@ -169,6 +169,21 @@ describe("komendy domenowe Workspace", () => {
     expect(next.knowledge[0]).toMatchObject({ id: "resource-one", type: "resource", sourceInboxItemId: "inbox-one", title: "SQL performance guide" });
   });
 
+  it("wiąże Wiedzę z Projektem przez areaId", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      areas: [{ id: "project-one", name: "Projekt", description: "", visibility: "active" as const, createdAt: "2026-08-01T09:00:00.000Z", updatedAt: "2026-08-01T09:00:00.000Z" }],
+      inbox: [{ id: "inbox-project", kind: "text" as const, content: "Materiał", createdAt: "2026-08-01T09:00:00.000Z", status: "unprocessed" as const }]
+    };
+    const next = executeDomainCommand(state, {
+      type: "triage_inbox_intent",
+      inboxItemId: "inbox-project",
+      intent: { kind: "knowledge", knowledgeId: "knowledge-project", linkId: "link-project", knowledgeKind: "resource", title: "Materiał projektu", detail: "Opis", projectId: "project-one" },
+      decidedAt: "2026-08-01T09:05:00.000Z"
+    });
+    expect(next.knowledgeLinks).toEqual([expect.objectContaining({ id: "link-project", areaId: "project-one", knowledgeItemId: "knowledge-project" })]);
+  });
+
   it("pozwala poprawić checkpoint tylko do rozpoczęcia kolejnej sesji", () => {
     const editable = {
       ...structuredClone(emptyState),
