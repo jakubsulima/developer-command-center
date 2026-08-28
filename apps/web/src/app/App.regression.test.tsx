@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
+import { demoState } from "../data/demo";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
@@ -68,13 +69,11 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(await screen.findByRole("button", { name: "Otwórz centrum dodawania" }));
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
     const quickAdd = createCenter.querySelector(".quick-add");
-    expect(quickAdd).toHaveClass("mobile-chooser");
+    expect(quickAdd).not.toHaveClass("mobile-chooser");
     for (const mode of ["Działanie", "Cel", "Do Skrzynki"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
+    await waitFor(() => expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus());
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
-    await user.click(within(createCenter).getByRole("button", { name: "Działanie" }));
-    expect(quickAdd).toHaveClass("mobile-expanded");
-    expect(within(createCenter).getByRole("button", { name: "Wróć do wyboru typu" })).toBeInTheDocument();
     await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
     const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
     await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));
@@ -87,6 +86,36 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(profileCenter).getByRole("button", { name: /Eksport danych/ })).toBeInTheDocument();
     expect(within(profileCenter).getByRole("link", { name: /Podsumowanie/ })).toHaveAttribute("href", "/review");
     expect(within(profileCenter).queryByText("Działanie cykliczne")).not.toBeInTheDocument();
+  });
+
+  it("pokazuje Na dziś przed zwiniętymi wyjątkami i rozwija pełną listę", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    state.goals = [
+      ...state.goals,
+      ...Array.from({ length: 3 }, (_, index) => ({
+        ...state.goals[0]!,
+        id: `goal-extra-${index + 1}`,
+        title: `Cel bez następnego ${index + 1}`,
+        createdAt: `2026-08-${String(2 + index).padStart(2, "0")}T08:00:00.000Z`
+      }))
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp();
+
+    const priority = await screen.findByRole("region", { name: "Najważniejsze teraz" });
+    const today = screen.getByRole("region", { name: "Na dziś" });
+    const attention = screen.getByRole("region", { name: "Wymaga uwagi" });
+    expect(Boolean(priority.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(today.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(attention.querySelectorAll(".attention-list > a")).toHaveLength(2);
+    const attentionCount = Number(within(attention).getByLabelText(/spraw wymaga uwagi$/).getAttribute("aria-label")?.match(/\d+/)?.[0]);
+    expect(within(attention).getByRole("link", { name: "Zobacz wszystkie" })).toHaveAttribute("href", "/?show=attention");
+
+    await user.click(within(attention).getByRole("link", { name: "Zobacz wszystkie" }));
+    expect(screen.getByRole("region", { name: "Wymaga uwagi" }).querySelectorAll(".attention-list > a")).toHaveLength(attentionCount);
+    await user.click(within(screen.getByRole("region", { name: "Wymaga uwagi" })).getByRole("link", { name: "Zwiń listę" }));
+    expect(screen.getByRole("region", { name: "Wymaga uwagi" }).querySelectorAll(".attention-list > a")).toHaveLength(2);
   });
 
   it("pokazuje ogólne Rutyny niezależnie od planu dnia i otwiera ich ustawienia", async () => {
@@ -330,12 +359,16 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
     const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
-    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj wiedzę" });
+    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Wiedza · 0" });
     expect(relationToggle).toHaveAttribute("aria-expanded", "false");
     await user.click(relationToggle);
     expect(relationToggle).toHaveAttribute("aria-expanded", "true");
     await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
     await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
     expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();
+    const unlink = within(actionKnowledge).getByRole("button", { name: "Odłącz PostgreSQL: constraints and normalization od Działania" });
+    unlink.focus();
+    await user.keyboard("{Enter}");
+    expect(within(actionKnowledge).queryByText("PostgreSQL: constraints and normalization")).not.toBeInTheDocument();
   });
 });

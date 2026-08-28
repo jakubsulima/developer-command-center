@@ -1,4 +1,4 @@
-import type { ActionStatus, GoalKind, GoalStatus, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning } from "./types";
+import type { ActionStatus, GoalKind, GoalStatus, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, ProgressKind } from "./types";
 
 export const goalStatusLabels: Record<GoalStatus, string> = { active: "Aktywny", paused: "Wstrzymany", achieved: "Osiągnięty", abandoned: "Porzucony" };
 export const goalKindLabels: Record<GoalKind, string> = { project: "Projekt", learning: "Nauka", personal: "Osobisty", maintenance: "Utrzymanie", custom: "Własny" };
@@ -13,4 +13,5 @@ export function knowledgeDefaultRelationMeaning(kind: KnowledgeKind): KnowledgeR
 }
 export const inboxStatusLabels: Record<InboxStatus, string> = { unprocessed: "Nowe", snoozed: "Odłożone", resolved: "Przetworzone", discarded: "Odrzucone" };
 export const actionStatusLabels: Record<ActionStatus, string> = { ready: "Gotowe", in_progress: "W toku", blocked: "Zablokowane", completed: "Ukończone", skipped: "Pominięte", cancelled: "Anulowane" };
+export const progressKindLabels: Record<ProgressKind, string> = { note: "Notatka", decision: "Decyzja", result: "Rezultat", evidence: "Dowód", blocker: "Blokada" };
 export const visibilityLabels = { active: "Aktywne", archived: "Archiwum", trashed: "Kosz" } as const;

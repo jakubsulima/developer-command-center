@@ -1,16 +1,18 @@
 import { Link2, TextCursorInput } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { InboxKind } from "../domain/types";
 import { normalizeCapture } from "../domain/capture";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { Button } from "./ui";
 import { Textarea } from "./ui/textarea";
+import { recordFirstFlowStage } from "../lib/firstFlow";
 
-export function CaptureComposer({ draftKey, id, onSubmit, onClose, compact = false, autoFocus = false }: {
+export function CaptureComposer({ draftKey, id, onSubmit, onClose, onSuccess, compact = false, autoFocus = false }: {
   draftKey: string;
   id: string;
   onSubmit: (content: string, kind: InboxKind) => Promise<void>;
   onClose?: () => void;
+  onSuccess?: () => void;
   compact?: boolean;
   autoFocus?: boolean;
 }) {
@@ -20,6 +22,7 @@ export function CaptureComposer({ draftKey, id, onSubmit, onClose, compact = fal
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const preview = (() => { try { return normalizeCapture(draft.value, kind).previewDomain; } catch { return undefined; } })();
+  useEffect(() => { if (!compact) recordFirstFlowStage("capture-started"); }, [compact]);
   const submit = async () => {
     if (saving) return;
     setError(""); setSuccess(""); setSaving(true);
@@ -27,6 +30,8 @@ export function CaptureComposer({ draftKey, id, onSubmit, onClose, compact = fal
       const normalized = normalizeCapture(draft.value, kind);
       await onSubmit(normalized.content, normalized.kind);
       draft.clear(); setSuccess("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
+      if (!compact) recordFirstFlowStage("capture-saved");
+      onSuccess?.();
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "capture_failed";
       setError(code === "invalid_capture_url" || code === "invalid_capture_protocol" ? "Podaj pełny adres HTTP lub HTTPS, np. https://example.com." : code === "capture_content_required" ? "Wpisz treść przechwycenia." : "Nie udało się zapisać. Spróbuj ponownie.");

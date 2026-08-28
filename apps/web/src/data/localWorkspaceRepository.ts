@@ -3,6 +3,8 @@ import { ensureGoalModel } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
+import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
+import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 import { emptyState } from "./empty";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
@@ -118,6 +120,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
 }): WorkspaceRepository {
   const { indexedDb, storage } = options;
   let latestGoalReview: ReturnType<typeof createDemoAIGoalReview> | undefined;
+  const inboxTriageProposals = new Map<string, AIInboxTriageProposal>();
 
   const load = async () => {
     const stored = indexedDb
@@ -194,6 +197,23 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async submitGoalReviewFeedback() {
       // Demo zachowuje kontrakt bez wysyłania i trwałego śledzenia oceny.
+    },
+    async getLatestInboxTriageProposal(_workspaceId, inboxItemId) {
+      return inboxTriageProposals.get(inboxItemId);
+    },
+    async requestInboxTriageProposal(_workspaceId, inboxItemId, forceRefresh = false) {
+      const state = await load() ?? structuredClone(emptyState);
+      const item = state.inbox.find((candidate) => candidate.id === inboxItemId);
+      if (!item || item.status !== "unprocessed") throw new Error("INBOX_ITEM_NOT_AVAILABLE");
+      const cached = !forceRefresh ? inboxTriageProposals.get(inboxItemId) : undefined;
+      if (cached) return { ...structuredClone(cached), cached: true };
+      const proposal = createDemoAIInboxTriageProposal(state, item);
+      inboxTriageProposals.set(inboxItemId, proposal);
+      return structuredClone(proposal);
+    },
+    async submitInboxTriageFeedback(_workspaceId, proposalId, rating: AIInboxTriageFeedbackRating) {
+      void rating;
+      if (![...inboxTriageProposals.values()].some((proposal) => proposal.proposalId === proposalId)) throw new Error("PROPOSAL_NOT_FOUND");
     }
   };
 }

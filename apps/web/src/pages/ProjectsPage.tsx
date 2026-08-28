@@ -50,7 +50,7 @@ export function ProjectsPage() {
   };
 
   return <AppShell>
-    <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe obszary pracy`} action={<Button variant="primary" onClick={() => setOpen(true)}><Plus />Nowy projekt</Button>} />
+    <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe konteksty pracy`} action={<Button variant="primary" onClick={() => setOpen(true)}><Plus />Nowy projekt</Button>} />
     <p className="page-lead">Projekt przechowuje wspólny kontekst przez długi czas. W jego ramach tworzysz prostsze Cele, Działania i Wiedzę.</p>
     <div className="knowledge-views" role="group" aria-label="Widoczność Projektów">
       <Button variant={view === "active" ? "primary" : "ghost"} onClick={() => setView("active")}>Aktywne</Button>

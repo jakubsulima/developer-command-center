@@ -19,7 +19,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260820182703_index_knowledge_evidence_fk.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260823070000_explicit_knowledge_relations.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260824054519_workspace_core_and_pages.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -41,8 +42,8 @@ describe("migracje Supabase", () => {
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
-    expect(tableCount).toBe(31);
-    expect(rlsCount).toBe(31);
+    expect(tableCount).toBe(33);
+    expect(rlsCount).toBe(33);
   });
 
   it("nie wystawia tabel bez polityk ani uprzywilejowanych funkcji publicznych", async () => {
@@ -344,6 +345,43 @@ describe("migracje Supabase", () => {
     await database.exec("reset role");
 
     await expect(database.query("insert into public.ai_executions (workspace_id, proposal_id, requested_by, idempotency_key) values ($1, $2, $3, $4)", [otherWorkspace, proposalId, otherUser, "a2000000-0000-0000-0000-000000000099"])).rejects.toThrow("ai_executions_proposal_workspace_fkey");
+  });
+
+  it("izoluje kontekst triage AI i pozwala zapisać tylko przez istniejącą komendę", async () => {
+    const user = "d1000000-0000-0000-0000-000000000001";
+    const otherUser = "d2000000-0000-0000-0000-000000000002";
+    const goalId = "d1000000-0000-0000-0000-000000000010";
+    const captureKey = "d1000000-0000-0000-0000-000000000011";
+    const actionId = "d1000000-0000-0000-0000-000000000012";
+    const triageKey = "d1000000-0000-0000-0000-000000000013";
+    const areaId = "d1000000-0000-0000-0000-000000000014";
+    const knowledgeId = "d1000000-0000-0000-0000-000000000015";
+    const linkId = "d1000000-0000-0000-0000-000000000016";
+    const captureKey2 = "d1000000-0000-0000-0000-000000000017";
+    const triageKey2 = "d1000000-0000-0000-0000-000000000018";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [user, otherUser, '{"workspace_name":"Workspace Inbox AI"}', '{"workspace_name":"Other Inbox AI"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    const otherWorkspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [otherUser]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const inboxId = await scalar<string>("select (public.capture_item($1, 'Zrób budżet domowy', 'text', $2)).id::text", [workspace, captureKey]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Budżet domowy', 'Spokojne finanse')", [goalId, workspace]);
+    const visibleContext = await database.query<{ value: unknown }>("select public.get_ai_inbox_triage_context($1, $2) as value", [workspace, inboxId]);
+    expect(visibleContext.rows[0]?.value).toMatchObject({ workspaceId: workspace, inbox: { id: inboxId, status: "unprocessed" } });
+    await expect(database.query("insert into public.ai_inbox_triage_proposals (workspace_id, created_by, inbox_item_id, source_snapshot_at, context_hash, prompt_version, schema_version, provider, model, proposal_json, cache_expires_at) values ($1, $2, $3, now(), repeat('a', 64), 1, 1, 'demo', 'demo', '{}', now())", [workspace, user, inboxId])).rejects.toThrow();
+    const triageIntent = JSON.stringify({ kind: "action", actionId, title: "Policz wydatki", detail: "Zbierz liczby.", goalId, targetDate: "2026-09-01" });
+    await database.query("select public.triage_inbox_intent($1, $2, $3::jsonb, $4)", [workspace, inboxId, triageIntent, triageKey]);
+    expect(await scalar<string>("select scheduled_for::text from public.actions where id = $1", [actionId])).toBe("2026-09-01");
+    await database.query("insert into public.areas (id, workspace_id, name) values ($1, $2, 'Projekt AI')", [areaId, workspace]);
+    const inboxId2 = await scalar<string>("select (public.capture_item($1, 'Materiał do projektu', 'text', $2)).id::text", [workspace, captureKey2]);
+    const knowledgeIntent = JSON.stringify({ kind: "knowledge", knowledgeId, linkId, knowledgeKind: "resource", title: "Materiał projektu", detail: "Opis", projectId: areaId });
+    await database.query("select public.triage_inbox_intent($1, $2, $3::jsonb, $4)", [workspace, inboxId2, knowledgeIntent, triageKey2]);
+    expect(await scalar<string>("select area_id::text from public.knowledge_links where id = $1", [linkId])).toBe(areaId);
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [otherUser]);
+    const hiddenContext = await database.query<{ value: unknown }>("select public.get_ai_inbox_triage_context($1, $2) as value", [workspace, inboxId]);
+    expect(hiddenContext.rows[0]?.value).toBeNull();
+    expect(await scalar<number>("select count(*)::int from public.ai_inbox_triage_proposals where workspace_id = $1", [otherWorkspace])).toBe(0);
+    await database.exec("reset role");
   });
 
   it("atomowo tworzy relacje Wiedzy i rezultat Działania z idempotencją oraz RLS", async () => {

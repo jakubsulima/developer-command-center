@@ -2,6 +2,7 @@ import type { AppState, FocusSessionRecord, KnowledgeItem } from "../domain/type
 import { getSupabase } from "../lib/supabase";
 import type { CommandResult, Page, PageCursor, SearchResult, WorkspaceCommand, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
 import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent, type AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import { AIInboxTriageError, decodeAIInboxTriageProposal, type AIInboxTriageFeedbackRating } from "../domain/aiInboxTriage";
 
 function objectPayload(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}: nieprawidłowy JSON`);
@@ -152,6 +153,33 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
     async submitGoalReviewFeedback(workspaceId, reviewId, recommendationId, rating: AIGoalReviewFeedbackRating) {
       const { error } = await getSupabase().rpc("set_ai_goal_review_feedback", { target_workspace_id: workspaceId, target_review_id: reviewId, target_recommendation_id: recommendationId, target_rating: rating });
       if (error) throw new AIGoalReviewError("WORKSPACE_NOT_AVAILABLE", "Nie udało się zapisać oceny.");
+    },
+    async getLatestInboxTriageProposal(workspaceId, inboxItemId) {
+      const { data, error } = await getSupabase().from("ai_inbox_triage_proposals")
+        .select("id,inbox_item_id,provider,model,proposal_json,created_at")
+        .eq("workspace_id", workspaceId).eq("inbox_item_id", inboxItemId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) {
+        if (error.code === "42P01" || /ai_inbox_triage_proposals.*does not exist/i.test(error.message)) return undefined;
+        throw new AIInboxTriageError("WORKSPACE_NOT_AVAILABLE", "Nie udało się pobrać propozycji AI.");
+      }
+      if (!data) return undefined;
+      return decodeAIInboxTriageProposal({ proposalId: data.id, inboxItemId: data.inbox_item_id, status: "ready", cached: true, generatedAt: data.created_at, provider: data.provider, model: data.model, proposal: data.proposal_json });
+    },
+    async requestInboxTriageProposal(workspaceId, inboxItemId, forceRefresh = false) {
+      const { data, error } = await getSupabase().functions.invoke("ai-inbox-triage", { body: { workspaceId, inboxItemId, forceRefresh } });
+      if (error) {
+        const context = (error as { context?: Response }).context;
+        let code = "PROVIDER_REJECTED"; let message = "Nie udało się przygotować propozycji AI.";
+        if (context) {
+          try { const payload = await context.clone().json() as { error?: { code?: string; message?: string } }; code = payload.error?.code ?? code; message = payload.error?.message ?? message; } catch { /* stabilny błąd */ }
+        }
+        throw new AIInboxTriageError(code, message);
+      }
+      return decodeAIInboxTriageProposal(data);
+    },
+    async submitInboxTriageFeedback(workspaceId, proposalId, rating: AIInboxTriageFeedbackRating) {
+      const { error } = await getSupabase().rpc("set_ai_inbox_triage_feedback", { target_workspace_id: workspaceId, target_proposal_id: proposalId, target_rating: rating });
+      if (error) throw new AIInboxTriageError("WORKSPACE_NOT_AVAILABLE", "Nie udało się zapisać oceny propozycji.");
     }
   };
 }

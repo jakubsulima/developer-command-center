@@ -7,6 +7,9 @@ project_id = "project-learning-app"
 [functions.ai-goal-review]
 verify_jwt = true
 
+[functions.ai-inbox-triage]
+verify_jwt = true
+
 [api]
 enabled = true
 # Port to use for the API URL.

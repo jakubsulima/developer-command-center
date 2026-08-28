@@ -15,11 +15,18 @@ import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 import type { AIGoalReview } from "../domain/aiGoalReview";
 import { AIGoalReviewError } from "../domain/aiGoalReview";
+import { AppErrorReporter } from "../lib/appErrorReporter";
+import type { AIInboxTriageFeedbackRating } from "../domain/aiInboxTriage";
 
 const STORAGE_KEY = "command-center-state-v1";
 const loadRepository = () => import("../data/supabaseRepository");
 
 type MutationScope = { collection: keyof AppState; ids: string[] };
+
+function operationTypeFromMutationKey(key: string) {
+  const type = key.split(":", 1)[0]?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return type || "workspace";
+}
 
 function restoreMutationScopes(current: AppState, previous: AppState, scopes: MutationScope[]) {
   let next = current;
@@ -105,7 +112,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState: (next) => {
       stateRef.current = next;
       setState(next);
-    }
+    },
+    onError: (key, error) => AppErrorReporter.report(error, "mutation", { operationType: operationTypeFromMutationKey(key) })
   }), []);
   const syncState = useSyncExternalStore(mutationCoordinator.subscribe, mutationCoordinator.getSyncState, mutationCoordinator.getSyncState);
   const [aiGoalReview, setAIGoalReview] = useState<AIGoalReview>();
@@ -196,6 +204,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await operation();
     } catch (error) {
       mutationCoordinator.recordError(key, error, "Nie udało się zsynchronizować zmiany.");
+      if (key === "workspace") AppErrorReporter.report(error, "mutation", { operationType: "workspace" });
       throw error;
     }
   }, [mutationCoordinator]);
@@ -247,6 +256,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!aiGoalReview || !state.workspaceId) return;
       const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
       await repository.submitGoalReviewFeedback(state.workspaceId, aiGoalReview.reviewId, recommendationId, rating);
+    },
+    async requestInboxTriageProposal(inboxItemId, forceRefresh = false) {
+      const current = await ensureWorkspaceState();
+      const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (!workspaceId) throw new Error("Brak aktywnego Workspace.");
+      const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+      return repository.requestInboxTriageProposal(workspaceId, inboxItemId, forceRefresh);
+    },
+    async submitInboxTriageFeedback(proposalId, rating: AIInboxTriageFeedbackRating) {
+      const current = await ensureWorkspaceState();
+      const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (!workspaceId) return;
+      const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+      await repository.submitInboxTriageFeedback(workspaceId, proposalId, rating);
     },
     async search(query, limit = 20) {
       if (mode === "demo") return localRepository.search(query, limit);
@@ -528,7 +551,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const intent: InboxTriageIntent = input.kind === "goal" ? {
         ...input, goalId: crypto.randomUUID(), actionId: input.firstActionTitle?.trim() ? crypto.randomUUID() : undefined
       } : input.kind === "action" ? { ...input, actionId: crypto.randomUUID() } : {
-        ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId ? crypto.randomUUID() : undefined
+        ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId || input.projectId ? crypto.randomUUID() : undefined
       };
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");

@@ -145,9 +145,17 @@ mieć sesyjny JWT w `Authorization: Bearer ...` i publishable key w `apikey`.
 Kill switch to `AI_GOAL_REVIEW_ENABLED=false`; jego zmiana nie wymaga nowego
 builda frontendu.
 
+Asystent Skrzynki działa osobno przez `ai-inbox-triage`. Ustaw
+`AI_INBOX_TRIAGE_ENABLED=false`, aby wyłączyć tylko tę funkcję. Limity, cache,
+timeout i retencję kontrolują odpowiednio `AI_INBOX_TRIAGE_DAILY_LIMIT`,
+`AI_INBOX_TRIAGE_CACHE_HOURS`, `AI_INBOX_TRIAGE_TIMEOUT_MS` oraz
+`AI_INBOX_TRIAGE_RETENTION_DAYS`. Wdrożenie wymaga checkpointu HITL: stagingu,
+testu Edge Function, RLS drugiego użytkownika i małej polskiej ewaluacji
+zanonimizowanych przykładów.
+
 Przed produkcją wykonaj na stagingu analizę małego i dużego portfolio, sprawdź
 cache oraz limit, błąd 401 bez JWT, brak dostępu drugiego użytkownika i logi pod
-kątem treści Celów oraz sekretów. Zweryfikuj też aktualne warunki retencji,
+kątem treści Celów, Skrzynki i sekretów. Zweryfikuj też aktualne warunki retencji,
 region i dostępność wybranego modelu NVIDIA. Funkcja nie powinna być wdrażana
 na produkcję bez benchmarku jakości opisanego w
 `docs/planning/nvidia-ai-implementation.md`.
