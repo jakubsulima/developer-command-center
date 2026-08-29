@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AppLoading } from "../auth/AuthRoot";
 import { StartPage } from "../pages/StartPage";
 import { ActionFeedbackProvider } from "../components/ActionFeedback";
@@ -7,6 +7,28 @@ import { ScrollToTop } from "../components/ScrollToTop";
 import { useStore } from "./useStore";
 import { markStartupPhase } from "../lib/startupMetrics";
 import { performanceNow, recordPerformanceTiming, viewportBucket } from "../lib/performanceMetrics";
+import { readNavigationState } from "../domain/navigation";
+
+function LegacyGoalActionRedirect() {
+  const { goalId } = useParams();
+  const location = useLocation();
+  const { state } = useStore();
+  const actionId = new URLSearchParams(location.search).get("action");
+  const currentState = readNavigationState(location.state);
+  const goal = goalId ? state.goals.find((item) => item.id === goalId) : undefined;
+  const fallbackState = goalId ? {
+    breadcrumbs: [{ label: "Cele", to: "/goals" }, { label: `Cel: ${goal?.title ?? goalId}`, to: `/goals/${encodeURIComponent(goalId)}` }],
+    returnTo: `/goals/${encodeURIComponent(goalId)}`,
+    returnLabel: `Cel: ${goal?.title ?? goalId}`,
+  } : undefined;
+  if (!actionId) return <Navigate to="/goals" replace />;
+  return <Navigate replace to={`/actions/${encodeURIComponent(actionId)}`} state={currentState ?? fallbackState} />;
+}
+
+function LegacyGoalActionRedirectOrDetail() {
+  const location = useLocation();
+  return new URLSearchParams(location.search).has("action") ? <LegacyGoalActionRedirect /> : <GoalDetailPage />;
+}
 
 function timedImport<T>(route: string, loader: () => Promise<T>) {
   const startedAt = performanceNow();
@@ -47,7 +69,7 @@ export function App() {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/skrzynka" element={<Navigate to="/knowledge?section=inbox" replace />} />
         <Route path="/goals" element={<GoalsPage />} />
-        <Route path="/goals/:goalId" element={<GoalDetailPage />} />
+        <Route path="/goals/:goalId" element={<LegacyGoalActionRedirectOrDetail />} />
         <Route path="/actions/:actionId" element={<ActionDetailPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />

@@ -1,5 +1,6 @@
 import type { AppState, Goal, GoalAction, InboxItem } from "./types";
 import { localDateForTimeZone, selectWorkspaceActivity } from "./activity";
+import { routeForEntity } from "./routes";
 import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
 export type HomeAttentionKind = "blocked" | "overdue" | "goal_without_next_action" | "knowledge_queue";
@@ -61,7 +62,7 @@ function sortByAge<T extends { id: string; createdAt?: string; scheduledFor?: st
 }
 
 function actionRoute(action: GoalAction) {
-  return action.goalId ? `/goals/${encodeURIComponent(action.goalId)}?action=${encodeURIComponent(action.id)}` : `/actions/${encodeURIComponent(action.id)}`;
+  return routeForEntity({ type: "action", id: action.id });
 }
 
 function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeAttentionSignal {

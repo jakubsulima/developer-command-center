@@ -1,11 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Archive, ArrowRight, FolderKanban, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { NavigationLink } from "../components/ContextNavigation";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { entityCardVariants } from "../components/ui-variants";
+import { locationAddress } from "../domain/navigation";
+import { useLocation } from "react-router-dom";
 
 const colors = ["violet", "orange", "amber"] as const;
 
@@ -15,6 +17,7 @@ function initials(name: string) {
 
 export function ProjectsPage() {
   const { state, createArea, setAreaVisibility } = useStore();
+  const location = useLocation();
   const [view, setView] = useState<"active" | "archived" | "trashed">("active");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,7 +62,7 @@ export function ProjectsPage() {
     </div>
     {projects.length ? <div className="project-card-grid">{projects.map((project, index) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
-      return <Panel className={`${entityCardVariants()} project-card project-context-card entity-card`} key={project.id}>
+      return <Panel className={`${entityCardVariants()} project-card project-context-card entity-card`} key={project.id} data-navigation-card-id={`project-${project.id}`} tabIndex={-1}>
         <div className="project-card-head"><span className={`project-avatar ${colors[index % colors.length]}`}>{initials(project.name)}</span><Badge tone="info">Stały kontekst</Badge></div>
         <h2 className="line-clamp-2">{project.name}</h2>
         <p className="line-clamp-2">{project.description || "Miejsce dla powiązanych celów, zadań i wiedzy."}</p>
@@ -68,7 +71,7 @@ export function ProjectsPage() {
           <span><strong>{counts.actions}</strong><small>Otwarte zadania</small></span>
           <span><strong>{counts.knowledge}</strong><small>Wiedza</small></span>
         </div>
-        {view === "active" ? <Link className="button button-secondary entity-card-open" to={`/projects/${project.id}`}>Otwórz projekt <ArrowRight /></Link> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
+        {view === "active" ? <NavigationLink className="button button-secondary entity-card-open" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={`project-${project.id}`}>Otwórz projekt <ArrowRight /></NavigationLink> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
       </Panel>;
     })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Utwórz trwałe miejsce, w którym połączysz Cele, Działania i Wiedzę." : "Nie ma tutaj żadnych Projektów."} action={view === "active" ? <Button variant="primary" onClick={() => setOpen(true)}><Plus />Utwórz pierwszy Projekt</Button> : undefined} />}
 

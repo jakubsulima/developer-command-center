@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -25,9 +25,14 @@ describe("goal-centric experience", () => {
     expect(screen.getByLabelText(/Postęp kryteriów/)).toBeInTheDocument();
     expect(screen.getByText("Bez daty docelowej")).toBeInTheDocument();
     expect(screen.getByText("Więcej", { selector: "summary" })).toBeInTheDocument();
+    const details = screen.getByRole("region", { name: "Szczegóły Celu" });
+    const actionsSection = within(details).getByText("Działania", { selector: "strong" }).closest("details") as HTMLDetailsElement;
+    expect(actionsSection).not.toHaveAttribute("open");
     expect(screen.queryByText(/Focus Session|Rozpocznij fokus|timer/i)).not.toBeInTheDocument();
     expect(screen.queryByText("decision")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" }));
+    await user.click(within(details).getByText("Działania", { selector: "strong" }));
+    await user.click(within(details).getByText("Historia Działań"));
     expect(screen.getByRole("button", { name: "Przywróć: Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cofnij" })).toBeInTheDocument();
   });
@@ -53,7 +58,8 @@ describe("goal-centric experience", () => {
     renderApp("/projects/fintrack-api");
     const action = await screen.findByRole("link", { name: "Otwórz Działanie: Zaprojektuj encje i relacje dla transakcji" });
     await user.click(action);
-    expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("FinTrack API");
     expect(screen.getAllByText("Zaprojektuj encje i relacje dla transakcji").length).toBeGreaterThan(0);
   });
 });

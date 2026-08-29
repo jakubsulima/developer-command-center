@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link2, Plus, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import type { GoalAction, KnowledgeKind, KnowledgeRelationMeaning } from "../domain/types";
 import { knowledgeDefaultRelationMeaning, knowledgeKindLabels, knowledgeRelationMeaningLabels } from "../domain/labels";
@@ -9,6 +9,8 @@ import { Button, Panel } from "./ui";
 import { Modal } from "./Modal";
 import { KnowledgeKindBadge } from "./KnowledgeKindBadge";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
+import { NavigationLink } from "./ContextNavigation";
+import { navigationCardId, type NavigationBreadcrumb } from "../domain/navigation";
 
 const groups: Array<{ meaning: KnowledgeRelationMeaning; label: string }> = [
   { meaning: "material", label: "Materiały" },
@@ -23,15 +25,17 @@ function allowedMeanings(kind: KnowledgeKind): KnowledgeRelationMeaning[] {
   return ["material", "reference"];
 }
 
-export function ActionKnowledgeRelations({ action }: { action: GoalAction }) {
+export function ActionKnowledgeRelations({ action, navigation }: { action: GoalAction; navigation?: { breadcrumbs: NavigationBreadcrumb[]; returnTo: string; returnLabel: string } }) {
   const { state, createKnowledge, linkKnowledge, unlinkKnowledge } = useStore();
   const mutation = useKeyedMutation();
+  const location = useLocation();
   const [selectedId, setSelectedId] = useState("");
   const [meaning, setMeaning] = useState<KnowledgeRelationMeaning>("reference");
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [form, setForm] = useState({ kind: "note" as KnowledgeKind, title: "", detail: "", meaning: "reference" as KnowledgeRelationMeaning });
   const links = state.knowledgeLinks.filter((link) => link.actionId === action.id);
+  const restoreCardId = location.state && typeof location.state === "object" && "navigationRestore" in location.state && typeof location.state.navigationRestore === "object" && location.state.navigationRestore && "sourceCardId" in location.state.navigationRestore && typeof location.state.navigationRestore.sourceCardId === "string" ? location.state.navigationRestore.sourceCardId : undefined;
+  const [expanded, setExpanded] = useState(() => Boolean(restoreCardId && links.some((link) => navigationCardId("knowledge", link.knowledgeItemId) === restoreCardId)));
   const available = state.knowledge.filter((item) => !item.archivedAt && !item.trashedAt && !links.some((link) => link.knowledgeItemId === item.id));
   const selected = state.knowledge.find((item) => item.id === selectedId);
   const roleOptions = useMemo<KnowledgeRelationMeaning[]>(() => selected ? allowedMeanings(selected.type) : ["material", "reference"], [selected]);
@@ -43,7 +47,7 @@ export function ActionKnowledgeRelations({ action }: { action: GoalAction }) {
     <div className="action-relations-heading"><h3 id={`action-relations-${action.id}`}><Link2 />Wiedza Działania</h3><Button variant="ghost" className="action-relations-toggle" aria-expanded={expanded} aria-controls={`action-relations-content-${action.id}`} onClick={() => setExpanded((current) => !current)}>Wiedza · {links.length}</Button></div>
     {expanded ? <div id={`action-relations-content-${action.id}`}>
       <div className="action-relations-expanded-heading"><span className="muted-copy">Powiązania i źródła Działania</span><Button variant="ghost" onClick={() => setOpen(true)}><Plus />Nowa</Button></div>
-      {links.length ? groups.map((group) => { const groupLinks = links.filter((link) => link.meaning === group.meaning); if (!groupLinks.length) return null; return <div className="action-relation-group" key={group.meaning}><strong>{group.label}</strong>{groupLinks.map((link) => { const item = state.knowledge.find((candidate) => candidate.id === link.knowledgeItemId); return <span className="action-relation-chip" key={link.id}>{item ? <Link to={routeForEntity({ type: "knowledge", id: item.id })}><KnowledgeKindBadge kind={item.type} compact /><span>{item.title}</span></Link> : <span>Niedostępna Wiedza</span>}<Button variant="ghost" aria-label={`Odłącz ${item?.title ?? "Wiedzę"} od Działania`} onClick={() => void mutation.run(`action-relations:${action.id}`, () => unlinkKnowledge(link.id))}><X /></Button></span>; })}</div>; }) : <p className="muted-copy action-relations-empty">Brak powiązanej Wiedzy.</p>}
+      {links.length ? groups.map((group) => { const groupLinks = links.filter((link) => link.meaning === group.meaning); if (!groupLinks.length) return null; return <div className="action-relation-group" key={group.meaning}><strong>{group.label}</strong>{groupLinks.map((link) => { const item = state.knowledge.find((candidate) => candidate.id === link.knowledgeItemId); return <span className="action-relation-chip" key={link.id} data-navigation-card-id={item ? navigationCardId("knowledge", item.id) : undefined} tabIndex={item ? -1 : undefined}>{item ? navigation ? <NavigationLink to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={navigation.breadcrumbs} returnTo={navigation.returnTo} returnLabel={navigation.returnLabel} sourceCardId={navigationCardId("knowledge", item.id)}><KnowledgeKindBadge kind={item.type} compact /><span>{item.title}</span></NavigationLink> : <Link to={routeForEntity({ type: "knowledge", id: item.id })}><KnowledgeKindBadge kind={item.type} compact /><span>{item.title}</span></Link> : <span>Niedostępna Wiedza</span>}<Button variant="ghost" aria-label={`Odłącz ${item?.title ?? "Wiedzę"} od Działania`} onClick={() => void mutation.run(`action-relations:${action.id}`, () => unlinkKnowledge(link.id))}><X /></Button></span>; })}</div>; }) : <p className="muted-copy action-relations-empty">Brak powiązanej Wiedzy.</p>}
       <div className="action-relation-connect"><select aria-label={`Podepnij Wiedzę do Działania: ${action.title}`} value={selectedId} onChange={(event) => { const next = state.knowledge.find((item) => item.id === event.target.value); setSelectedId(event.target.value); setMeaning(next ? knowledgeDefaultRelationMeaning(next.type) : "reference"); }}><option value="">Podepnij istniejącą…</option>{available.map((item) => <option key={item.id} value={item.id}>{knowledgeKindLabels[item.type]} · {item.title}</option>)}</select>{selectedId ? <select aria-label="Rola relacji Wiedzy" value={meaning} onChange={(event) => setMeaning(event.target.value as KnowledgeRelationMeaning)}>{roleOptions.map((option) => <option key={option} value={option}>{knowledgeRelationMeaningLabels[option]}</option>)}</select> : null}<Button disabled={!selectedId} loading={mutation.isBusy(`action-relations:${action.id}`)} onClick={() => void connect()}>Połącz</Button></div>
     </div> : null}
     <Modal open={open} closeDisabled={mutation.isBusy(`action-relations:${action.id}`)} title={`Nowa Wiedza dla: ${action.title}`} onClose={() => setOpen(false)}><label className="field-label" htmlFor={`action-new-kind-${action.id}`}>Typ</label><select id={`action-new-kind-${action.id}`} value={form.kind} onChange={(event) => { const kind = event.target.value as KnowledgeKind; setForm((current) => ({ ...current, kind, meaning: knowledgeDefaultRelationMeaning(kind) })); }}>{Object.entries(knowledgeKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select><label className="field-label" htmlFor={`action-new-title-${action.id}`}>Tytuł</label><input id={`action-new-title-${action.id}`} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} autoFocus /><label className="field-label" htmlFor={`action-new-detail-${action.id}`}>Treść</label><textarea id={`action-new-detail-${action.id}`} rows={4} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} /><label className="field-label" htmlFor={`action-new-meaning-${action.id}`}>Rola wobec Działania</label><select id={`action-new-meaning-${action.id}`} value={form.meaning} onChange={(event) => setForm((current) => ({ ...current, meaning: event.target.value as KnowledgeRelationMeaning }))}>{allowedMeanings(form.kind).map((option) => <option key={option} value={option}>{knowledgeRelationMeaningLabels[option]}</option>)}</select><div className="modal-actions"><Button type="button" disabled={mutation.isBusy(`action-relations:${action.id}`)} onClick={() => setOpen(false)}>Anuluj</Button><Button type="button" variant="primary" disabled={!form.title.trim()} loading={mutation.isBusy(`action-relations:${action.id}`)} onClick={() => void create()}>Zapisz Wiedzę</Button></div></Modal>

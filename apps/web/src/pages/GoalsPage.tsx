@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Archive, ArrowRight, BookOpen, CircleDot, Flag, Heart, Layers3, Plus, RefreshCw, Rocket, RotateCcw, Settings2, Sparkles, Trash2 } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
@@ -10,6 +10,8 @@ import { entityCardVariants, stickyFormActionsVariants } from "../components/ui-
 import { routeForEntity } from "../domain/routes";
 import type { GoalKind, GoalStatus } from "../domain/types";
 import { goalKindLabels as kindLabels, goalStatusLabels as statusLabels } from "../domain/labels";
+import { NavigationLink } from "../components/ContextNavigation";
+import { locationAddress, navigationCardId } from "../domain/navigation";
 
 const systemTemplates = [
   { id: "blank", name: "Własny", kind: "custom" as const, outcomePrompt: "Co chcesz osiągnąć?", description: "Zacznij od pustej karty", icon: CircleDot },
@@ -28,6 +30,7 @@ function goalCountLabel(count: number) {
 
 export function GoalsPage() {
   const { state, loading: storeLoading, createGoal, createGoalTemplate, updateGoalTemplate, setGoalVisibility, setGoalTemplateVisibility } = useStore();
+  const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [newOpen, setNewOpen] = useState(false);
@@ -135,7 +138,7 @@ export function GoalsPage() {
         </>;
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
-          : <Link className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} to={routeForEntity({ type: "goal", id: goal.id })} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</Link>;
+          : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
       })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Zacznij od rezultatu, który jest dla Ciebie ważny. Pierwszy krok możesz dodać od razu albo później." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? <Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Utwórz pierwszy cel</Button> : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>

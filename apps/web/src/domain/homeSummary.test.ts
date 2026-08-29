@@ -37,6 +37,13 @@ describe("deriveHomeSummary", () => {
     expect(deriveHomeSummary(state, now).recommendation.kind).toBe("goal_without_next_action");
   });
 
+  it("always points action recommendations to the action detail route", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    state.actions = [action("next", { goalId: "goal-1", isNext: true })];
+    expect(deriveHomeSummary(state, now).recommendation.to).toBe("/actions/next");
+  });
+
   it("prefers a conscious next action across multiple goals", () => {
     const state = structuredClone(emptyState);
     state.goals = [

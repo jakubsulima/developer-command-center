@@ -105,6 +105,43 @@ describe("goal-centric workspace", () => {
     expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
   });
 
+  it("wraca ze szczegółu Celu do tej samej zakładki Projektu", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-navigation", name: "Projekt nawigacji", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    state.goals = [{ id: "goal-navigation", title: "Cel nawigacji", outcome: "Spójny powrót", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project-navigation", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-navigation");
+    await screen.findByRole("heading", { name: "Projekt nawigacji" });
+    await user.click(screen.getByRole("tab", { name: "Cele" }));
+    await user.click(screen.getByRole("link", { name: "Otwórz Cel: Cel nawigacji" }));
+
+    expect(await screen.findByRole("heading", { name: "Cel nawigacji" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Projekt: Projekt nawigacji" }));
+
+    expect(await screen.findByRole("heading", { name: "Projekt nawigacji" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cele" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("pokazuje pętlę pracy jako zwiniętą wskazówkę", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects/area-finanse");
+    await screen.findByRole("heading", { name: "Finanse" });
+
+    const summary = screen.getByText("Pętla pracy — wskazówka").closest("summary") as HTMLElement;
+    const guide = summary.closest("details") as HTMLDetailsElement;
+    const flowHeading = screen.getByRole("heading", { name: "Od kierunku do wiedzy", hidden: true });
+
+    expect(guide).not.toHaveAttribute("open");
+    expect(flowHeading).not.toBeVisible();
+
+    await user.click(summary);
+
+    expect(guide).toHaveAttribute("open");
+    expect(flowHeading).toBeVisible();
+  });
+
   it("tworzy, edytuje i wzbogaca własną serię cykliczną", async () => {
     const user = userEvent.setup();
     renderApp("/routines");
@@ -130,17 +167,14 @@ describe("goal-centric workspace", () => {
     expect(recurringAction.parentElement).toHaveTextContent("cykliczne");
   });
 
-  it("pokazuje podsumowanie podczas szybkiego dodawania Działania", async () => {
+  it("dodaje Działanie ze Startu wyłącznie przez centralny przycisk", async () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.click(screen.getByRole("button", { name: "Dodaj Działanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj Działanie" });
-    await user.type(within(dialog).getByLabelText("Nazwa Działania"), "Przygotować plan rozmowy");
-    await user.click(within(dialog).getByRole("button", { name: "Jutro" }));
-    expect(within(dialog).getByRole("button", { name: "Jutro" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(dialog).getByText("Tak zapiszesz Działanie")).toBeInTheDocument();
-    expect(within(dialog).getByText("Przygotować plan rozmowy")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Otwórz centrum dodawania" }));
+    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
     expect(await screen.findByText("Przygotować plan rozmowy")).toBeInTheDocument();
   });
@@ -152,7 +186,8 @@ describe("goal-centric workspace", () => {
     expect(screen.queryByRole("link", { name: "Zobacz wszystkie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
-    expect(screen.getAllByRole("button", { name: "Dodaj Działanie" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Otwórz centrum dodawania" })).toBeInTheDocument();
   });
 
   it("pokazuje propozycję AI i nie zmienia Skrzynki przed zatwierdzeniem", async () => {

@@ -11,6 +11,7 @@ import { Sheet } from "./ui/sheet";
 import { AppLoading } from "../auth/AuthRoot";
 import { AppErrorReporter } from "../lib/appErrorReporter";
 import { beginPerformanceTiming } from "../lib/performanceMetrics";
+import { useNavigationRestoration } from "./ContextNavigation";
 
 const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 
@@ -27,6 +28,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
   const { state, mode, loading, resetDemo, exportData, reload, syncState } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
+  useNavigationRestoration();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const syncing = syncState.status === "syncing";
   const error = Object.values(syncState.errors)[0];
