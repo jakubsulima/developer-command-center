@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Archive, ArrowDown, ArrowUp, Ban, CalendarDays, Check, ChevronDown, Circle, Flag, History, Layers3, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Target, Trash2 } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Target, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell } from "../components/AppShell";
 import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { AlertDialog } from "../components/AlertDialog";
 import { useActionFeedback } from "../components/action-feedback-context";
-import { Badge, Button, EmptyState, Panel } from "../components/ui";
+import { Button, EmptyState, Panel } from "../components/ui";
 import { Progress } from "../components/ui/progress";
 import { Modal } from "../components/Modal";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
@@ -68,16 +68,21 @@ export function GoalDetailPage() {
   const linkedKnowledge = links.map((link) => ({ link, item: state.knowledge.find((item) => item.id === link.knowledgeItemId) })).filter((value) => value.item);
   const legacySessions = state.focusSessions.filter((session) => session.projectId === goal.id);
   const nextAction = actions.find((action) => action.isNext && ["ready", "in_progress"].includes(action.status));
-  const openActions = actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length;
   const completedCriteria = criteria.filter((item) => item.completed).length;
   const criteriaProgress = criteria.length ? Math.round((completedCriteria / criteria.length) * 100) : 0;
-  const projectName = state.areas.find((area) => area.id === goal.areaId)?.name ?? "Bez Projektu";
   const project = goal.areaId ? state.areas.find((area) => area.id === goal.areaId) : undefined;
   const fallbackBreadcrumbs: NavigationBreadcrumb[] = project ? [{ label: "Projekty", to: "/projects" }, { label: project.name, to: `/projects/${encodeURIComponent(project.id)}` }] : [{ label: "Cele", to: "/goals" }];
   const goalRoute = `/goals/${encodeURIComponent(goal.id)}`;
   const currentBreadcrumb = { label: `Cel: ${goal.title}`, to: goalRoute };
   const breadcrumbs = breadcrumbsForPage(location.state, fallbackBreadcrumbs, currentBreadcrumb);
   const priorityLabel = goal.priority === "high" ? "Wysoka ważność" : goal.priority === "low" ? "Niska ważność" : "Normalna ważność";
+
+  const openGoalEditor = () => {
+    setDialogError("");
+    setGoalForm({ title: goal.title, outcome: goal.outcome, areaId: goal.areaId ?? "", priority: goal.priority, targetDate: goal.targetDate ?? "", criteria: criteria.map((item) => item.title).join("\n") });
+    setEditGoal(true);
+  };
+  const closeGoalMenu = (target: HTMLElement) => target.closest("details")?.removeAttribute("open");
 
   const addAction = async (event: FormEvent) => {
     event.preventDefault();
@@ -172,11 +177,15 @@ export function GoalDetailPage() {
   };
 
   return <AppShell>
-    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} /><details className="goal-more-menu"><summary><MoreHorizontal />Więcej</summary><div><Button loading={visibilitySaving} onClick={() => void changeGoalVisibility("archived")}><Archive />Archiwizuj</Button><Button variant="danger" disabled={visibilitySaving} onClick={() => { setVisibilityError(""); setTrashOpen(true); }}><Trash2 />Przenieś do kosza</Button></div></details></div>
+    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
+      <div className="goal-menu-context"><span>{goalKindLabels[goal.kind]}</span><strong>{project?.name ?? "Bez Projektu"}</strong><small>{priorityLabel} · {goal.targetDate ? `Termin ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${goal.targetDate}T12:00:00Z`))}` : "Bez daty docelowej"}</small></div>
+      <label className="goal-menu-field" htmlFor="goal-status"><span>Stan Celu</span><select id="goal-status" value={goal.status} disabled={goalStatusSaving} aria-busy={goalStatusSaving} onChange={(event) => { const status = event.target.value as typeof goal.status; closeGoalMenu(event.currentTarget); if (status === "achieved" || status === "abandoned") { setStatusReason(""); setGoalStatusError(""); setPendingGoalStatus(status); } else void changeGoalStatus(status); }}><option value="active">Aktywny</option><option value="paused">Wstrzymany</option><option value="achieved">Osiągnięty</option><option value="abandoned">Porzucony</option></select></label>
+      <Button onClick={(event) => { closeGoalMenu(event.currentTarget); openGoalEditor(); }}><Pencil />Edytuj Cel</Button>
+      <Button loading={visibilitySaving} onClick={() => void changeGoalVisibility("archived")}><Archive />Archiwizuj</Button>
+      <Button variant="danger" disabled={visibilitySaving} onClick={(event) => { closeGoalMenu(event.currentTarget); setVisibilityError(""); setTrashOpen(true); }}><Trash2 />Przenieś do kosza</Button>
+    </div></details></div>
     <section className="goal-overview">
-      <div className="goal-overview-main"><div className="goal-overview-kicker"><Badge tone="info">{goalKindLabels[goal.kind]}</Badge><span><Layers3 />{projectName}</span></div><h1>{goal.title}</h1><p>{goal.outcome}</p><div className="goal-overview-meta"><span><Target />{priorityLabel}</span><span><CalendarDays />{goal.targetDate ? `Termin: ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${goal.targetDate}T12:00:00Z`))}` : "Bez daty docelowej"}</span></div></div>
-      <div className="goal-overview-controls"><label htmlFor="goal-status">Stan Celu</label><select id="goal-status" value={goal.status} disabled={goalStatusSaving} aria-busy={goalStatusSaving} onChange={(event) => { const status = event.target.value as typeof goal.status; if (status === "achieved" || status === "abandoned") { setStatusReason(""); setGoalStatusError(""); setPendingGoalStatus(status); } else void changeGoalStatus(status); }}><option value="active">Aktywny</option><option value="paused">Wstrzymany</option><option value="achieved">Osiągnięty</option><option value="abandoned">Porzucony</option></select><Button variant="primary" onClick={() => { setDialogError(""); setGoalForm({ title: goal.title, outcome: goal.outcome, areaId: goal.areaId ?? "", priority: goal.priority, targetDate: goal.targetDate ?? "", criteria: criteria.map((item) => item.title).join("\n") }); setEditGoal(true); }}><Pencil />Edytuj Cel</Button></div>
-      <div className="goal-health-grid"><div><span><ListTodo />Następny krok</span><strong>{nextAction?.title ?? "Wybierz następne Działanie"}</strong></div><div><span><Target />Kryteria</span><strong>{criteria.length ? `${completedCriteria} z ${criteria.length} spełnione` : "Brak kryteriów"}</strong></div><div><span><Flag />Otwarte Działania</span><strong>{openActions}</strong></div></div>
+      <div className="goal-overview-main"><h1>{goal.title}</h1><p>{goal.outcome}</p></div>
     </section>
     {goalStatusError && !pendingGoalStatus ? <p className="inline-mutation-error" role="alert">{goalStatusError}</p> : null}
     {visibilityError && !trashOpen ? <p className="inline-mutation-error" role="alert">{visibilityError} <button type="button" onClick={() => void changeGoalVisibility("archived")}>Spróbuj ponownie</button></p> : null}

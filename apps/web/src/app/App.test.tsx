@@ -87,20 +87,26 @@ describe("goal-centric workspace", () => {
 
     renderApp("/projects/project-history");
     await screen.findByRole("heading", { name: "Projekt z historią" });
+    const overview = screen.getByRole("region", { name: "Co jest teraz najważniejsze" });
+    expect(within(overview).getByRole("button", { name: "Otwórz Cele — 1 bieżący" })).toBeInTheDocument();
+    expect(within(overview).getByRole("button", { name: "Otwórz Działania — 1 otwarte" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Cele" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Działania" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Cele" }));
     const goals = screen.getByRole("region", { name: "Cele" });
-    const actions = screen.getByRole("region", { name: "Działania" });
 
     expect(within(goals).getByText("Bieżący Cel")).toBeInTheDocument();
     expect(within(goals).queryByText("Osiągnięty Cel")).not.toBeInTheDocument();
-    expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
-    expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
-    expect(screen.getByText("Bieżące Cele").previousElementSibling).toHaveTextContent("1");
-
     await user.click(within(goals).getByRole("button", { name: /Historia/ }));
-    await user.click(within(actions).getByRole("button", { name: /Historia/ }));
-
     expect(within(goals).getByText("Osiągnięty Cel")).toBeInTheDocument();
     expect(within(goals).queryByText("Bieżący Cel")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Działania" }));
+    const actions = screen.getByRole("region", { name: "Działania" });
+    expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
+    expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
+    await user.click(within(actions).getByRole("button", { name: /Historia/ }));
     expect(within(actions).getByText("Ukończone Działanie")).toBeInTheDocument();
     expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
   });

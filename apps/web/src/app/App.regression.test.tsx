@@ -282,7 +282,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
-    await user.click(screen.getByText("Więcej", { selector: "summary" }));
+    await user.click(screen.getByText("Opcje Celu"));
     await user.click(screen.getByRole("button", { name: "Przenieś do kosza" }));
     const dialog = screen.getByRole("alertdialog", { name: "Przenieść Cel do Kosza?" });
     expect(dialog).toHaveTextContent("Działania, kryteria, Wiedza i historia postępu pozostaną zachowane.");
@@ -350,6 +350,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
+    await user.click(screen.getByText("Opcje Celu"));
     await user.selectOptions(screen.getByLabelText("Stan Celu"), "paused");
     expect(screen.getByRole("option", { name: "Wstrzymany", selected: true })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edytuj: Zaprojektuj encje i relacje dla transakcji" }));

@@ -17,14 +17,22 @@ describe("goal-centric experience", () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
-    expect(screen.getByText("Następny krok")).toBeInTheDocument();
+    expect(screen.queryByText("Następny krok")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Następne Działanie" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Szybki wpis postępu" })).toBeInTheDocument();
     expect(screen.getByLabelText("Treść aktualizacji")).toBeInTheDocument();
     expect(screen.getByText("Kryteria sukcesu")).toBeInTheDocument();
     expect(screen.getByLabelText(/Postęp kryteriów/)).toBeInTheDocument();
-    expect(screen.getByText("Bez daty docelowej")).toBeInTheDocument();
-    expect(screen.getByText("Więcej", { selector: "summary" })).toBeInTheDocument();
+    expect(screen.queryByText("Bez daty docelowej")).not.toBeInTheDocument();
+    const goalOptions = screen.getByText("Opcje Celu").closest("details") as HTMLDetailsElement;
+    expect(within(goalOptions).getByRole("button", { name: "Edytuj Cel" })).not.toBeVisible();
+    await user.click(within(goalOptions).getByText("Opcje Celu"));
+    expect(within(goalOptions).getByText(/Wysoka ważność/)).toHaveTextContent("Bez daty docelowej");
+    await user.click(within(goalOptions).getByRole("button", { name: "Edytuj Cel" }));
+    expect(goalOptions).not.toHaveAttribute("open");
+    const editGoalDialog = screen.getByRole("dialog", { name: "Edytuj Cel i kryteria" });
+    expect(editGoalDialog).toBeVisible();
+    await user.click(within(editGoalDialog).getByRole("button", { name: "Anuluj" }));
     const details = screen.getByRole("region", { name: "Szczegóły Celu" });
     const actionsSection = within(details).getByText("Działania", { selector: "strong" }).closest("details") as HTMLDetailsElement;
     expect(actionsSection).not.toHaveAttribute("open");
@@ -56,6 +64,7 @@ describe("goal-centric experience", () => {
   it("opens a Project action inside its Goal context", async () => {
     const user = userEvent.setup();
     renderApp("/projects/fintrack-api");
+    await user.click(await screen.findByRole("tab", { name: "Działania" }));
     const action = await screen.findByRole("link", { name: "Otwórz Działanie: Zaprojektuj encje i relacje dla transakcji" });
     await user.click(action);
     expect(await screen.findByRole("heading", { name: "Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
