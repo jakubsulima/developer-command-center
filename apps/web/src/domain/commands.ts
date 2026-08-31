@@ -1,5 +1,6 @@
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, Project, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
+import { validateKnowledgeTarget } from "./knowledge";
 
 export type InboxTriageIntent =
   | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
@@ -433,13 +434,15 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const source = state.knowledge.find((item) => item.id === command.knowledgeItemId);
     if (!source) throw new Error("knowledge_item_not_found");
     validateKnowledgeRelation(source.type, command.meaning, command);
-    if (command.targetKnowledgeItemId && !state.knowledge.some((item) => item.id === command.targetKnowledgeItemId)) throw new Error("knowledge_target_not_found");
-    if (command.targetKnowledgeItemId === command.knowledgeItemId) throw new Error("knowledge_self_link_not_allowed");
-    const duplicate = state.knowledgeLinks.some((link) => link.knowledgeItemId === command.knowledgeItemId
-      && link.areaId === command.areaId && link.goalId === command.goalId && link.actionId === command.actionId
-      && link.recurringTemplateId === command.recurringTemplateId && link.targetKnowledgeItemId === command.targetKnowledgeItemId
-      && link.meaning === command.meaning);
-    if (duplicate) return state;
+    const target = command.targetKnowledgeItemId ? { kind: "knowledge" as const, id: command.targetKnowledgeItemId }
+      : command.areaId ? { kind: "project" as const, id: command.areaId }
+        : command.goalId ? { kind: "goal" as const, id: command.goalId }
+          : command.actionId ? { kind: "action" as const, id: command.actionId }
+            : command.recurringTemplateId ? { kind: "recurring-action" as const, id: command.recurringTemplateId }
+              : undefined;
+    if (!target) throw new Error("knowledge_link_target_required");
+    const canCreate = validateKnowledgeTarget(state, source.id, source.type, target, command.meaning);
+    if (!canCreate) return state;
     return { ...state, knowledgeLinks: [...state.knowledgeLinks, {
       id: command.id,
       knowledgeItemId: command.knowledgeItemId,
@@ -1053,7 +1056,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   const overrideReason = command.wipOverrideReason?.trim();
   if (activeCommitments >= 3 && !overrideReason) throw new Error("wip_override_reason_required");
 
-  const project: Project = {
+  const project: LegacyProjectRecord = {
     id: command.id,
     name: command.title.trim(),
     initials: initials(command.title),

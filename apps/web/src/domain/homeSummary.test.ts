@@ -89,6 +89,12 @@ describe("deriveHomeSummary", () => {
     expect(deriveHomeSummary(state, now)).toMatchObject({ isPristineWorkspace: true, recommendation: { kind: "calm" }, attentionCount: 0, todayActions: [], upcomingActions: [] });
   });
 
+  it("does not treat a workspace with only a current Project as pristine", () => {
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: "2026-08-21", updatedAt: "2026-08-21" }];
+    expect(deriveHomeSummary(state, now).isPristineWorkspace).toBe(false);
+  });
+
   it("keeps historical data from looking pristine", () => {
     const state = structuredClone(emptyState);
     state.actions = [action("done", { status: "completed", completedAt: "2026-08-01T10:00:00.000Z" })];

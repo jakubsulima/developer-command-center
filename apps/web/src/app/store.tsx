@@ -5,7 +5,7 @@ import { demoState } from "../data/demo";
 import { emptyState } from "../data/empty";
 import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import { executeDomainCommand, type InboxTriageIntent } from "../domain/commands";
-import { ensureGoalModel } from "../domain/goals";
+import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
@@ -147,7 +147,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let active = true;
     void localRepository.load().then((saved) => {
       if (!active) return;
-      if (saved) setState(ensureGoalModel(saved));
+      if (saved) setState(migrateLegacyWorkspaceState(saved));
       setLocalHydrated(true);
     }).catch(() => setLocalHydrated(true));
     return () => { active = false; };
@@ -166,7 +166,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (remoteQuery.data) {
-      const hydrated = ensureGoalModel(remoteQuery.data);
+      const hydrated = migrateLegacyWorkspaceState(remoteQuery.data);
       mutationCoordinator.refresh(hydrated);
     }
   }, [mutationCoordinator, remoteQuery.data]);
@@ -219,7 +219,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       throw new Error("Użytkownik nie ma przypisanego Workspace.");
     }
 
-    const hydrated = ensureGoalModel(refreshed.data);
+    const hydrated = migrateLegacyWorkspaceState(refreshed.data);
     stateRef.current = hydrated;
     setState(hydrated);
     return hydrated;
@@ -352,7 +352,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         reconcile: async () => {
           if (!failed) return undefined;
           const refreshed = await remoteQuery.refetch();
-          return refreshed.data ? ensureGoalModel(refreshed.data) : undefined;
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
         }
       });
     },

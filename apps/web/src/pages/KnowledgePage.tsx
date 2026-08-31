@@ -1,5 +1,5 @@
 import { Archive, BookMarked, FileCode2, FileText, FlaskConical, Inbox, Link2, MoreHorizontal, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -18,6 +18,7 @@ import { entityCardVariants } from "../components/ui-variants";
 import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
+import { projectKnowledgeIds } from "../domain/projectModule";
 
 const kinds = {
   artifact: { icon: FileCode2, label: "Rezultat" },
@@ -51,6 +52,7 @@ export function KnowledgePage() {
   const [actionsItemId, setActionsItemId] = useState<string>();
   const [form, setForm] = useState<{ kind: KnowledgeKind; title: string; detail: string; goalIds: string[]; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
   const normalized = query.trim().toLocaleLowerCase("pl");
+  const areaKnowledgeIds = useMemo(() => areaFilter ? projectKnowledgeIds(state, areaFilter) : undefined, [areaFilter, state]);
   useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
     const next = new URLSearchParams(params); let changed = false;
@@ -64,7 +66,7 @@ export function KnowledgePage() {
     const visible = view === "active" ? !item.archivedAt && !item.trashedAt : view === "archived" ? Boolean(item.archivedAt) && !item.trashedAt : Boolean(item.trashedAt);
     const links = state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id);
     const linkedToGoal = !goalFilter || links.some((link) => link.goalId === goalFilter || state.actions.some((action) => action.id === link.actionId && action.goalId === goalFilter));
-    const linkedToArea = !areaFilter || links.some((link) => link.areaId === areaFilter || state.goals.some((goal) => goal.id === link.goalId && goal.areaId === areaFilter) || state.actions.some((action) => action.id === link.actionId && action.areaId === areaFilter));
+    const linkedToArea = !areaFilter || areaKnowledgeIds?.has(item.id);
     return visible && linkedToGoal && linkedToArea && (kind === "all" || item.type === kind) && (!normalized || `${item.title} ${item.detail}`.toLocaleLowerCase("pl").includes(normalized));
   });
   const create = async () => {

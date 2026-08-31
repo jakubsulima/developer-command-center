@@ -14,6 +14,7 @@ import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationBreadcrumb } from "../domain/navigation";
+import { projectProjection } from "../domain/projectModule";
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 type ProjectHistoryFilter = "current" | "history";
@@ -26,7 +27,7 @@ export function ProjectDetailPage() {
   const { state, createGoal, createAction, createKnowledge, updateArea, setAreaVisibility, updateAction, setActionStatus, setNextAction } = useStore();
   const mutation = useKeyedMutation();
   const { notifyUndo } = useActionFeedback();
-  const project = state.areas.find((item) => item.id === projectId);
+  const project = projectProjection(state, projectId ?? "");
   const [dialog, setDialog] = useState<"goal" | "action" | "knowledge" | "edit">();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");

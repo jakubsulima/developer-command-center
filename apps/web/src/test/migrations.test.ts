@@ -20,7 +20,9 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260823070000_explicit_knowledge_relations.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260824054519_workspace_core_and_pages.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -44,6 +46,13 @@ describe("migracje Supabase", () => {
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
     expect(tableCount).toBe(33);
     expect(rlsCount).toBe(33);
+  });
+
+  it("wymusza najwyżej jeden rezultat Wiedzy na Działanie", async () => {
+    const result = await database.query<{ indexname: string }>(
+      "select indexname from pg_indexes where schemaname = 'public' and indexname = 'knowledge_links_one_result_per_action_idx'"
+    );
+    expect(result.rows).toHaveLength(1);
   });
 
   it("nie wystawia tabel bez polityk ani uprzywilejowanych funkcji publicznych", async () => {

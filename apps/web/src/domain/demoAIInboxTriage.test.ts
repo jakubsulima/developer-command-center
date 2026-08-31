@@ -26,7 +26,7 @@ describe("demo AI Inbox triage", () => {
 
   it("rozpoznaje Cel, Projekt i bezpiecznie zatrzymuje niejasne treści", () => {
     const state = structuredClone(emptyState);
-    state.projects = [{ id: "project-learn", name: "Nauka TypeScript", initials: "TS", color: "violet", technology: "TypeScript", outcome: "Rozwój", status: "W trakcie", commitmentStatus: "active", nextStep: "Czytać", primary: false, effortBudgetMinutes: 10, usedMinutes: 0, requirements: [], workItems: [] }];
+    state.areas = [{ id: "project-learn", name: "Nauka TypeScript", description: "Rozwój", visibility: "active", createdAt: "now", updatedAt: "now" }];
     expect(createDemoAIInboxTriageProposal(state, item("Chce osiagnac bieglosc w TypeScript")).proposal).toMatchObject({ decision: "goal", confidence: "medium", linkedType: "project", linkedId: "project-learn" });
     expect(createDemoAIInboxTriageProposal(state, item("Luźna myśl bez decyzji")).proposal).toMatchObject({ decision: "keep_inbox", confidence: "low" });
     expect(createDemoAIInboxTriageProposal(state, item("krótko")).proposal).toMatchObject({ decision: "keep_inbox", confidence: "low" });

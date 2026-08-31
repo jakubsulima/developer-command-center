@@ -41,7 +41,8 @@ export function readNavigationState(value: unknown): NavigationState | undefined
 }
 
 export function readNavigationBreadcrumbs(value: unknown) {
-  if (readNavigationState(value)) return readNavigationState(value)!.breadcrumbs;
+  const navigation = readNavigationState(value);
+  if (navigation) return navigation.breadcrumbs;
   if (!value || typeof value !== "object") return undefined;
   const breadcrumbs = readBreadcrumbs((value as { breadcrumbs?: unknown }).breadcrumbs);
   return breadcrumbs.length ? breadcrumbs : undefined;

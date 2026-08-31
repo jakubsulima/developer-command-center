@@ -127,7 +127,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
 
   return {
     today,
-    isPristineWorkspace: state.projects.length === 0 && state.goals.length === 0 && state.actions.length === 0 && state.knowledge.length === 0 && state.inbox.length === 0,
+    isPristineWorkspace: state.areas.length === 0 && state.goals.length === 0 && state.actions.length === 0 && state.knowledge.length === 0 && state.inbox.length === 0,
     todayActions,
     overdueActions: overdue,
     upcomingActions,

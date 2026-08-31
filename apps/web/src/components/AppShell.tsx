@@ -11,7 +11,7 @@ import { Sheet } from "./ui/sheet";
 import { AppLoading } from "../auth/AuthRoot";
 import { AppErrorReporter } from "../lib/appErrorReporter";
 import { beginPerformanceTiming } from "../lib/performanceMetrics";
-import { useNavigationRestoration } from "./ContextNavigation";
+import { useNavigationRestoration } from "../hooks/useNavigationRestoration";
 
 const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 

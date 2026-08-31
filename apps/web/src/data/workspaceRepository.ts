@@ -1,8 +1,81 @@
 import type { DomainCommand } from "../domain/commands";
-import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, Project, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
+import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
+
+export type WorkspaceIntent = DomainCommand;
+export type WorkspaceIntentResult<Intent extends WorkspaceIntent> = Intent extends unknown ? AppState : never;
+
+export interface WorkspaceSelection<T> {
+  key: string;
+  select: (state: AppState) => T;
+}
+
+export interface WorkspaceObservation<T> {
+  getSnapshot(): T;
+  subscribe(listener: () => void): () => void;
+}
+
+export type WorkspaceQuery =
+  | { type: "core"; userId: string }
+  | { type: "page"; query: WorkspacePageQuery }
+  | { type: "knowledge-item"; id: string }
+  | { type: "legacy-focus-session"; id: string }
+  | { type: "search"; query: string; limit?: number }
+  | { type: "export"; workspaceId: string };
+
+export type WorkspaceQueryResult<Q extends WorkspaceQuery> =
+  Q extends { type: "core" } ? WorkspaceCore
+    : Q extends { type: "page" } ? Page<WorkspacePageItem>
+      : Q extends { type: "knowledge-item" } ? KnowledgeItem | undefined
+        : Q extends { type: "legacy-focus-session" } ? FocusSessionRecord | undefined
+          : Q extends { type: "search" } ? SearchResult[]
+            : Q extends { type: "export" } ? WorkspaceExport
+              : never;
+
+/** Small caller-facing seam; adapters remain behind WorkspacePersistence. */
+export interface Workspace {
+  observe<T>(selection: WorkspaceSelection<T>): WorkspaceObservation<T>;
+  query<Q extends WorkspaceQuery>(query: Q): Promise<WorkspaceQueryResult<Q>>;
+  execute<C extends WorkspaceIntent>(intent: C): Promise<WorkspaceIntentResult<C>>;
+}
+
+export type PersistedQuery = WorkspaceQuery;
+export type PersistedQueryResult<Q extends PersistedQuery> = WorkspaceQueryResult<Q>;
+
+export interface CommandEnvelope<C extends WorkspaceIntent> {
+  commandId: string;
+  idempotencyKey: string;
+  command: C;
+}
+
+export interface CommandReceipt<C extends WorkspaceIntent> {
+  commandId: string;
+  idempotencyKey: string;
+  committedAt: string;
+  result: WorkspaceIntentResult<C>;
+}
+
+export interface WorkspacePersistence {
+  read<Q extends PersistedQuery>(query: Q): Promise<PersistedQueryResult<Q>>;
+  commit<C extends WorkspaceIntent>(command: CommandEnvelope<C>): Promise<CommandReceipt<C>>;
+}
+
+export type WorkspaceErrorCategory =
+  | "validation"
+  | "not_found"
+  | "access_denied"
+  | "version_conflict"
+  | "schema_incompatibility"
+  | "unavailable_persistence";
+
+export class WorkspaceError extends Error {
+  public constructor(public readonly category: WorkspaceErrorCategory, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "WorkspaceError";
+  }
+}
 
 export interface PageCursor {
   sortValue: string;
@@ -35,7 +108,7 @@ export interface WorkspaceCore {
   goals: Goal[];
   goalCriteria: GoalCriterion[];
   actions: GoalAction[];
-  projects: Project[];
+  legacyProjects: LegacyProjectRecord[];
   recurringActionTemplates: RecurringActionTemplate[];
   knowledgeLinks: KnowledgeLink[];
   counts: {
@@ -50,8 +123,6 @@ export interface WorkspaceCore {
 }
 
 export type WorkspaceCommand = DomainCommand;
-export type CommandResult = AppState;
-
 export interface WorkspaceExport {
   format: string;
   version: number;
@@ -68,7 +139,6 @@ export interface WorkspaceRepository {
   loadKnowledgeItem(id: string): Promise<KnowledgeItem | undefined>;
   loadLegacyFocusSession(id: string): Promise<FocusSessionRecord | undefined>;
   search(query: string, limit?: number): Promise<SearchResult[]>;
-  execute(command: WorkspaceCommand): Promise<CommandResult>;
   exportWorkspace(workspaceId: string): Promise<WorkspaceExport>;
   getLatestGoalReview(workspaceId: string): Promise<AIGoalReview | undefined>;
   requestGoalReview(workspaceId: string, forceRefresh?: boolean): Promise<AIGoalReview>;

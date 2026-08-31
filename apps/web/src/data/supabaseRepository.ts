@@ -1,7 +1,7 @@
-import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, Project, ProjectStatus, RecurringActionTemplate } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectStatus, RecurringActionTemplate } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
-import { ensureGoalModel } from "../domain/goals";
+import { migrateLegacyWorkspaceState } from "../domain/goals";
 import { getSupabase } from "../lib/supabase";
 import { emptyState } from "./empty";
 import { createSupabaseWorkspaceRepository } from "./supabaseWorkspaceRepository";
@@ -140,9 +140,9 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const knowledgeContentMap = new Map(knowledgeContents.map((item) => [item.entity_id, item]));
   const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
   const workItemMap = new Map(workItems.map((item) => [item.entity_id, item]));
-  const colors: Project["color"][] = ["violet", "orange", "amber"];
+  const colors: LegacyProjectRecord["color"][] = ["violet", "orange", "amber"];
 
-  const projects: Project[] = projectRows.map((project, index) => {
+  const projects: LegacyProjectRecord[] = projectRows.map((project, index) => {
     const entity = entityMap.get(project.entity_id);
     const commitment = commitments.find((item) => item.target_entity_id === project.entity_id);
     const projectWork = workItems.filter((item) => item.primary_context_entity_id === project.entity_id);
@@ -161,7 +161,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
       technology: constraintTechnology(project.constraints_md),
       outcome: project.outcome,
       status: projectStatus(project, commitment, blocker),
-      commitmentStatus: commitment?.status as Project["commitmentStatus"],
+      commitmentStatus: commitment?.status as LegacyProjectRecord["commitmentStatus"],
       nextStep: next ? entityMap.get(next.entity_id)?.title ?? next.description : "Zdefiniuj następny fizyczny krok",
       blocker,
       primary: commitment?.is_primary ?? false,
@@ -187,7 +187,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const selectedProjectId = selectedWorkItem?.primary_context_entity_id ?? primaryProject?.id ?? "";
   const proposal = proposals[0];
 
-  return ensureGoalModel({
+  return migrateLegacyWorkspaceState({
     ...emptyState,
     workspaceId,
     workspaceTimezone: workspace.timezone || "Europe/Warsaw",
@@ -281,7 +281,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
       repository.loadPage({ workspaceId, collection: "completed-actions", pageSize: 50 })
     ]);
     const typed = (items: WorkspacePageItem[]) => items;
-    return ensureGoalModel({
+    return migrateLegacyWorkspaceState({
       ...structuredClone(emptyState),
       workspaceId,
       workspaceTimezone: core.workspaceTimezone,
@@ -290,7 +290,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
       goals: core.goals,
       goalCriteria: core.goalCriteria,
       actions: [...core.actions, ...(typed(completedActions.items) as AppState["actions"])],
-      projects: core.projects,
+      projects: core.legacyProjects,
       recurringActionTemplates: core.recurringActionTemplates,
       knowledgeLinks: core.knowledgeLinks,
       inbox: typed(inbox.items) as AppState["inbox"],

@@ -8,6 +8,7 @@ import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { entityCardVariants } from "../components/ui-variants";
 import { locationAddress } from "../domain/navigation";
 import { useLocation } from "react-router-dom";
+import { projectProjections } from "../domain/projectModule";
 
 const colors = ["violet", "orange", "amber"] as const;
 
@@ -23,18 +24,14 @@ export function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", description: "" });
-  const projects = state.areas.filter((project) => project.visibility === view);
-  const activeProjects = state.areas.filter((project) => project.visibility === "active").length;
+  const projects = projectProjections(state, view);
+  const activeProjects = projectProjections(state, "active").length;
 
-  const metrics = useMemo(() => new Map(state.areas.map((project) => {
-    const goals = state.goals.filter((goal) => goal.areaId === project.id && goal.visibility === "active");
-    const goalIds = new Set(goals.map((goal) => goal.id));
-    const actions = state.actions.filter((action) => action.areaId === project.id || Boolean(action.goalId && goalIds.has(action.goalId)));
-    const actionIds = new Set(actions.map((action) => action.id));
-    const recurringIds = new Set(state.recurringActionTemplates.filter((item) => item.areaId === project.id || Boolean(item.goalId && goalIds.has(item.goalId))).map((item) => item.id));
-    const knowledge = new Set(state.knowledgeLinks.filter((link) => link.areaId === project.id || Boolean(link.goalId && goalIds.has(link.goalId)) || Boolean(link.actionId && actionIds.has(link.actionId)) || Boolean(link.recurringTemplateId && recurringIds.has(link.recurringTemplateId))).map((link) => link.knowledgeItemId));
-    return [project.id, { goals: goals.length, actions: actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length, knowledge: knowledge.size }];
-  })), [state.actions, state.areas, state.goals, state.knowledgeLinks, state.recurringActionTemplates]);
+  const metrics = useMemo(() => new Map(projectProjections(state).map((project) => [project.id, {
+    goals: project.goals.filter((goal) => goal.visibility === "active").length,
+    actions: project.actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length,
+    knowledge: project.knowledge.filter((item) => !item.archivedAt && !item.trashedAt).length
+  }])), [state]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

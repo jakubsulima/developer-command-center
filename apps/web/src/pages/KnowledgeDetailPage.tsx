@@ -17,6 +17,7 @@ import { useAuth } from "../auth/useAuth";
 import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationBreadcrumb } from "../domain/navigation";
+import { resolveKnowledgeProjectContexts } from "../domain/knowledge";
 
 export function KnowledgeDetailPage() {
   const { knowledgeId } = useParams();
@@ -49,28 +50,16 @@ export function KnowledgeDetailPage() {
   const supportingLinks = useMemo(() => state.knowledgeLinks.filter((link) => link.targetKnowledgeItemId === knowledgeId), [knowledgeId, state.knowledgeLinks]);
   const projectContexts = useMemo(() => {
     const contexts = new Map<string, { project: typeof state.areas[number]; directLinks: typeof links; sources: Set<string> }>();
-    const add = (areaId: string | undefined, source: string, directLink?: typeof links[number]) => {
-      const project = state.areas.find((area) => area.id === areaId);
-      if (!project) return;
+    for (const context of resolveKnowledgeProjectContexts(state, knowledgeId ?? "")) {
+      const project = state.areas.find((area) => area.id === context.projectId);
+      if (!project) continue;
       const current = contexts.get(project.id) ?? { project, directLinks: [], sources: new Set<string>() };
-      current.sources.add(source);
-      if (directLink) current.directLinks.push(directLink);
+      current.sources.add(context.source === "direct" ? "bezpośrednio" : context.source === "goal" ? "przez Cel" : context.source === "action" ? "przez Działanie" : "przez Rutynę");
+      current.directLinks = links.filter((link) => link.areaId === project.id);
       contexts.set(project.id, current);
-    };
-    for (const link of links) {
-      if (link.areaId) add(link.areaId, "bezpośrednio", link);
-      if (link.goalId) add(state.goals.find((goal) => goal.id === link.goalId)?.areaId, "przez Cel");
-      if (link.actionId) {
-        const action = state.actions.find((candidate) => candidate.id === link.actionId);
-        add(action?.areaId ?? state.goals.find((goal) => goal.id === action?.goalId)?.areaId, "przez Działanie");
-      }
-      if (link.recurringTemplateId) {
-        const series = state.recurringActionTemplates.find((candidate) => candidate.id === link.recurringTemplateId);
-        add(series?.areaId ?? state.goals.find((goal) => goal.id === series?.goalId)?.areaId, "przez Rutynę");
-      }
     }
     return [...contexts.values()];
-  }, [links, state]);
+  }, [knowledgeId, links, state]);
   if (!localItem && itemQuery.isPending) return <AppShell><EmptyState icon={<BookMarked />} title="Ładowanie Wiedzy" detail="Pobieram element…" /></AppShell>;
   if (!resolvedItem) return <AppShell><EmptyState icon={<BookMarked />} title="Nie znaleziono elementu Wiedzy" detail="Element nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/knowledge")}>Wróć do Wiedzy</Button>} /></AppShell>;
   const item = resolvedItem;
