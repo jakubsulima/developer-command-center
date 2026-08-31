@@ -1,5 +1,6 @@
 import type { AppState, Goal, GoalAction, InboxItem } from "./types";
 import { localDateForTimeZone, selectWorkspaceActivity } from "./activity";
+import { routeForEntity } from "./routes";
 import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
 export type HomeAttentionKind = "blocked" | "overdue" | "goal_without_next_action" | "knowledge_queue";
@@ -61,7 +62,7 @@ function sortByAge<T extends { id: string; createdAt?: string; scheduledFor?: st
 }
 
 function actionRoute(action: GoalAction) {
-  return action.goalId ? `/goals/${encodeURIComponent(action.goalId)}?action=${encodeURIComponent(action.id)}` : `/actions/${encodeURIComponent(action.id)}`;
+  return routeForEntity({ type: "action", id: action.id });
 }
 
 function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeAttentionSignal {
@@ -126,7 +127,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
 
   return {
     today,
-    isPristineWorkspace: state.projects.length === 0 && state.goals.length === 0 && state.actions.length === 0 && state.knowledge.length === 0 && state.inbox.length === 0,
+    isPristineWorkspace: state.areas.length === 0 && state.goals.length === 0 && state.actions.length === 0 && state.knowledge.length === 0 && state.inbox.length === 0,
     todayActions,
     overdueActions: overdue,
     upcomingActions,

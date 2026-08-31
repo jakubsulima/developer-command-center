@@ -4,7 +4,7 @@ import { AI_INBOX_TRIAGE_SCHEMA_VERSION, type AIInboxTriageProposal } from "./ai
 function linkedTarget(content: string, state: AppState) {
   const words = content.toLocaleLowerCase("pl-PL").split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4);
   const score = (title: string) => words.filter((word) => title.toLocaleLowerCase("pl-PL").includes(word)).length;
-  const candidates = [...state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").map((goal) => ({ type: "goal" as const, id: goal.id, title: goal.title })), ...state.projects.filter((project) => !project.archivedAt && !project.trashedAt).map((project) => ({ type: "project" as const, id: project.id, title: project.name }))];
+  const candidates = [...state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").map((goal) => ({ type: "goal" as const, id: goal.id, title: goal.title })), ...state.areas.filter((project) => project.visibility === "active").map((project) => ({ type: "project" as const, id: project.id, title: project.name }))];
   const best = candidates.map((candidate) => ({ candidate, score: score(candidate.title) })).sort((left, right) => right.score - left.score)[0];
   return best && best.score > 0 ? { linkedType: best.candidate.type, linkedId: best.candidate.id } : { linkedType: "none" as const, linkedId: null };
 }

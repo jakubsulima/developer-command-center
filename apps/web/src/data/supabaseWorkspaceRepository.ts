@@ -1,6 +1,6 @@
-import type { AppState, FocusSessionRecord, KnowledgeItem } from "../domain/types";
+import type { FocusSessionRecord, KnowledgeItem } from "../domain/types";
 import { getSupabase } from "../lib/supabase";
-import type { CommandResult, Page, PageCursor, SearchResult, WorkspaceCommand, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
+import type { Page, PageCursor, SearchResult, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
 import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent, type AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 import { AIInboxTriageError, decodeAIInboxTriageProposal, type AIInboxTriageFeedbackRating } from "../domain/aiInboxTriage";
 
@@ -31,7 +31,7 @@ export function decodeWorkspaceCore(payload: unknown): WorkspaceCore {
     goals: arrayPayload(root.goals, "WorkspaceCore.goals"),
     goalCriteria: arrayPayload(root.goalCriteria, "WorkspaceCore.goalCriteria"),
     actions: arrayPayload(root.actions, "WorkspaceCore.actions"),
-    projects: arrayPayload(root.projects, "WorkspaceCore.projects"),
+    legacyProjects: arrayPayload(root.legacyProjects ?? root.projects, "WorkspaceCore.legacyProjects"),
     recurringActionTemplates: arrayPayload(root.recurringActionTemplates, "WorkspaceCore.recurringActionTemplates"),
     knowledgeLinks: arrayPayload(root.knowledgeLinks, "WorkspaceCore.knowledgeLinks"),
     counts: {
@@ -106,11 +106,6 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       const { data, error } = await getSupabase().rpc("search_workspace", { search_query: query.trim(), result_limit: Math.min(limit, 20) });
       if (error) throw new Error(`WorkspaceSearch: ${error.message}`);
       return arrayPayload<SearchResult>(data, "WorkspaceSearch");
-    },
-    async execute(command: WorkspaceCommand): Promise<CommandResult> {
-      const { data, error } = await getSupabase().rpc("execute_workspace_command", { workspace_command: command });
-      if (error) throw new Error(`WorkspaceCommand: ${error.message}`);
-      return data as AppState;
     },
     async exportWorkspace(workspaceId): Promise<WorkspaceExport> {
       const { exportWorkspaceRemote } = await import("./supabaseRepository");

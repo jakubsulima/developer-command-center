@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Archive, CalendarClock, CalendarDays, Check, ChevronRight, CircleAlert, Layers3, ListPlus, Plus, Repeat2, SkipForward, Sparkles, TrendingUp } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
@@ -15,11 +15,13 @@ import { formatWorkspaceDateRange } from "../domain/activity";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
 import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
+import { NavigationLink } from "../components/ContextNavigation";
+import { locationAddress, navigationCardId } from "../domain/navigation";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
 const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
 
-function StartActionRow({ action, context, relationSummary, complete, openMore, busy, error, retry }: {
+function StartActionRow({ action, context, relationSummary, complete, openMore, busy, error, retry, breadcrumbs, returnTo }: {
   action: GoalAction;
   context: ActionContext;
   relationSummary: string[];
@@ -28,10 +30,12 @@ function StartActionRow({ action, context, relationSummary, complete, openMore, 
   busy: boolean;
   error?: string;
   retry?: () => Promise<void>;
+  breadcrumbs: Array<{ label: string; to?: string }>;
+  returnTo: string;
 }) {
-  return <div className="today-action">
+  return <div className="today-action" data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
     <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => void complete(action.id)} onMore={() => openMore(action.id)} />
-    <div className="action-copy"><div className="action-title-row"><strong>{action.title}</strong>{action.isNext ? <span className="action-next-badge">Następne</span> : null}{action.recurringTemplateId ? <span className="action-recurring-marker">cykliczne</span> : null}</div><small>{context.to !== "/" ? <Link to={context.to}>{describeActionContext(context)}</Link> : describeActionContext(context)}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
+    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong>{action.recurringTemplateId ? <span className="action-recurring-marker">cykliczne</span> : null}</NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><small>{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
     {action.status === "blocked" ? <Badge tone="danger">Zablokowane</Badge> : null}
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </div>;
@@ -42,6 +46,7 @@ export function StartPage() {
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const materializeOnMount = useRef(materializeRecurring);
   const [actionOpen, setActionOpen] = useState(false);
   const [actionSaving, setActionSaving] = useState(false);
@@ -73,7 +78,9 @@ export function StartPage() {
   const setNext = (action: GoalAction) => action.goalId ? mutation.run(`start:${action.id}`, () => setNextAction(action.goalId!, action.id)) : Promise.resolve();
   const skip = (action: GoalAction) => mutation.run(`start:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, action.status, action.blocker) }); });
   const contextFor = (action: GoalAction) => resolveActionContext(action, state);
-  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} complete={complete} openMore={setActionMenuId} busy={mutation.isBusy(`start:${action.id}`)} error={mutation.error(`start:${action.id}`)} retry={mutation.retry(`start:${action.id}`)} /></div>; };
+  const startBreadcrumbs = [{ label: "Start", to: "/" }];
+  const startAddress = locationAddress(location);
+  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} complete={complete} openMore={setActionMenuId} busy={mutation.isBusy(`start:${action.id}`)} error={mutation.error(`start:${action.id}`)} retry={mutation.retry(`start:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} /></div>; };
 
   const submitAction = async (event: FormEvent) => {
     event.preventDefault();
@@ -105,20 +112,20 @@ export function StartPage() {
     : summary.recommendation.kind === "goal_without_next_action" ? "Ustal następny krok" : "Przejdź do decyzji";
 
   return <AppShell>
-    <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} action={hasWork ? <Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button> : undefined} />
+    <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} />
 
-    {showFirstFlow ? <Panel className="first-flow-panel" aria-labelledby="first-flow-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Pierwsza minuta</span><h2 id="first-flow-title">Jeden użyteczny wynik</h2></div><Badge tone="neutral">bez touru modułów</Badge></div><p>Zacznij od rzeczy, którą naprawdę chcesz zrobić. Przechwyć myśl, zamień ją w jedno Działanie, zobacz je tutaj i oznacz jako ukończone.</p><ol className="first-flow-steps"><li className={summary.isPristineWorkspace ? "current" : "done"}>Przechwyć myśl</li><li className={state.inbox.length ? "current" : ""}>Utwórz Działanie</li><li className={state.actions.length ? "current" : ""}>Ukończ na Starcie</li></ol>{summary.isPristineWorkspace ? <Link className="button button-primary" to="/knowledge?section=inbox&capture=true"><Archive />Przechwyć teraz</Link> : state.inbox.some((item) => item.status === "unprocessed") ? <Link className="button button-primary" to="/knowledge?section=inbox&status=unprocessed"><ListPlus />Utwórz Działanie</Link> : firstOpenAction ? <Link className="button button-primary" to={routeForEntity({ type: "action", id: firstOpenAction.id, goalId: firstOpenAction.goalId })}>Otwórz pierwsze Działanie<ChevronRight /></Link> : null}</Panel> : null}
+    {showFirstFlow ? <Panel className="first-flow-panel" aria-labelledby="first-flow-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Pierwsza minuta</span><h2 id="first-flow-title">Jeden użyteczny wynik</h2></div><Badge tone="neutral">bez touru modułów</Badge></div><p>Zacznij od rzeczy, którą naprawdę chcesz zrobić. Przechwyć myśl, zamień ją w jedno Działanie, zobacz je tutaj i oznacz jako ukończone.</p><ol className="first-flow-steps"><li className={summary.isPristineWorkspace ? "current" : "done"}>Przechwyć myśl</li><li className={state.inbox.length ? "current" : ""}>Utwórz Działanie</li><li className={state.actions.length ? "current" : ""}>Ukończ na Starcie</li></ol>{summary.isPristineWorkspace ? <Link className="button button-primary" to="/knowledge?section=inbox&capture=true"><Archive />Przechwyć teraz</Link> : state.inbox.some((item) => item.status === "unprocessed") ? <Link className="button button-primary" to="/knowledge?section=inbox&status=unprocessed"><ListPlus />Utwórz Działanie</Link> : firstOpenAction ? <NavigationLink className="button button-primary" to={routeForEntity({ type: "action", id: firstOpenAction.id })} breadcrumbs={startBreadcrumbs} returnTo={startAddress} returnLabel="Start" sourceCardId={navigationCardId("action", firstOpenAction.id)}>Otwórz pierwsze Działanie<ChevronRight /></NavigationLink> : null}</Panel> : null}
 
     {summary.recommendation.kind !== "calm" ? <Panel className={`start-recommendation ${summary.recommendation.kind === "next_action" ? "start-next-recommendation" : ""}`} aria-labelledby="start-recommendation-title"><div className="start-section-heading"><div><span className="eyebrow"><Sparkles />Priorytet</span><h2 id="start-recommendation-title">Najważniejsze teraz</h2></div><Badge tone="warning">{summary.recommendation.kind === "next_action" ? "Następne Działanie" : "Jedna decyzja"}</Badge></div><div className="recommendation-content"><div><strong>{summary.recommendation.title}</strong>{summary.recommendation.context ? <small className="recommendation-context">{summary.recommendation.context}</small> : null}<p>{summary.recommendation.detail}</p></div><Link className="button button-primary" to={summary.recommendation.to}>{recommendationCta}<ChevronRight /></Link></div></Panel> : null}
 
     <div className="today-layout start-layout">
       <div className="today-main start-main">
         <Panel aria-labelledby="start-today-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarDays />Plan dnia</span><h2 id="start-today-title">Na dziś</h2></div><span className="count-chip" aria-label={`${summary.todayActions.length} działań na dziś`}>{summary.todayActions.length}</span></div>{todayItems.length ? <div className="today-list">{todayItems.map(renderAction)}</div> : <p className="muted-copy">Nic nie jest zaplanowane ani przypięte na dziś.</p>}{summary.todayActions.length > 5 ? <Link className="section-link" to="/?show=today">{showAll("today") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-        {summary.isPristineWorkspace ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Zacznij od jednego kroku" detail="Wykonaj pierwsze Działanie albo zapisz myśl do późniejszego uporządkowania." action={<div className="button-row"><Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Dodaj Działanie</Button><Link className="button button-secondary" to="/knowledge?section=inbox&capture=true"><Archive />Zapisz do Skrzynki</Link></div>} /></Panel> : null}
+        {summary.isPristineWorkspace ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Zacznij od jednego kroku" detail="Wykonaj pierwsze Działanie albo zapisz myśl do późniejszego uporządkowania." action={<Link className="button button-secondary" to="/knowledge?section=inbox&capture=true"><Archive />Zapisz do Skrzynki</Link>} /></Panel> : null}
         {showNoPlan ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Nic nie jest zaplanowane na dziś" detail="Workspace ma już historię. Wybierz jeden konkretny następny krok, żeby łatwo wrócić do działania." action={<Button variant="primary" onClick={() => setActionOpen(true)}><Plus />Ustal następny krok</Button>} /></Panel> : null}
       </div>
       <aside className="today-aside start-aside">
-        <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h2 id="start-upcoming-title">Nadchodzące</h2></div><span className="count-chip" aria-label={`${summary.upcomingActions.length} nadchodzących działań`}>{summary.upcomingActions.length}</span></div>{upcomingItems.length ? upcomingItems.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><Link to={routeForEntity({ type: "action", id: action.id, goalId: action.goalId })}>{action.title}{action.recurringTemplateId ? <small><Repeat2 />cykliczne</small> : null}</Link></div>) : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{summary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
+        <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h2 id="start-upcoming-title">Nadchodzące</h2></div><span className="count-chip" aria-label={`${summary.upcomingActions.length} nadchodzących działań`}>{summary.upcomingActions.length}</span></div>{upcomingItems.length ? upcomingItems.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><NavigationLink data-navigation-card-id={navigationCardId("action", action.id)} to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={startBreadcrumbs} returnTo={startAddress} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{action.title}{action.recurringTemplateId ? <small><Repeat2 />cykliczne</small> : null}</NavigationLink></div>) : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{summary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
         <Panel aria-labelledby="start-activity-title"><div className="start-section-heading"><div><span className="eyebrow"><TrendingUp />Rytm pracy</span><h2 id="start-activity-title">Bieżący tydzień</h2></div></div><p className="activity-period">{formatWorkspaceDateRange(summary.activity.periodStart, summary.activity.periodEnd)}</p><div className="activity-grid"><div><strong>{summary.activity.completedActions}</strong><span>ukończonych Działań</span></div><div><strong>{summary.activity.progressUpdates}</strong><span>aktualizacji postępu</span></div><div><strong>{summary.activity.knowledgeAdded}</strong><span>dodanych elementów Wiedzy</span></div></div><p className="muted-copy">To informacja o ruchu w Workspace, nie ocena produktywności.</p></Panel>
       </aside>
     </div>

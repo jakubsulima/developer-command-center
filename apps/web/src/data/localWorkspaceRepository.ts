@@ -1,5 +1,5 @@
 import { executeDomainCommand, type DomainCommand } from "../domain/commands";
-import { ensureGoalModel } from "../domain/goals";
+import { migrateLegacyWorkspaceState } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
@@ -12,7 +12,7 @@ const DATABASE_NAME = "developer-command-center";
 const STORE_NAME = "workspace";
 const STATE_KEY = "active";
 const FALLBACK_KEY = "command-center-local-workspace-v2";
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 interface StoredWorkspace {
   version: number;
@@ -23,6 +23,7 @@ interface StoredWorkspace {
 export interface WorkspaceRepository extends CoreWorkspaceRepository {
   load(): Promise<AppState | null>;
   save(state: AppState): Promise<void>;
+  execute(command: DomainCommand): Promise<AppState>;
   export(): Promise<{ format: string; version: number; exportedAt: string; state: AppState }>;
   clear(): Promise<void>;
 }
@@ -46,7 +47,7 @@ function toWorkspaceCore(state: AppState): WorkspaceCore {
     goals: structuredClone(state.goals),
     goalCriteria: structuredClone(state.goalCriteria),
     actions: structuredClone(state.actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status))),
-    projects: structuredClone(state.projects),
+    legacyProjects: structuredClone(state.projects),
     recurringActionTemplates: structuredClone(state.recurringActionTemplates),
     knowledgeLinks: structuredClone(state.knowledgeLinks),
     counts: {
@@ -127,7 +128,8 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       ? await readIndexedDb(indexedDb)
       : JSON.parse(storage.getItem(FALLBACK_KEY) ?? "null") as StoredWorkspace | null;
     if (!stored?.state) return null;
-    return ensureGoalModel(structuredClone(stored.state));
+    const snapshot = structuredClone(stored.state);
+    return stored.version < SCHEMA_VERSION ? migrateLegacyWorkspaceState(snapshot) : snapshot;
   };
 
   const save = async (state: AppState) => {
@@ -179,7 +181,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
         ...state.goals.filter((item) => `${item.title} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "goal" as const, title: item.title, detail: item.outcome, route: `/goals/${item.id}` })),
         ...state.actions.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "action" as const, title: item.title, detail: item.detail, route: `/actions/${item.id}` })),
         ...state.knowledge.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
-        ...state.projects.filter((item) => `${item.name} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.outcome, route: `/projects/${item.id}` })),
+        ...state.areas.filter((item) => item.visibility === "active" && `${item.name} ${item.description ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.description, route: `/projects/${item.id}` })),
         ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: `/knowledge?section=inbox&item=${item.id}` }))
       ];
       return results.slice(0, Math.min(20, Math.max(1, limit)));

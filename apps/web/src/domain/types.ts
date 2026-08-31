@@ -26,6 +26,24 @@ export interface Area {
   updatedAt: string;
 }
 
+/**
+ * The active Project context. Persisted Project identity currently lives in
+ * `areas`; the Project module enriches this record with its related objects.
+ */
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  visibility: Visibility;
+  createdAt: string;
+  updatedAt: string;
+  goals: Goal[];
+  actions: GoalAction[];
+  recurringActionTemplates: RecurringActionTemplate[];
+  knowledge: KnowledgeItem[];
+}
+
 export interface GoalTemplate {
   id: string;
   name: string;
@@ -144,6 +162,14 @@ export interface KnowledgeLink {
   createdAt: string;
 }
 
+/** Exactly one domain object can be the target of a Knowledge relation. */
+export type KnowledgeTarget =
+  | { kind: "project"; id: string }
+  | { kind: "goal"; id: string }
+  | { kind: "action"; id: string }
+  | { kind: "recurring-action"; id: string }
+  | { kind: "knowledge"; id: string };
+
 /** Exactly one target is required for every Knowledge relation. */
 export type KnowledgeRelationTarget =
   | { targetKnowledgeItemId: string; areaId?: never; goalId?: never; actionId?: never; recurringTemplateId?: never }
@@ -191,7 +217,8 @@ export interface WorkItem {
   blocker?: string;
 }
 
-export interface Project {
+/** Historical Project aggregate retained for read-only history and export. */
+export interface LegacyProjectRecord {
   id: string;
   name: string;
   initials: string;
@@ -349,7 +376,8 @@ export interface AppState {
   progressEntries: ProgressEntry[];
   recurringActionTemplates: RecurringActionTemplate[];
   knowledgeLinks: KnowledgeLink[];
-  projects: Project[];
+  /** Historical Project records. Active Project contexts are derived from areas. */
+  projects: LegacyProjectRecord[];
   checkpoints: Checkpoint[];
   inbox: InboxItem[];
   evidence: LearningEvidence[];

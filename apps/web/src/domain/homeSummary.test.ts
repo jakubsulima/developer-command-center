@@ -37,6 +37,13 @@ describe("deriveHomeSummary", () => {
     expect(deriveHomeSummary(state, now).recommendation.kind).toBe("goal_without_next_action");
   });
 
+  it("always points action recommendations to the action detail route", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    state.actions = [action("next", { goalId: "goal-1", isNext: true })];
+    expect(deriveHomeSummary(state, now).recommendation.to).toBe("/actions/next");
+  });
+
   it("prefers a conscious next action across multiple goals", () => {
     const state = structuredClone(emptyState);
     state.goals = [
@@ -80,6 +87,12 @@ describe("deriveHomeSummary", () => {
   it("returns a calm recommendation for an empty workspace", () => {
     const state = structuredClone(emptyState);
     expect(deriveHomeSummary(state, now)).toMatchObject({ isPristineWorkspace: true, recommendation: { kind: "calm" }, attentionCount: 0, todayActions: [], upcomingActions: [] });
+  });
+
+  it("does not treat a workspace with only a current Project as pristine", () => {
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: "2026-08-21", updatedAt: "2026-08-21" }];
+    expect(deriveHomeSummary(state, now).isPristineWorkspace).toBe(false);
   });
 
   it("keeps historical data from looking pristine", () => {

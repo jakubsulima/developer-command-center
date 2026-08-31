@@ -6,7 +6,7 @@ import type {
   GoalCriterion,
   GoalStatus,
   LearningGoal,
-  Project,
+  LegacyProjectRecord,
   Visibility,
   WorkItem
 } from "./types";
@@ -17,7 +17,7 @@ function visibilityOf(item: { archivedAt?: string; trashedAt?: string }): Visibi
   return "active";
 }
 
-function projectStatus(project: Project): GoalStatus {
+function projectStatus(project: LegacyProjectRecord): GoalStatus {
   if (project.domainStatus === "completed" || project.commitmentStatus === "fulfilled") return "achieved";
   if (project.domainStatus === "abandoned" || project.commitmentStatus === "released") return "abandoned";
   if (project.commitmentStatus === "paused") return "paused";
@@ -39,7 +39,7 @@ function actionStatus(workItem: WorkItem): ActionStatus {
   return "ready";
 }
 
-function projectGoal(project: Project): Goal {
+function projectGoal(project: LegacyProjectRecord): Goal {
   return {
     id: project.id,
     title: project.name,
@@ -53,7 +53,7 @@ function projectGoal(project: Project): Goal {
   };
 }
 
-function projectArea(project: Project) {
+function projectArea(project: LegacyProjectRecord) {
   const timestamp = new Date(0).toISOString();
   return {
     id: project.id,
@@ -78,7 +78,7 @@ function learningGoal(goal: LearningGoal): Goal {
   };
 }
 
-function projectActions(project: Project): GoalAction[] {
+function projectActions(project: LegacyProjectRecord): GoalAction[] {
   return project.workItems.map((item, position) => ({
     id: item.id,
     version: 1,
@@ -96,7 +96,7 @@ function projectActions(project: Project): GoalAction[] {
   }));
 }
 
-function projectCriteria(project: Project): GoalCriterion[] {
+function projectCriteria(project: LegacyProjectRecord): GoalCriterion[] {
   return project.requirements.map((criterion) => ({
     id: criterion.id,
     goalId: project.id,
@@ -140,5 +140,23 @@ export function ensureGoalModel(state: AppState): AppState {
     progressEntries: state.progressEntries ?? [],
     recurringActionTemplates: state.recurringActionTemplates ?? [],
     knowledgeLinks: state.knowledgeLinks ?? []
+  };
+}
+
+/**
+ * Converts a previously hydrated snapshot to the current read boundary once.
+ * Project aggregates and their derived goal/action records remain available in
+ * `projects` for history/export, but they must not be reintroduced into the
+ * active Project context on every hydration.
+ */
+export function migrateLegacyWorkspaceState(state: AppState): AppState {
+  const legacyIds = new Set(state.projects.map((project) => project.id));
+  const projectedTimestamp = new Date(0).toISOString();
+  return {
+    ...state,
+    areas: state.areas.filter((area) => !(legacyIds.has(area.id) && area.createdAt === projectedTimestamp)),
+    goals: state.goals.filter((goal) => !goal.legacySource),
+    actions: state.actions.filter((action) => !action.legacySourceId),
+    goalCriteria: state.goalCriteria.filter((criterion) => !criterion.legacySourceId)
   };
 }
