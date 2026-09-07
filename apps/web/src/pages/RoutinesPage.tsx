@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, CalendarDays, Layers3, ListChecks, Pause, Play, Plus, Repeat2, Settings2, ShieldCheck } from "lucide-react";
+import { CalendarClock, CalendarDays, Layers3, ListChecks, Pause, Play, Repeat2, Settings2, ShieldCheck } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { routeForEntity } from "../domain/routes";
@@ -55,8 +55,8 @@ export function RoutinesPage() {
     });
   };
 
-  return <AppShell>
-    <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" action={<Button variant="primary" onClick={openNew}><Plus />Nowa rutyna</Button>} />
+  return <AppShell addAction={{ label: "Nowa Rutyna", shortLabel: "Rutyna", ariaLabel: "Dodaj nową Rutynę", active: formOpen && !editingTemplateId, onClick: openNew }}>
+    <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" />
     <div className="routine-overview" aria-label="Podsumowanie Rutyn">
       <div><Repeat2 /><span><strong>{activeCount}</strong><small>aktywne</small></span></div>
       <div><Pause /><span><strong>{pausedCount}</strong><small>wstrzymane</small></span></div>
@@ -80,7 +80,7 @@ export function RoutinesPage() {
         {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
         <div className="routine-card-actions"><Link className="button button-secondary" to={`/routines?editSeries=${encodeURIComponent(routine.id)}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
       </Panel>;
-    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Dodaj pierwsze powtarzalne Działanie i wybierz jego rytm." : "Zmień filtr albo utwórz nową Rutynę."} action={<Button variant="primary" onClick={openNew}><Plus />Nowa rutyna</Button>} />}
+    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku Rutyna na dole, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
     <RecurringActionForm open={formOpen} templateId={editingTemplateId} onClose={closeForm} />
   </AppShell>;
 }

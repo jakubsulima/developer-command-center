@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Target, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -58,6 +58,8 @@ export function GoalDetailPage() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [visibilityError, setVisibilityError] = useState("");
+  const actionsSectionRef = useRef<HTMLDetailsElement>(null);
+  const newActionInputRef = useRef<HTMLInputElement>(null);
   const goal = state.goals.find((item) => item.id === goalId);
   useEffect(() => { const id = searchParams.get("action"); if (id) requestAnimationFrame(() => { const target = document.querySelector<HTMLElement>(`[data-action-id="${CSS.escape(id)}"]`); target?.scrollIntoView?.({ block: "center", behavior: "auto" }); target?.focus(); }); }, [searchParams, state.actions]);
   if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono Celu" detail="Cel nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/goals")}>Wróć do Celów</Button>} /></AppShell>;
@@ -83,6 +85,13 @@ export function GoalDetailPage() {
     setEditGoal(true);
   };
   const closeGoalMenu = (target: HTMLElement) => target.closest("details")?.removeAttribute("open");
+  const openActionComposer = () => {
+    if (actionsSectionRef.current) actionsSectionRef.current.open = true;
+    newActionInputRef.current?.focus();
+    requestAnimationFrame(() => {
+      newActionInputRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
+  };
 
   const addAction = async (event: FormEvent) => {
     event.preventDefault();
@@ -176,7 +185,7 @@ export function GoalDetailPage() {
     });
   };
 
-  return <AppShell>
+  return <AppShell addAction={{ label: "Nowe Działanie", shortLabel: "Działanie", ariaLabel: `Dodaj Działanie do Celu ${goal.title}`, onClick: openActionComposer }}>
     <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
       <div className="goal-menu-context"><span>{goalKindLabels[goal.kind]}</span><strong>{project?.name ?? "Bez Projektu"}</strong><small>{priorityLabel} · {goal.targetDate ? `Termin ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${goal.targetDate}T12:00:00Z`))}` : "Bez daty docelowej"}</small></div>
       <label className="goal-menu-field" htmlFor="goal-status"><span>Stan Celu</span><select id="goal-status" value={goal.status} disabled={goalStatusSaving} aria-busy={goalStatusSaving} onChange={(event) => { const status = event.target.value as typeof goal.status; closeGoalMenu(event.currentTarget); if (status === "achieved" || status === "abandoned") { setStatusReason(""); setGoalStatusError(""); setPendingGoalStatus(status); } else void changeGoalStatus(status); }}><option value="active">Aktywny</option><option value="paused">Wstrzymany</option><option value="achieved">Osiągnięty</option><option value="abandoned">Porzucony</option></select></label>
@@ -197,11 +206,11 @@ export function GoalDetailPage() {
     <Panel className="goal-secondary" aria-labelledby="goal-secondary-title">
       <div className="goal-secondary-intro"><div><span className="eyebrow">Na później</span><h2 id="goal-secondary-title">Szczegóły Celu</h2><p>Rozwiń tylko tę część, której teraz potrzebujesz.</p></div></div>
       <div className="goal-secondary-list">
-        <details className="goal-secondary-section">
+        <details className="goal-secondary-section" ref={actionsSectionRef}>
           <summary><span className="goal-secondary-icon"><ListTodo /></span><span className="goal-secondary-label"><strong>Działania</strong><small>Otwarte kroki, dodawanie i historia</small></span><span className="goal-secondary-count">{remainingActions.length}</span><ChevronDown /></summary>
           <div className="goal-secondary-content">
             <div className="action-list">{remainingActions.length ? remainingActions.map(renderAction) : <p className="muted-copy action-list-empty">Brak innych otwartych Działań.</p>}</div>
-            <form className="inline-create" onSubmit={addAction}><input aria-label="Nowe Działanie" placeholder="Dodaj konkretny krok…" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /><input aria-label="Termin Działania" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /><Button type="submit" loading={actionMutation.isBusy("goal-create-action")} disabled={!actionForm.title.trim()}><Plus />Dodaj</Button>{actionMutation.error("goal-create-action") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-create-action")} <button type="button" onClick={() => void actionMutation.retry("goal-create-action")?.()}>Spróbuj ponownie</button></p> : null}</form>
+            <form className="inline-create" onSubmit={addAction}><input ref={newActionInputRef} aria-label="Nowe Działanie" placeholder="Dodaj konkretny krok…" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /><input aria-label="Termin Działania" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /><Button type="submit" loading={actionMutation.isBusy("goal-create-action")} disabled={!actionForm.title.trim()}>Dodaj</Button>{actionMutation.error("goal-create-action") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-create-action")} <button type="button" onClick={() => void actionMutation.retry("goal-create-action")?.()}>Spróbuj ponownie</button></p> : null}</form>
             {historicalActions.length ? <details className="goal-action-history"><summary><History />Historia Działań <span>{historicalActions.length}</span></summary><div className="action-list">{historicalActions.map(renderAction)}</div></details> : null}
           </div>
         </details>

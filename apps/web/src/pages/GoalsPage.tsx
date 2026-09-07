@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Archive, ArrowRight, BookOpen, CircleDot, Flag, Heart, Layers3, Plus, RefreshCw, Rocket, RotateCcw, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, BookOpen, CircleDot, Flag, Heart, Layers3, RefreshCw, Rocket, RotateCcw, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -102,8 +102,8 @@ export function GoalsPage() {
   };
 
   return (
-    <AppShell>
-      <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" action={<Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Nowy cel</Button>} />
+    <AppShell addAction={{ label: "Nowy Cel", shortLabel: "Cel", ariaLabel: "Dodaj nowy Cel", active: newOpen, onClick: () => setNewOpen(true) }}>
+      <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" />
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
         {statusTabs()}
@@ -139,7 +139,7 @@ export function GoalsPage() {
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Zacznij od rezultatu, który jest dla Ciebie ważny. Pierwszy krok możesz dodać od razu albo później." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? <Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Utwórz pierwszy cel</Button> : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Cel na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>

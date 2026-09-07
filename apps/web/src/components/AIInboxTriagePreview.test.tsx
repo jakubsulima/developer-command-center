@@ -57,7 +57,7 @@ describe("AIInboxTriagePreview", () => {
     knowledgeProposal.proposal = { ...knowledgeProposal.proposal, decision: "knowledge", knowledgeKind: "resource", linkedType: "project", linkedId: "project-1", targetDate: null };
     render(<AIInboxTriagePreview proposal={knowledgeProposal} state={structuredClone(emptyState)} onApprove={vi.fn()} onEdit={vi.fn()} onReject={vi.fn()} onFeedback={vi.fn()} />);
     expect(screen.getByText("Wiedza")).toBeInTheDocument();
-    expect(screen.getByText("resource")).toBeInTheDocument();
+    expect(screen.getByText("Materiał")).toBeInTheDocument();
   });
 
   it("pokazuje nazwę dozwolonego powiązania z Celem", () => {

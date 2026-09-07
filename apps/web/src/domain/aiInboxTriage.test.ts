@@ -17,4 +17,9 @@ describe("AI Inbox Triage contract", () => {
   ])("odrzuca niepoprawną propozycję: %#", (payload) => {
     expect(() => decodeAIInboxTriageProposalContent(payload)).toThrow(AIInboxTriageError);
   });
+
+  it.each(["artifact", "investigation"])("nie proponuje systemowego lub zadaniowego rodzaju Wiedzy: %s", (knowledgeKind) => {
+    const payload = { ...valid, decision: "knowledge", title: "Wpis", detail: "Opis", knowledgeKind, linkedType: "none", linkedId: null, targetDate: null };
+    expect(() => decodeAIInboxTriageProposalContent(payload)).toThrow(AIInboxTriageError);
+  });
 });

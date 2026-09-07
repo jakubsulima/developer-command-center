@@ -3,7 +3,7 @@ export const AI_INBOX_TRIAGE_SCHEMA_VERSION = 1 as const;
 export type AIInboxTriageDecision = "goal" | "action" | "knowledge" | "keep_inbox";
 export type AIInboxTriageConfidence = "low" | "medium" | "high";
 export type AIInboxTriageLinkedType = "goal" | "project" | "none";
-export type AIInboxTriageKnowledgeKind = "note" | "resource" | "decision" | "artifact" | "investigation";
+export type AIInboxTriageKnowledgeKind = "note" | "resource" | "decision";
 
 export interface AIInboxTriageProposalContent {
   schemaVersion: typeof AI_INBOX_TRIAGE_SCHEMA_VERSION;
@@ -41,7 +41,7 @@ export class AIInboxTriageError extends Error {
 const decisions = ["goal", "action", "knowledge", "keep_inbox"] as const;
 const confidences = ["low", "medium", "high"] as const;
 const linkedTypes = ["goal", "project", "none"] as const;
-const knowledgeKinds = ["note", "resource", "decision", "artifact", "investigation"] as const;
+const knowledgeKinds = ["note", "resource", "decision"] as const;
 
 function object(value: unknown, label: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AIInboxTriageError("INVALID_MODEL_OUTPUT", `${label}: oczekiwano obiektu.`);

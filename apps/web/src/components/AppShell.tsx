@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare, UserRound } from "lucide-react";
+import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
@@ -24,12 +24,22 @@ const navigation = [
   { to: "/review", label: "Podsumowanie", icon: CalendarCheck },
 ];
 
-export function AppShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+export type AppShellAddAction = {
+  label: string;
+  shortLabel?: string;
+  ariaLabel: string;
+  active?: boolean;
+  onClick: () => void;
+};
+
+export function AppShell({ children, aside, addAction }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction }) {
   const { state, mode, loading, resetDemo, exportData, reload, syncState } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
   useNavigationRestoration();
   const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
+  const activeGoals = state.goals.filter((goal) => goal.visibility === "active" && goal.status === "active").length;
+  const activeRoutines = state.recurringActionTemplates.filter((routine) => routine.status === "active").length;
   const syncing = syncState.status === "syncing";
   const error = Object.values(syncState.errors)[0];
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -38,12 +48,22 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const addActionRef = useRef(addAction);
+  addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const moreActive = ["/goals", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback(() => {
     beginPerformanceTiming("quick-add");
     setQuickAddOpen(true);
   }, []);
+  const triggerAdd = useCallback(() => {
+    const contextualAction = addActionRef.current;
+    if (contextualAction) {
+      contextualAction.onClick();
+      return;
+    }
+    openQuickAdd();
+  }, [openQuickAdd]);
 
   const downloadExport = async () => {
     if (exportState === "loading") return;
@@ -127,7 +147,7 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button aria-label="Otwórz szybkie dodawanie" onClick={openQuickAdd}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} onClick={triggerAdd}><Plus />{addAction?.label ?? "Dodaj"} <kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error ? "sync-error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
@@ -138,20 +158,25 @@ export function AppShell({ children, aside }: { children: ReactNode; aside?: Rea
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab ${quickAddOpen ? "active" : ""}`} aria-expanded={quickAddOpen} onClick={openQuickAdd} aria-label="Otwórz centrum dodawania"><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
+        <button className={`capture-fab ${quickAddOpen || addAction?.active ? "active" : ""}`} aria-expanded={addAction ? addAction.active : quickAddOpen} onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"}><span className="capture-fab-icon"><Plus /></span><span>{addAction?.shortLabel ?? addAction?.label ?? "Dodaj"}</span></button>
         <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <Suspense fallback={null}><QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
-        <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Praca</h3><nav className="mobile-more-links" aria-label="Nawigacja pracy">
-          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><Flag /><span><strong>Cele</strong></span><ChevronRight /></NavLink>
-          <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><Repeat2 /><span><strong>Rutyny</strong></span><ChevronRight /></NavLink>
-          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><CalendarCheck /><span><strong>Podsumowanie</strong></span><ChevronRight /></NavLink>
+        <section className="mobile-more-overview" aria-label="Profil i stan Workspace"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Workspace aktualny"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
+        <section aria-labelledby="mobile-more-tools-heading"><h3 id="mobile-more-tools-heading" className="mobile-more-section-heading">Szybkie narzędzia</h3><div className="mobile-more-tools">
+          <button type="button" onClick={() => { setProfileCenterOpen(false); setMobileSearchOpen(true); }}><span><Search /></span><strong>Wyszukaj</strong><small>W całym Workspace</small></button>
+          <button type="button" onClick={() => { setProfileCenterOpen(false); openQuickAdd(); }}><span><Plus /></span><strong>Dodaj dowolne</strong><small>Pełny wybór typów</small></button>
+        </div></section>
+        <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Workspace</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
+          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
+          <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
+          <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
+          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
         </nav></section>
-        <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Konto i dane</h3><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{error ? "Błąd synchronizacji" : mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><UserRound /></section>
-        <div className="mobile-more-actions" aria-label="Akcje konta i danych">
+        <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
           {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
           <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
           {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
