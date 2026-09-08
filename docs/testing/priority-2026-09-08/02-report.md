@@ -24,7 +24,7 @@ Pliki objęte wynikiem zadania:
 - `apps/web/src/data/localWorkspaceRepository.ts`, `supabaseWorkspaceRepository.ts`, `supabaseRepository.ts`, `workspaceRepository.ts`
 - `apps/web/src/pages/ReviewPage.tsx`, `StartPage.tsx` oraz komponenty i komunikaty językowe
 - `apps/web/src/styles.css`, `apps/web/src/test/migrations.test.ts`, testy regresji aplikacji
-- `supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql`
+- `supabase/migrations/20260908090100_workspace_weekly_summary_timezone.sql`
 - `docs/planning/priority-implementation-2026-09-08/README.md`
 
 ## Kontrole automatyczne

@@ -23,7 +23,7 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090100_workspace_weekly_summary_timezone.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908154542_actions_list_pagination.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908170000_action_status_version_checks.sql", import.meta.url)

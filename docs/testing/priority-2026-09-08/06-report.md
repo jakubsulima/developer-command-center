@@ -17,7 +17,7 @@ Zrealizowano:
 - Statusy i daty mają blokadę powtórnego kliknięcia, loading, błąd oraz retry. Undo przywraca poprzedni status, blocker lub datę, a przy błędzie można ponowić cofnięcie. Konflikt wersji ma komunikat dla użytkownika i odświeżenie kolejki; rollback usuwa również optymistyczny wpis blokady.
 - Po usunięciu wiersza fokus przechodzi na sąsiednie Działanie albo pusty stan. Undo przywraca element i ponownie kieruje fokus na jego wiersz.
 - Puste widoki mają osobne komunikaty dla zaległych i zablokowanych Działań oraz przejście do otwartych.
-- Dodano addytywną, lokalną migrację wersjonowanego `set_action_status_checked`; nie została wdrożona zdalnie.
+- Dodano addytywną migrację wersjonowanego `set_action_status_checked`.
 
 ### Testy i kontrole
 
@@ -30,9 +30,21 @@ Zrealizowano:
 - `git diff --check` — PASS.
 - Przegląd lokalnego UI w przeglądarce — desktop PASS: bezpośrednie `/actions?view=overdue` otwiera kolejkę, widoczne są trzy Działania i menu pojedynczego wiersza z decyzjami. Tryb demo uruchomiono przez `VITE_DATA_BACKEND=demo`.
 
+### Aktualizacja wdrożenia migracji — 8 września 2026
+
+- Cel: podpięty projekt Supabase `khlhhwfsxfxffawlghxh`; nie publikowano frontendu ani produkcji.
+- Naprawiono wyłącznie historię migracji: cztery zdalne wpisy bez plików w repozytorium oznaczono jako `reverted`; cztery migracje, których obiekty były już potwierdzone w schemacie, oznaczono jako `applied`.
+- Dry-run przed wdrożeniem wskazał dokładnie 7 migracji: `20260827164703`, `20260830120000`, `20260830121000`, `20260908090000`, `20260908090100`, `20260908154542`, `20260908170000`.
+- `supabase db push --linked` — PASS; wszystkie 7 migracji zastosowane.
+- `supabase migration list --linked` — PASS; każda lokalna wersja ma odpowiadający wpis zdalny.
+- Weryfikacja read-only — PASS: obecne są RPC triage, paginacji, podsumowania tygodniowego i wersjonowanych zapisów; grant `authenticated` jest aktywny, `anon` nie ma wykonania; obecne są tabele triage i indeks jednego wyniku na Działanie.
+- Końcowy `supabase db push --linked --dry-run` — PASS; baza zgłasza `Remote database is up to date`.
+- `pnpm supabase:lint:remote` — PASS bez błędów blokujących. Zgłoszono 4 ostrzeżenia w istniejących funkcjach (`update_goal_details`, `update_knowledge_item`, `create_knowledge_with_relations`, `add_progress_checked`); nie zmieniano ich w ramach tego wdrożenia.
+- CLI zgłosiło ostrzeżenie o nieudanym lokalnym cache pg-delta z powodu blokady montowania ścieżki przez Docker; nie wpłynęło to na zastosowanie migracji ani weryfikację zdalną.
+
 ## Staging
 
-Nie wykonano odbioru na realnym koncie ani zdalnej migracji. Do weryfikacji pozostają: rzeczywisty RPC wersjonowanego statusu, izolacja Workspace na stagingu oraz przepływ od linku Start/Przegląd do kolejki po wdrożeniu migracji.
+Migracje zostały wdrożone do podpiętego projektu i zweryfikowane na poziomie schematu/RPC. Nie wykonano jeszcze odbioru przepływu na realnym koncie ani testu izolacji Workspace; te scenariusze pozostają zakresem planu 09.
 
 ## Produkcja
 
@@ -40,4 +52,4 @@ Nie wdrażano produkcji.
 
 ## Odstępstwa i brakujące dowody
 
-Nie wykonano osobnego przeglądu w rozmiarze 390×844, z pełnym przepływem klawiatury, długimi tekstami oraz stanami loading/error. Testy RTL i build nie zastępują tego odbioru. Plan pozostaje więc oznaczony jako „lokalnie gotowy, staging oczekuje”.
+Nie wykonano osobnego przeglądu w rozmiarze 390×844, z pełnym przepływem klawiatury, długimi tekstami oraz stanami loading/error. Testy RTL i build nie zastępują tego odbioru. Implementacja i migracje są gotowe, ale pełny odbiór stagingowy nadal oczekuje.
