@@ -158,10 +158,19 @@ describe("regresje nowego modelu Celów", () => {
     sessionStorage.removeItem("command-global-search");
     renderApp();
     await user.click(await screen.findByRole("button", { name: "Otwórz wyszukiwanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
-    const search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
+    let dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    let search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
     await waitFor(() => expect(search).toHaveFocus());
     expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
+    await user.type(search, "x");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Wpisz co najmniej 2 znaki");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Wyszukiwanie globalne" })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Otwórz wyszukiwanie" }));
+    dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
+    await waitFor(() => expect(search).toHaveFocus());
     await user.type(search, "Portfolio");
     expect(await within(dialog).findByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
     const goalResult = (await within(dialog).findAllByRole("option")).find((option) => within(option).queryByText("Portfolio v2"));
