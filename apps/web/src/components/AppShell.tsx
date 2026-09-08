@@ -34,7 +34,7 @@ export type AppShellAddAction = {
 };
 
 export function AppShell({ children, aside, addAction }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction }) {
-  const { state, mode, loading, resetDemo, exportData, reload, syncState } = useStore();
+  const { state, mode, loading, resetDemo, exportData, reload, syncState, dataFreshness } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
   useNavigationRestoration();
@@ -43,6 +43,14 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const activeRoutines = state.recurringActionTemplates.filter((routine) => routine.status === "active").length;
   const syncing = syncState.status === "syncing";
   const error = Object.values(syncState.errors)[0];
+  const freshnessError = dataFreshness.status === "error";
+  const dataStatus = dataFreshness.status === "refreshing"
+    ? "Odświeżanie…"
+    : freshnessError
+      ? "Nie udało się odświeżyć — pokazujemy poprzednie dane"
+      : dataFreshness.lastSuccessfulAt
+        ? `Dane odświeżone ${new Date(dataFreshness.lastSuccessfulAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
+        : "Dane nie zostały jeszcze odświeżone";
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
@@ -132,8 +140,9 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         </nav>
         <div className="sidebar-bottom" ref={profileMenuRef}>
           {profileMenuOpen ? <div className="profile-popover" id="profile-menu" role="menu" aria-label="Opcje profilu">
-            <div className={`profile-menu-status ${error ? "error" : ""}`}>{error ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
-            {error ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload(); }}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+            <div className={`profile-menu-status ${error || freshnessError ? "error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
+            {mode === "supabase" ? <div className="profile-menu-freshness" data-testid="data-freshness"><small>{dataStatus}</small>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div> : null}
+            {mode === "supabase" ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload().catch(() => undefined); }}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button> : null}
             {mode === "demo" ? <button role="menuitem" onClick={() => { resetDemo(); setProfileMenuOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
             <button role="menuitem" disabled={exportState === "loading"} onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksportuj dane"}</span></button>
             {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
@@ -149,7 +158,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
           <Button aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} onClick={triggerAdd}><Plus />{addAction?.label ?? "Dodaj"} <kbd className="quick-add-shortcut">⌘J</kbd></Button>
-          {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error ? "sync-error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
+          {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
 
@@ -179,7 +188,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
         </nav></section>
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
-          {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+          {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}
           <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
           {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
           {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}

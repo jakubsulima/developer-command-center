@@ -93,4 +93,29 @@ describe("WorkspaceMutationCoordinator", () => {
     release();
     await pending;
   });
+
+  it("does not let a read that started before a completed write restore the old snapshot", async () => {
+    state = { actions: { a: "old-a" } };
+    const coordinator = new WorkspaceMutationCoordinator({ getState: () => state, setState: (next) => { state = next; } });
+    let releaseWrite!: () => void;
+    const write = coordinator.run({
+      key: "action:a",
+      apply: () => ({
+        nextState: setAction(state, "a", "new-a"),
+        rollback: (current) => setAction(current, "a", "old-a"),
+        reapply: (fresh) => setAction(fresh, "a", "new-a")
+      }),
+      persist: () => new Promise<void>((resolve) => { releaseWrite = resolve; })
+    });
+
+    await Promise.resolve();
+    const readRevision = 0;
+    releaseWrite();
+    await write;
+
+    // This is the response from a read which began before the write committed.
+    coordinator.refresh({ actions: { a: "old-a" } }, readRevision);
+
+    expect(state.actions.a).toBe("new-a");
+  });
 });

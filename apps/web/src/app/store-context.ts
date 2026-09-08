@@ -2,6 +2,7 @@ import { createContext } from "react";
 import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
+import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
 import type { SearchResult } from "../data/workspaceRepository";
 import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
@@ -53,6 +54,7 @@ export interface AppStore {
   mode: AuthMode;
   loading: boolean;
   syncState: SyncState;
+  dataFreshness: WorkspaceFreshnessState;
   aiGoalReview?: AIGoalReview;
   aiGoalReviewStatus: "idle" | "loading" | "refreshing" | "ready" | "error";
   aiGoalReviewError?: { code: string; message: string };

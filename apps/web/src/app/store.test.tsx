@@ -8,6 +8,13 @@ import { demoState } from "../data/demo";
 import { emptyState } from "../data/empty";
 import { useStore } from "./useStore";
 import { StoreProvider } from "./store";
+import { usePersistentDraft } from "../hooks/usePersistentDraft";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 const repository = vi.hoisted(() => ({
   loadSupabaseState: vi.fn(), captureRemote: vi.fn(), resolveInboxRemote: vi.fn(), startFocusRemote: vi.fn(),
@@ -54,6 +61,12 @@ function Probe() {
     <button onClick={() => void store.exportData().catch(() => undefined)}>Export</button>
     <button onClick={() => void store.reload()}>Reload</button>
   </>;
+}
+
+function DirtyDraftProbe() {
+  const store = useStore();
+  const draft = usePersistentDraft("goal-edit", { text: "" }, 60_000, { targetId: "goal-1" });
+  return <><input aria-label="Treść lokalnego szkicu" value={draft.value.text} onChange={(event) => draft.setValue({ text: event.target.value })} /><button onClick={() => void store.reload().catch(() => undefined)}>Odśwież</button></>;
 }
 
 describe("StoreProvider", () => {
@@ -181,5 +194,79 @@ describe("StoreProvider", () => {
     localStorage.setItem("command-center-state-v1", "{broken-json");
     renderStore(<Probe />, { ...auth, mode: "demo", user: { id: "demo", email: "demo@example.com", name: "Demo" } });
     expect(screen.getByText(/FinTrack API/)).toBeInTheDocument();
+  });
+
+  it("ręczny refresh przed progiem i równoczesne triggery wykonują jeden odczyt", async () => {
+    const initial = { ...structuredClone(demoState), workspaceId: "workspace-1" };
+    const updated = { ...structuredClone(initial), inbox: [{ ...initial.inbox[0], content: "Zmiana z drugiego klienta" }, ...initial.inbox.slice(1)] };
+    const refresh = deferred<typeof updated>();
+    repository.loadSupabaseState.mockReset();
+    repository.loadSupabaseState.mockResolvedValueOnce(initial).mockImplementationOnce(() => refresh.promise);
+    const user = userEvent.setup();
+    renderStore(<Probe />);
+    await screen.findByText("workspace-1");
+
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2));
+    refresh.resolve(updated);
+    expect(await screen.findByText("Zmiana z drugiego klienta")).toBeInTheDocument();
+  });
+
+  it("ponawia odczyt po wyścigu read/write i zachowuje zmianę optymistyczną", async () => {
+    const initial = { ...structuredClone(demoState), workspaceId: "workspace-1" };
+    const staleRead = deferred<typeof initial>();
+    const fresh = { ...structuredClone(initial), inbox: [{ id: "server-item", kind: "text" as const, content: "Zapis klienta A", createdAt: "2026-09-08T10:00:00.000Z", status: "unprocessed" as const }, ...initial.inbox] };
+    const freshRead = deferred<typeof fresh>();
+    const pendingCapture = deferred<Awaited<ReturnType<typeof repository.captureRemote>>>();
+    repository.loadSupabaseState.mockReset();
+    repository.loadSupabaseState.mockResolvedValueOnce(initial).mockImplementationOnce(() => staleRead.promise).mockImplementationOnce(() => freshRead.promise);
+    repository.captureRemote.mockImplementationOnce(() => pendingCapture.promise);
+    const user = userEvent.setup();
+    renderStore(<Probe />);
+    await screen.findByText("workspace-1");
+
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Capture" }));
+    await waitFor(() => expect(repository.captureRemote).toHaveBeenCalled());
+    staleRead.resolve(initial);
+    expect(await screen.findByText("Nowy zdalny capture")).toBeInTheDocument();
+    pendingCapture.resolve({ id: "server-item", kind: "text", content: "Zapis klienta A", createdAt: "2026-09-08T10:00:00.000Z", status: "unprocessed" });
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(3));
+    freshRead.resolve(fresh);
+    expect(await screen.findByText("Zapis klienta A")).toBeInTheDocument();
+    expect(screen.queryByText("Nowy zdalny capture")).not.toBeInTheDocument();
+  });
+
+  it("nie narusza treści dirty form podczas ręcznego odświeżenia", async () => {
+    const initial = { ...structuredClone(demoState), workspaceId: "workspace-1" };
+    const updated = { ...structuredClone(initial), inbox: [{ ...initial.inbox[0], content: "Odświeżone dane" }, ...initial.inbox.slice(1)] };
+    repository.loadSupabaseState.mockReset().mockResolvedValueOnce(initial).mockResolvedValueOnce(updated);
+    const user = userEvent.setup();
+    renderStore(<DirtyDraftProbe />);
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(1));
+    const input = screen.getByRole("textbox", { name: "Treść lokalnego szkicu" });
+    await user.type(input, "Nie zgubić tego wpisu");
+    await user.click(screen.getByRole("button", { name: "Odśwież" }));
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2));
+    expect(input).toHaveValue("Nie zgubić tego wpisu");
+  });
+
+  it("ignoruje spóźnioną odpowiedź poprzedniego Usera po zmianie sesji", async () => {
+    const oldRead = deferred<typeof demoState>();
+    const nextState = { ...structuredClone(demoState), workspaceId: "workspace-2", inbox: [{ ...demoState.inbox[0], content: "Dane drugiego Usera" }, ...demoState.inbox.slice(1)] };
+    repository.loadSupabaseState.mockReset().mockImplementation((userId: string) => userId === "user-1" ? oldRead.promise : Promise.resolve(nextState));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstAuth = { ...auth, user: { id: "user-1", email: "one@example.com", name: "One" } };
+    const secondAuth = { ...auth, user: { id: "user-2", email: "two@example.com", name: "Two" } };
+    const view = renderStore(<Probe />, firstAuth, queryClient);
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledWith("user-1"));
+    view.rerender(<QueryClientProvider client={queryClient}><AuthContext.Provider value={secondAuth}><StoreProvider><Probe /></StoreProvider></AuthContext.Provider></QueryClientProvider>);
+    expect(await screen.findByText("workspace-2")).toBeInTheDocument();
+    oldRead.resolve({ ...structuredClone(demoState), workspaceId: "workspace-1", inbox: [{ ...demoState.inbox[0], content: "Stare dane Usera" }, ...demoState.inbox.slice(1)] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText("Stare dane Usera")).not.toBeInTheDocument();
+    expect(screen.getByText("Dane drugiego Usera")).toBeInTheDocument();
   });
 });

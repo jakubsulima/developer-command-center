@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
 import { demoState } from "../data/demo";
 import { emptyState } from "../data/empty";
@@ -12,6 +12,7 @@ import { releaseDueInboxItems } from "../domain/inbox";
 import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
+import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspaceDataFreshness";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 import type { AIGoalReview } from "../domain/aiGoalReview";
 import { AIGoalReviewError } from "../domain/aiGoalReview";
@@ -101,6 +102,8 @@ function loadDemoState(): AppState {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { mode, user } = useAuth();
+  const queryClient = useQueryClient();
+  const identityKey = `${mode}:${user?.id ?? "anonymous"}`;
   const legacyMigrationRef = useRef(mode === "demo" && Boolean(localStorage.getItem(STORAGE_KEY)));
   const [state, setState] = useState<AppState>(() => mode === "demo" ? loadDemoState() : structuredClone(emptyState));
   const stateRef = useRef(state);
@@ -115,6 +118,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     onError: (key, error) => AppErrorReporter.report(error, "mutation", { operationType: operationTypeFromMutationKey(key) })
   }), []);
+  const [dataFreshness, setDataFreshness] = useState<WorkspaceFreshnessState>({ status: "idle" });
+  const freshness = useMemo(() => new WorkspaceDataFreshness({ onChange: setDataFreshness }), []);
+  const identityRef = useRef(identityKey);
+  const readMetadataRef = useRef(new WeakMap<object, { identityKey: string; writeRevision: number }>());
   const syncState = useSyncExternalStore(mutationCoordinator.subscribe, mutationCoordinator.getSyncState, mutationCoordinator.getSyncState);
   const [aiGoalReview, setAIGoalReview] = useState<AIGoalReview>();
   const [aiGoalReviewStatus, setAIGoalReviewStatus] = useState<"idle" | "loading" | "refreshing" | "ready" | "error">("idle");
@@ -125,14 +132,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     queryKey: ["workspace-state", user?.id],
     enabled: mode === "supabase" && Boolean(user),
     queryFn: async () => {
+      const requestedIdentity = `supabase:${user!.id}`;
+      const writeRevision = mutationCoordinator.getWriteRevision();
       const startedAt = performance.now();
       try {
-        return await (await loadRepository()).loadSupabaseState(user!.id);
+        const snapshot = await (await loadRepository()).loadSupabaseState(user!.id);
+        readMetadataRef.current.set(snapshot as object, { identityKey: requestedIdentity, writeRevision });
+        return snapshot;
       } finally {
         recordStartupTiming("supabase-workspace", performance.now() - startedAt);
       }
     }
   });
+  const refetchWorkspace = remoteQuery.refetch;
+
+  useEffect(() => {
+    if (identityRef.current === identityKey) return;
+    identityRef.current = identityKey;
+    freshness.reset();
+    mutationCoordinator.reset();
+    const empty = structuredClone(emptyState);
+    stateRef.current = empty;
+    setState(empty);
+    setLocalHydrated(mode === "demo");
+  }, [freshness, identityKey, mode, mutationCoordinator]);
 
   useEffect(() => {
     if (mode === "demo" && localHydrated) markStartupPhase("workspace-resolved");
@@ -164,12 +187,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
   }, [localHydrated, localRepository, mode, mutationCoordinator, state]);
 
+  const invalidateActiveWorkspaceQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["workspace-page"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["actions-highlight"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["workspace-action"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["knowledge-item"], refetchType: "active" })
+    ]);
+  }, [queryClient]);
+
+  const applyRemoteSnapshot = useCallback((snapshot: AppState, metadata?: { identityKey: string; writeRevision: number }) => {
+    if (metadata && metadata.identityKey !== identityKey) return false;
+    const hydrated = migrateLegacyWorkspaceState(snapshot);
+    return mutationCoordinator.refresh(hydrated, metadata?.writeRevision);
+  }, [identityKey, mutationCoordinator]);
+
+  const refreshWorkspace = useCallback(async (force = false) => {
+    const requestedIdentity = identityKey;
+    return freshness.request(async () => {
+      if (mode === "demo") {
+        const saved = await localRepository.load();
+        const snapshot = saved ? migrateLegacyWorkspaceState(saved) : stateRef.current;
+        mutationCoordinator.refresh(snapshot);
+        await invalidateActiveWorkspaceQueries();
+        return snapshot;
+      }
+
+      let result: Awaited<ReturnType<typeof refetchWorkspace>> | undefined;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (identityRef.current !== requestedIdentity) return undefined;
+        const readRevision = mutationCoordinator.getWriteRevision();
+        result = await refetchWorkspace();
+        if (identityRef.current !== requestedIdentity) return undefined;
+        if (result.error) throw result.error;
+        const metadata = result.data ? readMetadataRef.current.get(result.data as object) : undefined;
+        if (mutationCoordinator.getWriteRevision() !== readRevision || (metadata && metadata.writeRevision !== mutationCoordinator.getWriteRevision())) {
+          await mutationCoordinator.whenIdle();
+          continue;
+        }
+        if (!result.data) throw new Error("Nie udało się odczytać przestrzeni pracy.");
+        if (!applyRemoteSnapshot(result.data, metadata)) {
+          await mutationCoordinator.whenIdle();
+          continue;
+        }
+        await invalidateActiveWorkspaceQueries();
+        return result.data;
+      }
+      throw new Error("Odświeżanie kolidowało z trwającym zapisem. Spróbuj ponownie.");
+    }, force);
+  }, [applyRemoteSnapshot, freshness, identityKey, invalidateActiveWorkspaceQueries, localRepository, mode, mutationCoordinator, refetchWorkspace]);
+
   useEffect(() => {
-    if (remoteQuery.data) {
-      const hydrated = migrateLegacyWorkspaceState(remoteQuery.data);
-      mutationCoordinator.refresh(hydrated);
+    if (mode === "demo" && localHydrated) freshness.markSuccessful();
+  }, [freshness, localHydrated, mode]);
+
+  useEffect(() => {
+    if (!remoteQuery.data) return;
+    const metadata = readMetadataRef.current.get(remoteQuery.data as object);
+    if (metadata && metadata.identityKey !== identityKey) return;
+    if (!applyRemoteSnapshot(remoteQuery.data, metadata)) {
+      void refreshWorkspace(true).catch(() => undefined);
+      return;
     }
-  }, [mutationCoordinator, remoteQuery.data]);
+    if (!freshness.isRefreshing()) freshness.markSuccessful(remoteQuery.dataUpdatedAt || Date.now());
+    void invalidateActiveWorkspaceQueries();
+  }, [applyRemoteSnapshot, freshness, identityKey, invalidateActiveWorkspaceQueries, refreshWorkspace, remoteQuery.data, remoteQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshWorkspace(false).catch(() => undefined);
+    };
+    const refreshWhenOnline = () => void refreshWorkspace(true).catch(() => undefined);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("online", refreshWhenOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("online", refreshWhenOnline);
+    };
+  }, [refreshWorkspace]);
 
   const aiReviewSignature = useMemo(() => JSON.stringify({
     goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
@@ -230,6 +325,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mode,
     loading: mode === "supabase" ? remoteQuery.isPending : !localHydrated,
     syncState,
+    dataFreshness,
     aiGoalReview,
     aiGoalReviewStatus,
     aiGoalReviewError,
@@ -958,17 +1054,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async reload() {
       if (mode === "demo") {
         setState((current) => releaseDueInboxItems(current, new Date()));
+        await refreshWorkspace(true);
         return;
       }
-      if (state.workspaceId) await runRemote(async () => { await (await loadRepository()).releaseDueInboxItemsRemote(state.workspaceId!); });
-      await remoteQuery.refetch();
+      if (stateRef.current.workspaceId) await runRemote(async () => { await (await loadRepository()).releaseDueInboxItemsRemote(stateRef.current.workspaceId!); });
+      await refreshWorkspace(true);
     },
     resetDemo() {
       localStorage.removeItem(STORAGE_KEY);
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, refreshWorkspace, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;
@@ -978,7 +1075,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
   if (mode === "supabase" && remoteQuery.isError && !remoteQuery.data) {
     const message = remoteQuery.error instanceof Error ? remoteQuery.error.message : "Nie udało się załadować przestrzeni pracy.";
-    return <div className="workspace-error" role="alert"><span className="loading-mark">!</span><h1>Nie udało się otworzyć przestrzeni pracy</h1><p>{message}</p><button className="button button-primary" onClick={() => void remoteQuery.refetch()}>Spróbuj ponownie</button></div>;
+    return <div className="workspace-error" role="alert"><span className="loading-mark">!</span><h1>Nie udało się otworzyć przestrzeni pracy</h1><p>{message}</p><button className="button button-primary" onClick={() => void refreshWorkspace(true).catch(() => undefined)}>Spróbuj ponownie</button></div>;
   }
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
