@@ -3485,3 +3485,160 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     min-height: 36px;
   }
 }
+
+/* Plan 04 — mobile clarity. Keep the existing dark palette and touch contract intact. */
+.action-context-compact {
+  display: none;
+}
+
+.next-action-card > .goal-action {
+  border: 0;
+  background: transparent;
+}
+
+.next-action-card .action-relations-panel {
+  border-top: 0;
+}
+
+.action-relations-toggle-empty {
+  color: var(--muted-foreground);
+}
+
+.progress-form {
+  grid-template-columns: minmax(140px, .45fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.progress-form-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.progress-form-field > span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.progress-form-field select,
+.progress-form-field textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.progress-form-feedback {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  grid-column: 1 / 3;
+  grid-row: 2;
+}
+
+.progress-form-feedback .draft-status {
+  min-height: 24px;
+}
+
+.progress-form-feedback .inline-mutation-error {
+  margin-top: 0;
+}
+
+.progress-form > .button {
+  grid-column: 3;
+  grid-row: 2;
+  width: 100%;
+  min-height: 44px;
+}
+
+@media (max-width: 767px) {
+  .action-context-full {
+    display: none;
+  }
+
+  .action-context-compact {
+    display: block;
+    max-width: 100%;
+    margin-top: 4px;
+    overflow: hidden;
+    color: #a9bdd8;
+    font-size: 13px;
+    line-height: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .action-context-compact a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(169, 189, 216, .45);
+    text-underline-offset: 2px;
+  }
+
+  .action-relation-summary {
+    display: none !important;
+  }
+
+  .today-action .action-title-row strong,
+  .goal-action .action-title-row strong {
+    overflow-wrap: anywhere;
+  }
+
+  .next-action-card > .goal-action {
+    margin-inline: -4px;
+    padding: 10px 4px;
+    border-radius: 0;
+  }
+
+  .next-action-card .action-relations-panel {
+    margin: 6px 0 0;
+    padding: 0;
+  }
+
+  .quick-progress {
+    scroll-margin-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .progress-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .progress-form-feedback,
+  .progress-form > .button {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .progress-form-feedback {
+    order: 3;
+  }
+
+  .progress-form > .button {
+    order: 4;
+    min-height: 48px;
+    scroll-margin-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .main-content:has(.goal-next-step) {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .creation-hub-modal .quick-add-modes > button small {
+    font-size: 12px;
+  }
+
+  .creation-hub-modal .quick-add-composer > span {
+    font-size: 12px;
+  }
+
+  .search-empty p {
+    font-size: 13px;
+  }
+
+  .mobile-global-search .search-result-copy small {
+    font-size: 12px;
+    line-height: 17px;
+  }
+}

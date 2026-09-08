@@ -28,3 +28,10 @@ export function resolveActionContext(action: GoalAction, state: AppState): Actio
 export function describeActionContext(context: ActionContext) {
   return context.name ? `${context.label} · ${context.name}` : context.label;
 }
+
+export function describeCompactActionContext(context: ActionContext) {
+  if (context.kind === "goal") return context.name ? `Cel · ${context.name}` : "Cel";
+  if (context.kind === "project") return context.name ? `Projekt · ${context.name}` : "Projekt";
+  if (context.kind === "missing-project") return "Projekt niedostępny";
+  return "Samodzielne";
+}

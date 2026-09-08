@@ -379,7 +379,7 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
     const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
-    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Wiedza · 0" });
+    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj materiał" });
     expect(relationToggle).toHaveAttribute("aria-expanded", "false");
     await user.click(relationToggle);
     expect(relationToggle).toHaveAttribute("aria-expanded", "true");

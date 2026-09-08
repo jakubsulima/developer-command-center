@@ -10,7 +10,7 @@ import { Badge, Button, EmptyState, Panel } from "../components/ui";
 import { deriveHomeSummary } from "../domain/homeSummary";
 import type { GoalAction } from "../domain/types";
 import { routeForEntity } from "../domain/routes";
-import { describeActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
+import { describeActionContext, describeCompactActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
 import { formatWorkspaceDateRange } from "../domain/activity";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
@@ -36,9 +36,10 @@ function StartActionRow({ action, context, relationSummary, complete, openMore, 
   breadcrumbs: Array<{ label: string; to?: string }>;
   returnTo: string;
 }) {
+  const compactContext = describeCompactActionContext(context);
   return <div className="today-action" data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
     <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => void complete(action.id)} onMore={() => openMore(action.id)} />
-    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong>{action.recurringTemplateId ? <span className="action-recurring-marker">cykliczne</span> : null}</NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><small>{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
+    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong>{action.recurringTemplateId ? <span className="action-recurring-marker">cykliczne</span> : null}</NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
     {action.status === "blocked" ? <Badge tone="danger">Zablokowane</Badge> : null}
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </div>;
