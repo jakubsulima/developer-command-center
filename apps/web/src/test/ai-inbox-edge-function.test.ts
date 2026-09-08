@@ -20,4 +20,8 @@ describe("AI Inbox Edge Function building blocks", () => {
     expect(() => parseProviderJson("{not-json")).toThrow("invalid_json");
     expect(validateAndFinalizeInboxTriage({ schemaVersion: 1, decision: "keep_inbox", confidence: "low", reason: "Za mało danych.", title: null, detail: null, knowledgeKind: null, linkedType: "none", linkedId: null, targetDate: null }, context).decision).toBe("keep_inbox");
   });
+
+  it.each(["artifact", "investigation"])("odrzuca rodzaj, którego nie tworzy się ze Skrzynki: %s", (knowledgeKind) => {
+    expect(() => validateAndFinalizeInboxTriage({ schemaVersion: 1, decision: "knowledge", confidence: "high", reason: "x", title: "x", detail: "x", knowledgeKind, linkedType: "none", linkedId: null, targetDate: null }, context)).toThrow("knowledgeKind:enum");
+  });
 });

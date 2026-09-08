@@ -160,7 +160,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
       })
       .catch((error: unknown) => {
-        mutationCoordinator.recordError("workspace", error, "Nie udało się zapisać lokalnego Workspace.");
+        mutationCoordinator.recordError("workspace", error, "Nie udało się zapisać lokalnej przestrzeni pracy.");
       });
   }, [localHydrated, localRepository, mode, mutationCoordinator, state]);
 
@@ -193,7 +193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       aiReviewSignatureRef.current = aiReviewSignature;
       setAIGoalReview(review);
       setAIGoalReviewStatus("ready");
-    }).catch(() => { /* AI pozostaje opcjonalne i nie blokuje Workspace. */ });
+    }).catch(() => { /* AI pozostaje opcjonalne i nie blokuje przestrzeni pracy. */ });
     return () => { active = false; };
   }, [aiGoalReviewStatus, aiReviewSignature, localRepository, mode, state.workspaceId]);
 
@@ -216,7 +216,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const refreshed = await remoteQuery.refetch();
     if (refreshed.error) throw refreshed.error;
     if (!refreshed.data?.workspaceId) {
-      throw new Error("Użytkownik nie ma przypisanego Workspace.");
+      throw new Error("Użytkownik nie ma przypisanej przestrzeni pracy.");
     }
 
     const hydrated = migrateLegacyWorkspaceState(refreshed.data);
@@ -236,7 +236,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async requestGoalReview(forceRefresh = false) {
       const current = await ensureWorkspaceState();
       const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
-      if (!workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (!workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       setAIGoalReviewStatus(aiGoalReview ? "refreshing" : "loading");
       setAIGoalReviewError(undefined);
       try {
@@ -260,7 +260,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async requestInboxTriageProposal(inboxItemId, forceRefresh = false) {
       const current = await ensureWorkspaceState();
       const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
-      if (!workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (!workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
       return repository.requestInboxTriageProposal(workspaceId, inboxItemId, forceRefresh);
     },
@@ -304,18 +304,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return goalId;
     },
-    async updateGoal(goalId, changes) {
-      const changedAt = new Date().toISOString();
-      const command = { type: "update_goal", goalId, ...changes, changedAt } as const;
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, changes), `goal:${goalId}`);
+    async updateGoal(goalId, changes, requestedVersion) {
+      await ensureWorkspaceState();
+      let expectedVersion = 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `goal:${goalId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const previousGoal = previous.goals.find((goal) => goal.id === goalId);
+          expectedVersion = requestedVersion ?? previousGoal?.version ?? 1;
+          const command = { type: "update_goal", goalId, ...changes, changedAt: new Date().toISOString() } as const;
+          return {
+            nextState: executeDomainCommand(previous, command),
+            rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "goals", ids: [goalId] }, { collection: "goalCriteria", ids: previous.goalCriteria.filter((criterion) => criterion.goalId === goalId).map((criterion) => criterion.id) }]),
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, expectedVersion, changes), `goal:${goalId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+        }
       });
     },
     async createAction(input) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const command = { type: "create_action", id, ...input, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${id}`, command, [{ collection: "actions", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).createActionRemote(stateRef.current.workspaceId!, id, input), `action:${id}`);
@@ -370,11 +396,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId), `goal:${goalId}:next-action`);
       });
     },
-    async addProgress(goalId, kind, content, actionId, knowledgeItemId) {
-      const id = crypto.randomUUID();
+    async addProgress(goalId, kind, content, actionId, knowledgeItemId, idempotencyKey) {
+      const id = idempotencyKey ?? crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const command = { type: "add_progress", id, goalId, kind, content, actionId, knowledgeItemId, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `progress:${id}`, command, [{ collection: "progressEntries", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).addProgressRemote(stateRef.current.workspaceId!, id, goalId, kind, content, actionId, knowledgeItemId), `progress:${id}`);
@@ -384,7 +410,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const command = { type: "create_area", id, name, description, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${id}`, command, [{ collection: "areas", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description), `area:${id}`);
@@ -402,7 +428,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const command = { type: "create_goal_template", id, name, kind, defaultActions, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal-template:${id}`, command, [{ collection: "goalTemplates", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).createGoalTemplateRemote(stateRef.current.workspaceId!, id, name, kind, defaultActions), `goal-template:${id}`);
@@ -473,7 +499,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         updatedAt: now
       };
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `routine:${id}`, { type: "create_recurring_template", template }, [{ collection: "recurringActionTemplates", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).createRecurringTemplateRemote(stateRef.current.workspaceId!, template), `routine:${id}`);
       });
@@ -536,7 +562,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge-link:${id}`, { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt }, [{ collection: "knowledgeLinks", ids: [id] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).linkKnowledgeRemote(stateRef.current.workspaceId!, id, knowledgeItemId, target, meaning), `knowledge-link:${id}`);
       });
@@ -554,7 +580,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId || input.projectId ? crypto.randomUUID() : undefined
       };
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const scopes: MutationScope[] = [{ collection: "inbox", ids: [inboxItemId] }];
       if (intent.kind === "goal") scopes.push({ collection: "goals", ids: [intent.goalId] }, { collection: "actions", ids: intent.actionId ? [intent.actionId] : [] });
       if (intent.kind === "action") scopes.push({ collection: "actions", ids: [intent.actionId] });
@@ -567,7 +593,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const reference: CreatedProjectReference = { projectId: id, workItemId: `${id}-work-item` };
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const command = {
         type: "create_project",
         id,
@@ -617,7 +643,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const goal = { id, title: input.title.trim(), criterion: input.criterion.trim(), status: "shaped" as const, skills: [input.skill.trim()] };
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       await mutationCoordinator.run({
         key: `learning-goal:${id}`,
         apply: () => {
@@ -651,7 +677,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const optimisticId = crypto.randomUUID();
       const optimisticItem = { id: optimisticId, kind, content: trimmed, createdAt: new Date().toISOString(), status: "unprocessed" as const };
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       await mutationCoordinator.run({
         key: `inbox:${optimisticId}`,
         apply: () => {
@@ -723,7 +749,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const relations = (input.relations ?? []).map((relation) => ({ ...relation, id: relation.id ?? crypto.randomUUID() }));
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const scopes: MutationScope[] = [{ collection: "knowledge", ids: [id] }, { collection: "knowledgeLinks", ids: relations.map((relation) => relation.id!) }];
       const applyCreate = (base: AppState) => {
         const createdAt = new Date().toISOString();
@@ -757,28 +783,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const progressId = action.goalId ? crypto.randomUUID() : undefined;
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnego Workspace.");
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const scopes: MutationScope[] = [{ collection: "knowledge", ids: result.kind === "new" ? [knowledgeId] : [] }, { collection: "knowledgeLinks", ids: [linkId] }, { collection: "progressEntries", ids: progressId ? [progressId] : [] }];
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${actionId}:result`, { type: "record_action_result", actionId, result, knowledgeId, linkId, progressId, createdAt }, scopes, async () => {
         if (mode !== "demo") await runRemote(async () => await (await loadRepository()).recordActionResultRemote(stateRef.current.workspaceId!, actionId, result, knowledgeId, linkId, progressId), `action:${actionId}:result`);
       });
       return knowledgeId;
     },
-    async updateKnowledge(knowledgeId, changes) {
-      const previous = stateRef.current;
-      const changedAt = new Date().toISOString();
-      const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
-        id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
-        goalId
-      }));
-      const { goalIds: _goalIds, ...knowledgeChanges } = changes;
-      void _goalIds;
-      const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge:${knowledgeId}`, { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt }, [
-        { collection: "knowledge", ids: [knowledgeId] },
-        { collection: "knowledgeLinks", ids: linkIds }
-      ], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, knowledgeChanges, goalLinks), `knowledge:${knowledgeId}`);
+    async updateKnowledge(knowledgeId, changes, requestedVersion) {
+      await ensureWorkspaceState();
+      let expectedVersion = 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `knowledge:${knowledgeId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const previousItem = previous.knowledge.find((item) => item.id === knowledgeId);
+          expectedVersion = requestedVersion ?? previousItem?.version ?? 1;
+          const changedAt = new Date().toISOString();
+          const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
+            id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
+            goalId
+          }));
+          const { goalIds: _goalIds, ...knowledgeChanges } = changes;
+          void _goalIds;
+          const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
+          const command = { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt } as const;
+          return {
+            nextState: executeDomainCommand(previous, command),
+            rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "knowledge", ids: [knowledgeId] }, { collection: "knowledgeLinks", ids: linkIds }]),
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            const previous = stateRef.current;
+            const { goalIds: _goalIds, ...knowledgeChanges } = changes;
+            const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
+              id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
+              goalId
+            }));
+            void _goalIds;
+            await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, expectedVersion, knowledgeChanges, goalLinks), `knowledge:${knowledgeId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+        }
       });
     },
     async setVisibility(entityType, entityId, visibility) {
@@ -862,7 +919,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (mode === "demo") {
         return { format: "developer-command-center/export", version: 1, exportedAt: new Date().toISOString(), mode: "demo", state };
       }
-      if (!state.workspaceId) throw new Error("Brak aktywnego Workspace do eksportu.");
+      if (!state.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy do eksportu.");
       const repository = await loadRepository();
       return repository.exportWorkspaceRemote(state.workspaceId);
     },
@@ -882,14 +939,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
-    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;
+    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;
   }
   if (mode === "demo" && !localHydrated) {
-    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie Workspace…</span></div>;
+    return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;
   }
   if (mode === "supabase" && remoteQuery.isError && !remoteQuery.data) {
-    const message = remoteQuery.error instanceof Error ? remoteQuery.error.message : "Nie udało się załadować Workspace.";
-    return <div className="workspace-error" role="alert"><span className="loading-mark">!</span><h1>Nie udało się otworzyć Workspace</h1><p>{message}</p><button className="button button-primary" onClick={() => void remoteQuery.refetch()}>Spróbuj ponownie</button></div>;
+    const message = remoteQuery.error instanceof Error ? remoteQuery.error.message : "Nie udało się załadować przestrzeni pracy.";
+    return <div className="workspace-error" role="alert"><span className="loading-mark">!</span><h1>Nie udało się otworzyć przestrzeni pracy</h1><p>{message}</p><button className="button button-primary" onClick={() => void remoteQuery.refetch()}>Spróbuj ponownie</button></div>;
   }
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

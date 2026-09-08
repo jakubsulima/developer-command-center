@@ -117,7 +117,13 @@ export interface WorkspaceCore {
     openActions: number;
     start: number;
   };
-  weeklySummary: Pick<WeeklyReviewSummary, "completedActions" | "focusMinutes" | "knowledgeAdded" | "progressUpdates"> & {
+  weeklySummary: {
+    periodStart?: string;
+    periodEnd?: string;
+    completedActions: WeeklyReviewSummary["completedActions"];
+    focusMinutes: WeeklyReviewSummary["focusMinutes"];
+    knowledgeAdded: WeeklyReviewSummary["knowledgeAdded"];
+    progressUpdates: WeeklyReviewSummary["progressUpdates"];
     recentReviews: ReviewRecord[];
   };
 }

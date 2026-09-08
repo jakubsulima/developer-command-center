@@ -1,4 +1,4 @@
-import { ArrowRight, BookMarked, CalendarCheck, Check, CheckCircle2, Clock3, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, BookMarked, CalendarCheck, Check, CheckCircle2, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -6,7 +6,9 @@ import { AppShell, PageHeading } from "../components/AppShell";
 import { DraftStatus } from "../components/DraftStatus";
 import { Badge, Button, Panel } from "../components/ui";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
+import { blockedActions } from "../domain/weeklyReview";
 import { formatWorkspaceDateRange } from "../domain/activity";
+import { polishCount, polishPluralForm } from "../domain/labels";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import type { ReviewRecord } from "../domain/types";
@@ -22,6 +24,9 @@ export function ReviewPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const completedThisWeek = state.reviews.some((review) => review.type === "weekly" && new Date(review.completedAt) >= weekly.start && new Date(review.completedAt) < weekly.end);
+  const activeGoalCount = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length;
+  const blockedCount = blockedActions(state).length;
+  const inboxCount = state.inbox.filter((item) => item.status === "unprocessed").length;
   const reviewHistory = mergePagedItems(state.reviews, reviewsPage.data?.items ?? [])
     .filter((review) => review.type === "weekly")
     .sort((left, right) => right.completedAt.localeCompare(left.completedAt));
@@ -34,7 +39,6 @@ export function ReviewPage() {
     const summary = note ? `${weekly.generatedSummary}\n\nDecyzja na kolejny tydzień: ${note}` : weekly.generatedSummary;
     const saved = await completeReview(summary, "weekly", {
       completedActions: String(weekly.completedActions),
-      focusMinutes: String(weekly.focusMinutes),
       knowledgeAdded: String(weekly.knowledgeAdded),
       progressUpdates: String(weekly.progressUpdates)
     });
@@ -55,17 +59,16 @@ export function ReviewPage() {
           <Panel className="review-main weekly-summary-card">
             <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.generatedSummary}</p></span></div>
             <div className="weekly-metrics" aria-label="Wyniki tygodnia">
-              <div><CheckCircle2 /><span><strong>{weekly.completedActions}</strong><small>ukończone</small></span></div>
-              <div><Clock3 /><span><strong>{weekly.focusMinutes} min</strong><small>fokusu</small></span></div>
-              <div><BookMarked /><span><strong>{weekly.knowledgeAdded}</strong><small>Wiedza</small></span></div>
-              <div><ListChecks /><span><strong>{weekly.progressUpdates}</strong><small>aktualizacje</small></span></div>
+              <div><CheckCircle2 /><span><strong>{weekly.completedActions}</strong><small>{polishPluralForm(weekly.completedActions, "ukończone Działanie", "ukończone Działania", "ukończonych Działań")}</small></span></div>
+              <div><BookMarked /><span><strong>{weekly.knowledgeAdded}</strong><small>{polishPluralForm(weekly.knowledgeAdded, "dodany element Wiedzy", "dodane elementy Wiedzy", "dodanych elementów Wiedzy")}</small></span></div>
+              <div><ListChecks /><span><strong>{weekly.progressUpdates}</strong><small>{polishPluralForm(weekly.progressUpdates, "aktualizacja postępu", "aktualizacje postępu", "aktualizacji postępu")}</small></span></div>
             </div>
           </Panel>
 
           <AIGoalReview />
 
           <Panel className="weekly-suggestions">
-            <div className="section-heading"><div><span className="section-kicker"><Lightbulb />Sugestie</span><h2>Co warto zrobić dalej</h2></div><span>{weekly.suggestions.length} priorytety</span></div>
+            <div className="section-heading"><div><span className="section-kicker"><Lightbulb />Sugestie</span><h2>Co warto zrobić dalej</h2></div><span>{polishCount(weekly.suggestions.length, "priorytet", "priorytety", "priorytetów")}</span></div>
             <div className="weekly-suggestion-list">
               {weekly.suggestions.map((suggestion, index) => <Link key={suggestion.id} to={suggestion.to}>
                 <span className="suggestion-number">{index + 1}</span>
@@ -87,7 +90,7 @@ export function ReviewPage() {
 
         <aside className="review-side">
           <Panel><h2>Historia tygodni</h2>{reviewsPage.isPending ? <p className="muted-copy">Ładowanie historii…</p> : reviewHistory.length ? reviewHistory.map((review) => <div className="review-history-item" key={review.id}><strong>Podsumowanie zapisane</strong><small>{reviewFormatter.format(new Date(review.completedAt))}</small><p>{review.summary || "Bez dodatkowej decyzji."}</p></div>) : <p className="muted-copy">Pierwsze zapisane podsumowanie pojawi się tutaj.</p>}{reviewsPage.isError && reviewHistory.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać dalszej historii.</p> : null}{reviewHistory.length && reviewsPage.hasNextPage ? <Button loading={reviewsPage.isFetchingNextPage} onClick={() => void reviewsPage.fetchNextPage()}>Załaduj starsze</Button> : null}</Panel>
-          <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length}</strong><span>aktywnych Celów</span></p><p><strong>{state.actions.filter((action) => action.status === "blocked").length}</strong><span>blokad</span></p><p><strong>{state.inbox.filter((item) => item.status === "unprocessed").length}</strong><span>w Skrzynce</span></p></div></Panel>
+          <Panel><h2><RefreshCw />Stan na teraz</h2><div className="review-state-list"><p><strong>{activeGoalCount}</strong><span>{polishPluralForm(activeGoalCount, "aktywny Cel", "aktywne Cele", "aktywnych Celów")}</span></p><p><strong>{blockedCount}</strong><span>{polishPluralForm(blockedCount, "blokada", "blokady", "blokad")}</span></p><p><strong>{inboxCount}</strong><span>{polishPluralForm(inboxCount, "element w Skrzynce", "elementy w Skrzynce", "elementów w Skrzynce")}</span></p></div></Panel>
         </aside>
       </div>
     </AppShell>

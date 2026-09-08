@@ -30,7 +30,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
   const { state, createAction, createGoal, capture } = useStore();
   const { notifySuccess } = useActionFeedback();
   const navigate = useNavigate();
-  const draft = usePersistentDraft("global-quick-add", emptyDraft);
+  const draft = usePersistentDraft("global-quick-add", emptyDraft, 450, { targetId: "new" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -147,7 +147,7 @@ export function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void
         <button className="quick-add-recurring" type="button" onClick={() => { close(); navigate("/routines?newRecurring=1"); }}><span><Repeat2 /></span><span><strong>Działanie cykliczne</strong><small>Utwórz nawyk, rutynę albo regularne przypomnienie</small></span><Plus /></button>
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}
         <div className="quick-add-footer">
-          <div className="quick-add-draft"><DraftStatus status={draft.status} />{draft.dirty ? <Button type="button" variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div>
+          <div className="quick-add-draft"><DraftStatus status={draft.status} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(draft.value.content)} />{draft.dirty ? <Button type="button" variant="ghost" onClick={draft.discard}>Odrzuć szkic</Button> : null}</div>
           <Button type="submit" variant="primary" loading={saving} disabled={!draft.value.content.trim()}><Plus />{modeCopy.submit}</Button>
         </div>
       </form>

@@ -1,5 +1,20 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Zadania gotowe do przekazania czatowi
+
+[Najważniejsze wdrożenia — pakiet z 8 września 2026](./priority-implementation-2026-09-08/README.md)
+rozpisuje priorytety audytu na 9 osobnych planów. Zawiera kolejność, zależności,
+zakres, kryteria odbioru i gotowe polecenia dla czatu wykonującego. Domyślny
+pakiet obejmuje plany 01–07 i odbiór 09; capture offline (08) jest opcjonalny.
+
+## Najnowszy przegląd możliwości rozwoju
+
+[Audyt funkcjonalny i wizualny — 7 września 2026](./product-roadmap-audit-2026-09-07.md)
+zawiera 32 propozycje z priorytetami, zależnościami, kryteriami odbioru i ryzykami.
+Rozróżnia istniejące funkcje, niezamkniętą weryfikację oraz nowe pomysły; rozlicza
+też zakres wcześniejszych planów 01–06. To punkt wejścia do wyboru kolejnych
+prac, przy zachowaniu dotychczasowych decyzji domenowych.
+
 ## Aktywny kierunek
 
 Fundament bezpieczeństwa zapisu, draftów, undo i potwierdzania ryzykownych
@@ -24,7 +39,7 @@ pozostaje zapisem etapu przejściowego.
 
 ## Kolejność realizacji
 
-Wszystkie aktywne poprawki wynikające z audytu interfejsu są rozpisane w
+Wcześniejsze poprawki wynikające z audytu interfejsu są rozpisane w
 [backlogu technicznym UI/UX](./ui-ux-remediation-backlog.md). Backlog obejmuje
 15 sprawdzonych kroków, zależności, kryteria akceptacji oraz podział AFK/HITL.
 

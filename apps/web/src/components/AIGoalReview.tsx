@@ -21,7 +21,7 @@ function signalLabel(key: string) {
   if (key.endsWith(":due-soon")) return "bliski termin";
   if (key.includes(":inactive:")) return `brak aktywności od ${key.split(":").at(-1)} dni`;
   if (key.includes(":too-many-open-actions:")) return `${key.split(":").at(-1)} otwartych Działań`;
-  return "sygnał z danych Workspace";
+  return "sygnał z danych przestrzeni pracy";
 }
 
 function errorCopy(code?: string) {

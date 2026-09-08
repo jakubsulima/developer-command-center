@@ -16,10 +16,11 @@ interface AlertDialogProps {
   loading?: boolean;
   confirmDisabled?: boolean;
   error?: string;
+  extraAction?: { label: string; onClick: () => Promise<void> | void };
   children?: ReactNode;
 }
 
-export function AlertDialog({ open, title, objectName, consequence, preserved, recovery, confirmLabel, onCancel, onConfirm, loading = false, confirmDisabled = false, error, children }: AlertDialogProps) {
+export function AlertDialog({ open, title, objectName, consequence, preserved, recovery, confirmLabel, onCancel, onConfirm, loading = false, confirmDisabled = false, error, extraAction, children }: AlertDialogProps) {
   const confirmInFlight = useRef(false);
   useEffect(() => {
     if (!open) confirmInFlight.current = false;
@@ -39,7 +40,7 @@ export function AlertDialog({ open, title, objectName, consequence, preserved, r
       <dl className="alert-dialog-details"><div><dt>Zachowane dane</dt><dd>{preserved}</dd></div><div><dt>Odzyskanie</dt><dd>{recovery}</dd></div></dl>
       {children}
       {error && <p className="auth-message error" role="alert">{error}</p>}
-      <div className="modal-actions"><Button autoFocus disabled={loading} onClick={onCancel}>Anuluj</Button><Button variant="danger" loading={loading} disabled={confirmDisabled} onClick={() => void confirm()}>{confirmLabel}</Button></div>
+      <div className="modal-actions"><Button autoFocus disabled={loading} onClick={onCancel}>Anuluj</Button>{extraAction ? <Button disabled={loading} onClick={() => void extraAction.onClick()}>{extraAction.label}</Button> : null}<Button variant="danger" loading={loading} disabled={confirmDisabled} onClick={() => void confirm()}>{confirmLabel}</Button></div>
     </Modal>
   );
 }

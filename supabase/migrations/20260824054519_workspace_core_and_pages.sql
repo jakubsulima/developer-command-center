@@ -41,7 +41,7 @@ select jsonb_build_object(
     'createdAt', template.created_at, 'updatedAt', template.updated_at
   ) order by template.is_system desc, template.name, template.id) from public.goal_templates template where (template.workspace_id = w.id or template.is_system) and template.archived_at is null and template.trashed_at is null), '[]'::jsonb),
   'goals', coalesce((select jsonb_agg(jsonb_build_object(
-    'id', goal.id, 'title', goal.title, 'outcome', goal.outcome, 'kind', goal.kind,
+    'id', goal.id, 'version', goal.version, 'title', goal.title, 'outcome', goal.outcome, 'kind', goal.kind,
     'status', goal.status, 'visibility', case when goal.trashed_at is not null then 'trashed' when goal.archived_at is not null then 'archived' else 'active' end,
     'priority', goal.priority, 'areaId', goal.area_id, 'templateId', goal.template_id,
     'targetDate', goal.target_date, 'legacySource', goal.legacy_source,
@@ -117,14 +117,14 @@ $$;
 create or replace function public.get_knowledge_page(target_workspace_id uuid, page_size integer default 50, cursor_sort_value text default null, cursor_id uuid default null)
 returns jsonb language sql stable security invoker as $$
 with ranked as (
-  select entity.id, entity.type, entity.title, content.detail, content.source_url, content.source_inbox_item_id, entity.archived_at, entity.trashed_at, content.created_at, content.updated_at, row_number() over (order by content.updated_at, entity.id) as row_no
+  select entity.id, entity.version, entity.type, entity.title, content.detail, content.source_url, content.source_inbox_item_id, entity.archived_at, entity.trashed_at, content.created_at, content.updated_at, row_number() over (order by content.updated_at, entity.id) as row_no
   from public.entities entity join public.knowledge_items content on content.entity_id = entity.id and content.workspace_id = entity.workspace_id
   where entity.workspace_id = target_workspace_id and private.is_workspace_member(entity.workspace_id) and entity.type in ('note', 'resource', 'decision', 'artifact', 'investigation')
     and (cursor_sort_value is null or (content.updated_at::text, entity.id::text) > (cursor_sort_value, cursor_id::text))
   order by content.updated_at, entity.id
   limit greatest(1, least(coalesce(page_size, 50), 100)) + 1
 ), visible as (select * from ranked where row_no <= greatest(1, least(coalesce(page_size, 50), 100)))
-select jsonb_build_object('items', coalesce((select jsonb_agg(jsonb_build_object('id', item.id, 'type', item.type, 'title', item.title, 'detail', item.detail, 'sourceUrl', item.source_url, 'sourceInboxItemId', item.source_inbox_item_id, 'archivedAt', item.archived_at, 'trashedAt', item.trashed_at, 'createdAt', item.created_at, 'updatedAt', item.updated_at) order by item.updated_at, item.id) from visible item), '[]'::jsonb), 'nextCursor', case when exists (select 1 from ranked where row_no = greatest(1, least(coalesce(page_size, 50), 100)) + 1) then (select jsonb_build_object('sortValue', item.updated_at::text, 'id', item.id) from visible item order by item.updated_at desc, item.id desc limit 1) else null end);
+select jsonb_build_object('items', coalesce((select jsonb_agg(jsonb_build_object('id', item.id, 'version', item.version, 'type', item.type, 'title', item.title, 'detail', item.detail, 'sourceUrl', item.source_url, 'sourceInboxItemId', item.source_inbox_item_id, 'archivedAt', item.archived_at, 'trashedAt', item.trashed_at, 'createdAt', item.created_at, 'updatedAt', item.updated_at) order by item.updated_at, item.id) from visible item), '[]'::jsonb), 'nextCursor', case when exists (select 1 from ranked where row_no = greatest(1, least(coalesce(page_size, 50), 100)) + 1) then (select jsonb_build_object('sortValue', item.updated_at::text, 'id', item.id) from visible item order by item.updated_at desc, item.id desc limit 1) else null end);
 $$;
 
 create or replace function public.get_goal_progress_page(target_workspace_id uuid, target_goal_id uuid default null, page_size integer default 25, cursor_sort_value text default null, cursor_id uuid default null)
@@ -173,7 +173,7 @@ stable
 security invoker
 as $$
 select jsonb_build_object(
-  'id', entity.id, 'type', entity.type, 'title', entity.title, 'detail', content.detail,
+  'id', entity.id, 'version', entity.version, 'type', entity.type, 'title', entity.title, 'detail', content.detail,
   'sourceUrl', content.source_url, 'sourceInboxItemId', content.source_inbox_item_id,
   'archivedAt', entity.archived_at, 'trashedAt', entity.trashed_at,
   'createdAt', content.created_at, 'updatedAt', content.updated_at

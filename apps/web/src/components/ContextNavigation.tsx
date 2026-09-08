@@ -9,11 +9,12 @@ import {
   type NavigationState
 } from "../domain/navigation";
 
-export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturnTo, fallbackReturnLabel }: {
+export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturnTo, fallbackReturnLabel, showBack = true }: {
   current: NavigationBreadcrumb;
   fallbackBreadcrumbs: NavigationBreadcrumb[];
   fallbackReturnTo: string;
   fallbackReturnLabel: string;
+  showBack?: boolean;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturn
   const goBack = () => navigate(returnTo, navigation ? { state: { navigationRestore: { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY }, breadcrumbs: navigation.breadcrumbs } } : undefined);
 
   return <nav className="context-navigation" aria-label="Ścieżka kontekstu">
-    <button className="back-link context-navigation-back" type="button" onClick={goBack} aria-label={returnLabel}><ArrowLeft /><span>{returnLabel}</span></button>
+    {showBack ? <button className="back-link context-navigation-back" type="button" onClick={goBack} aria-label={returnLabel}><ArrowLeft /><span>{returnLabel}</span></button> : null}
     <ol className="context-breadcrumbs">
       {visible.map((breadcrumb, index) => {
         const isCurrent = index === visible.length - 1;

@@ -45,7 +45,7 @@ export function AuthPage() {
             <li><Check />Zapisuj postęp i wiedzę przy swoich Celach</li>
           </ol>
         </div>
-        <small>Dane każdego Workspace są odizolowane przez PostgreSQL RLS.</small>
+        <small>Dane każdej przestrzeni pracy są odizolowane przez PostgreSQL RLS.</small>
       </section>
 
       <section className="auth-form-wrap">
@@ -54,12 +54,12 @@ export function AuthPage() {
             <button type="button" role="tab" aria-selected={mode === "sign-in"} className={mode === "sign-in" ? "active" : ""} onClick={() => { setMode("sign-in"); setError(""); }}>Logowanie</button>
             <button type="button" role="tab" aria-selected={mode === "sign-up"} className={mode === "sign-up" ? "active" : ""} onClick={() => { setMode("sign-up"); setError(""); }}>Nowe konto</button>
           </div>}
-          <div className="auth-heading"><h2>{mode === "sign-in" ? "Witaj ponownie" : "Utwórz prywatny Workspace"}</h2><p>{mode === "sign-in" ? "Wróć dokładnie tam, gdzie przerwałeś." : "Zacznij od jednego odizolowanego miejsca na własną pracę."}</p></div>
+          <div className="auth-heading"><h2>{mode === "sign-in" ? "Witaj ponownie" : "Utwórz prywatną przestrzeń pracy"}</h2><p>{mode === "sign-in" ? "Wróć dokładnie tam, gdzie przerwałeś." : "Zacznij od jednego odizolowanego miejsca na własną pracę."}</p></div>
 
           {mode === "sign-up" && <>
             <Label htmlFor="auth-name">Imię i nazwisko</Label>
             <Input id="auth-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required />
-            <Label htmlFor="workspace-name">Nazwa Workspace</Label>
+            <Label htmlFor="workspace-name">Nazwa przestrzeni pracy</Label>
             <Input id="workspace-name" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} required />
           </>}
           <Label htmlFor="auth-email">Adres e-mail</Label>

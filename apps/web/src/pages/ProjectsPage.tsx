@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Archive, ArrowRight, FolderKanban, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, BookOpen, FolderKanban, ListChecks, Plus, RotateCcw, Target, Trash2 } from "lucide-react";
 import { NavigationLink } from "../components/ContextNavigation";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -49,8 +49,8 @@ export function ProjectsPage() {
     }
   };
 
-  return <AppShell>
-    <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe konteksty pracy`} action={<Button variant="primary" onClick={() => setOpen(true)}><Plus />Nowy projekt</Button>} />
+  return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", active: open, onClick: () => setOpen(true) }}>
+    <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe konteksty pracy`} />
     <p className="page-lead">Projekt przechowuje wspólny kontekst przez długi czas. W jego ramach tworzysz prostsze Cele, Działania i Wiedzę.</p>
     <div className="knowledge-views" role="group" aria-label="Widoczność Projektów">
       <Button variant={view === "active" ? "primary" : "ghost"} onClick={() => setView("active")}>Aktywne</Button>
@@ -59,18 +59,18 @@ export function ProjectsPage() {
     </div>
     {projects.length ? <div className="project-card-grid">{projects.map((project, index) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
+      const statusLabel = view === "active" ? "Aktywny" : view === "archived" ? "Archiwum" : "W koszu";
       return <Panel className={`${entityCardVariants()} project-card project-context-card entity-card`} key={project.id} data-navigation-card-id={`project-${project.id}`} tabIndex={-1}>
-        <div className="project-card-head"><span className={`project-avatar ${colors[index % colors.length]}`}>{initials(project.name)}</span><Badge tone="info">Stały kontekst</Badge></div>
-        <h2 className="line-clamp-2">{project.name}</h2>
+        <div className="project-card-head"><span className={`project-avatar ${colors[index % colors.length]}`}>{initials(project.name)}</span><div className="project-card-identity"><small>Projekt</small><h2 className="line-clamp-2">{project.name}</h2></div><Badge tone={view === "active" ? "info" : "neutral"}>{statusLabel}</Badge></div>
         <p className="line-clamp-2">{project.description || "Miejsce dla powiązanych celów, zadań i wiedzy."}</p>
         <div className="project-context-metrics">
-          <span><strong>{counts.goals}</strong><small>Cele</small></span>
-          <span><strong>{counts.actions}</strong><small>Otwarte zadania</small></span>
-          <span><strong>{counts.knowledge}</strong><small>Wiedza</small></span>
+          <span><Target /><span><strong>{counts.goals}</strong><small>Cele</small></span></span>
+          <span><ListChecks /><span><strong>{counts.actions}</strong><small>Otwarte</small></span></span>
+          <span><BookOpen /><span><strong>{counts.knowledge}</strong><small>Wiedza</small></span></span>
         </div>
-        {view === "active" ? <NavigationLink className="button button-secondary entity-card-open" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={`project-${project.id}`}>Otwórz projekt <ArrowRight /></NavigationLink> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
+        {view === "active" ? <NavigationLink className="project-card-cta entity-card-open" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={`project-${project.id}`}>Otwórz projekt <ArrowRight /></NavigationLink> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
       </Panel>;
-    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Utwórz trwałe miejsce, w którym połączysz Cele, Działania i Wiedzę." : "Nie ma tutaj żadnych Projektów."} action={view === "active" ? <Button variant="primary" onClick={() => setOpen(true)}><Plus />Utwórz pierwszy Projekt</Button> : undefined} />}
+    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Użyj przycisku Projekt na dole, aby utworzyć trwałe miejsce dla Celów, Działań i Wiedzy." : "Nie ma tutaj żadnych Projektów."} />}
 
     <Modal open={open} title="Nowy projekt" onClose={() => setOpen(false)}>
       <form onSubmit={submit}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Archive, ArrowRight, BookOpen, CircleDot, Flag, Heart, Layers3, Plus, RefreshCw, Rocket, RotateCcw, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, BookOpen, CircleDot, Flag, Heart, Layers3, RefreshCw, Rocket, RotateCcw, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -15,7 +15,7 @@ import { locationAddress, navigationCardId } from "../domain/navigation";
 
 const systemTemplates = [
   { id: "blank", name: "Własny", kind: "custom" as const, outcomePrompt: "Co chcesz osiągnąć?", description: "Zacznij od pustej karty", icon: CircleDot },
-  { id: "project", name: "Projekt", kind: "project" as const, outcomePrompt: "Jaki rezultat ma dostarczyć projekt?", description: "Dostarcz konkretny rezultat", icon: Rocket },
+  { id: "project", name: "Projektowy", kind: "project" as const, outcomePrompt: "Jaki rezultat ma dostarczyć projekt?", description: "Dostarcz konkretny rezultat", icon: Rocket },
   { id: "learning", name: "Nauka", kind: "learning" as const, outcomePrompt: "Co będziesz umieć lub potrafić pokazać?", description: "Zdobądź i pokaż umiejętność", icon: BookOpen },
   { id: "personal", name: "Osobisty", kind: "personal" as const, outcomePrompt: "Jaka zmiana ma być widoczna?", description: "Wprowadź ważną zmianę", icon: Heart },
   { id: "maintenance", name: "Utrzymanie", kind: "maintenance" as const, outcomePrompt: "Jaki stan chcesz regularnie utrzymywać?", description: "Dbaj o pożądany stan", icon: RefreshCw }
@@ -102,8 +102,8 @@ export function GoalsPage() {
   };
 
   return (
-    <AppShell>
-      <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" action={<Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Nowy cel</Button>} />
+    <AppShell addAction={{ label: "Nowy Cel", shortLabel: "Cel", ariaLabel: "Dodaj nowy Cel", active: newOpen, onClick: () => setNewOpen(true) }}>
+      <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" />
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
         {statusTabs()}
@@ -139,7 +139,7 @@ export function GoalsPage() {
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Zacznij od rezultatu, który jest dla Ciebie ważny. Pierwszy krok możesz dodać od razu albo później." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? <Button variant="primary" onClick={() => setNewOpen(true)}><Plus />Utwórz pierwszy cel</Button> : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Cel na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>
@@ -171,7 +171,7 @@ export function GoalsPage() {
       <Modal open={settingsOpen} title="Własne szablony Celów" onClose={() => setSettingsOpen(false)}>
         <div className="settings-stack">
           <form onSubmit={(event) => { event.preventDefault(); const changes = { name: template.name, kind: template.kind, defaultActions: template.firstAction ? [{ title: template.firstAction }] : [] }; const operation = editingTemplateId ? updateGoalTemplate(editingTemplateId, changes) : createGoalTemplate(template.name, template.kind, changes.defaultActions).then(() => undefined); void operation.then(() => { setTemplate({ name: "", kind: "custom", firstAction: "" }); setEditingTemplateId(undefined); }); }}>
-            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon Celu"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tego Workspace.</p>
+            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon Celu"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tej przestrzeni pracy.</p>
             <label className="field-label" htmlFor="template-name">Nazwa</label><input id="template-name" value={template.name} onChange={(event) => setTemplate((current) => ({ ...current, name: event.target.value }))} required />
             <label className="field-label" htmlFor="template-kind">Charakter</label><select id="template-kind" value={template.kind} onChange={(event) => setTemplate((current) => ({ ...current, kind: event.target.value as GoalKind }))}>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <label className="field-label" htmlFor="template-action">Domyślne pierwsze Działanie</label><input id="template-action" value={template.firstAction} onChange={(event) => setTemplate((current) => ({ ...current, firstAction: event.target.value }))} />

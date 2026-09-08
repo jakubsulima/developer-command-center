@@ -23,7 +23,7 @@ export function LegacyFocusHistoryPage() {
   });
   const session = localSession ?? legacyQuery.data;
   if (!localSession && legacyQuery.isPending) return <AppShell><EmptyState icon={<History />} title="Ładowanie historii" detail="Pobieram zachowany zapis Focus…" /></AppShell>;
-  if (!session) return <AppShell><EmptyState icon={<History />} title="Nie znaleziono historycznego wpisu" detail="Ta dawna sesja nie istnieje w bieżącym Workspace." /></AppShell>;
+  if (!session) return <AppShell><EmptyState icon={<History />} title="Nie znaleziono historycznego wpisu" detail="Ta dawna sesja nie istnieje w bieżącej przestrzeni pracy." /></AppShell>;
   const goal = state.goals.find((item) => item.id === session.projectId);
   const action = state.actions.find((item) => item.id === session.workItemId);
   const duration = session.endedAt ? Math.max(0, Math.round((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60000)) : undefined;

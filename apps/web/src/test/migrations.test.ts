@@ -22,7 +22,9 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -238,6 +240,26 @@ describe("migracje Supabase", () => {
     await database.exec("reset role");
   });
 
+  it("liczy bieżące podsumowanie w strefie Workspace i pomija archiwalnego rodzica", async () => {
+    const user = "82000000-0000-0000-0000-000000000008";
+    const activeGoalId = "82000000-0000-0000-0000-000000000010";
+    const archivedGoalId = "82000000-0000-0000-0000-000000000011";
+    const activeActionId = "82000000-0000-0000-0000-000000000012";
+    const archivedActionId = "82000000-0000-0000-0000-000000000013";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Workspace Weekly"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $3, 'Aktywny Cel', 'Rezultat'), ($2, $3, 'Archiwalny Cel', 'Stary rezultat')", [activeGoalId, archivedGoalId, workspace]);
+    await database.query("update public.goals set archived_at = now() where id = $1", [archivedGoalId]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title, status, completed_at) values ($1, $3, $4, 'Bieżące Działanie', 'completed', now()), ($2, $3, $5, 'Archiwalne Działanie', 'completed', now())", [activeActionId, archivedActionId, workspace, activeGoalId, archivedGoalId]);
+    const summary = await scalar<{ completedActions: number; periodStart: string; periodEnd: string }>("select public.get_workspace_weekly_summary($1)::jsonb", [workspace]);
+    expect(summary.completedActions).toBe(1);
+    expect(summary.periodStart).toMatch(/^20\d\d-\d\d-\d\d$/);
+    expect(summary.periodEnd).toMatch(/^20\d\d-\d\d-\d\d$/);
+    await database.exec("reset role");
+  });
+
   it("egzekwuje atomowe komendy UI/UX, wersje, RLS i prawdziwe typy capture", async () => {
     const user = "90000000-0000-0000-0000-000000000009";
     const otherUser = "91000000-0000-0000-0000-000000000009";
@@ -310,6 +332,17 @@ describe("migracje Supabase", () => {
     await database.query("select public.update_knowledge_item($1, '{\"title\":\"Powtórzona próba\"}'::jsonb, $2::jsonb, $3)", [knowledgeId, replacementLinks, updateKnowledgeCommand]);
     expect(await scalar<string>("select title from public.entities where id = $1", [knowledgeId])).toBe("Nowa notatka");
     expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and goal_id is not null", [knowledgeId])).toBe(0);
+
+    const goalVersion = await scalar<number>("select version from public.goals where id = $1", [goalId]);
+    await database.query("select public.update_goal_details_checked($1, $2, '{\"title\":\"Cel po kontroli\"}'::jsonb, $3)", [goalId, goalVersion, "90000000-0000-0000-0000-000000000037"]);
+    await expect(database.query("select public.update_goal_details_checked($1, $2, '{\"title\":\"Stary szkic\"}'::jsonb, $3)", [goalId, goalVersion, "90000000-0000-0000-0000-000000000038"])).rejects.toThrow("goal_version_conflict");
+    const knowledgeVersion = await scalar<number>("select version from public.entities where id = $1", [knowledgeId]);
+    await database.query("select public.update_knowledge_item_checked($1, $2, '{\"title\":\"Wiedza po kontroli\"}'::jsonb, '[]'::jsonb, $3)", [knowledgeId, knowledgeVersion, "90000000-0000-0000-0000-000000000039"]);
+    await expect(database.query("select public.update_knowledge_item_checked($1, $2, '{\"title\":\"Stary szkic\"}'::jsonb, '[]'::jsonb, $3)", [knowledgeId, knowledgeVersion, "90000000-0000-0000-0000-000000000040"])).rejects.toThrow("knowledge_version_conflict");
+    const stableProgressId = "90000000-0000-0000-0000-000000000041";
+    await database.query("select public.add_progress_checked($1, $2, $3, 'note', 'Stabilny wpis', null, null, $4)", [workspace, stableProgressId, goalId, stableProgressId]);
+    await database.query("select public.add_progress_checked($1, $2, $3, 'note', 'Nie twórz duplikatu', null, null, $4)", [workspace, stableProgressId, goalId, stableProgressId]);
+    expect(await scalar<number>("select count(*)::int from public.progress_entries where id = $1", [stableProgressId])).toBe(1);
 
     await database.query("select public.create_knowledge_with_goal_links($1, $2, 'decision', 'Wybieramy PostgreSQL', 'Uzasadnienie', null, '[]'::jsonb, 'decision', $3)", [workspace, decisionId, "90000000-0000-0000-0000-000000000036"]);
     await database.query("insert into public.knowledge_links (workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ($1, $2, $3, 'material')", [workspace, knowledgeId, decisionId]);

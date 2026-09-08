@@ -1,11 +1,10 @@
-import { Archive, BookMarked, FileCode2, FileText, FlaskConical, Inbox, Link2, MoreHorizontal, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Archive, BookMarked, Box, FileText, GitBranch, Inbox, Library, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
-import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import type { KnowledgeItem, KnowledgeKind } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { MultiCombobox } from "../components/MultiCombobox";
@@ -19,16 +18,18 @@ import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspace
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
 import { projectKnowledgeIds } from "../domain/projectModule";
-
-const kinds = {
-  artifact: { icon: FileCode2, label: "Rezultat" },
-  decision: { icon: FileText, label: "Decyzja" },
-  resource: { icon: Link2, label: "Materiał" },
-  note: { icon: BookMarked, label: "Notatka" },
-  investigation: { icon: FlaskConical, label: "Poszukiwanie" }
-} as const;
+import { filterableKnowledgeKinds, isFilterableKnowledgeKind, knowledgeKindGuidance, type CreatableKnowledgeKind } from "../domain/knowledge-kinds";
+import { knowledgeKindLabels } from "../domain/labels";
+import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
 
 type View = "active" | "archived" | "trashed";
+
+const knowledgeKindIcons = {
+  note: FileText,
+  resource: Library,
+  decision: GitBranch,
+  artifact: Box
+} as const;
 
 export function KnowledgePage() {
   const { state, loading, createKnowledge, setVisibility } = useStore();
@@ -46,17 +47,19 @@ export function KnowledgePage() {
   const goalFilter = params.get("goal") ?? "";
   const areaFilter = params.get("area") ?? "";
   const [view, setView] = useState<View>("active");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
   const [actionsItemId, setActionsItemId] = useState<string>();
-  const [form, setForm] = useState<{ kind: KnowledgeKind; title: string; detail: string; goalIds: string[]; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
+  const [form, setForm] = useState<{ kind: CreatableKnowledgeKind; title: string; detail: string; goalIds: string[]; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
   const normalized = query.trim().toLocaleLowerCase("pl");
+  const advancedFilterCount = Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(view !== "active");
   const areaKnowledgeIds = useMemo(() => areaFilter ? projectKnowledgeIds(state, areaFilter) : undefined, [areaFilter, state]);
   useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
     const next = new URLSearchParams(params); let changed = false;
-    if (kind !== "all" && !Object.prototype.hasOwnProperty.call(kinds, kind)) { next.delete("kind"); changed = true; }
+    if (kind !== "all" && !isFilterableKnowledgeKind(kind)) { next.delete("kind"); changed = true; }
     if (goalFilter && !state.goals.some((goal) => goal.id === goalFilter)) { next.delete("goal"); changed = true; }
     if (areaFilter && !state.areas.some((area) => area.id === areaFilter)) { next.delete("area"); changed = true; }
     if (changed) setParams(next, { replace: true });
@@ -70,7 +73,8 @@ export function KnowledgePage() {
     return visible && linkedToGoal && linkedToArea && (kind === "all" || item.type === kind) && (!normalized || `${item.title} ${item.detail}`.toLocaleLowerCase("pl").includes(normalized));
   });
   const create = async () => {
-    if (!form.title.trim() || createSaving) return;
+    const guidance = knowledgeKindGuidance[form.kind];
+    if (!form.title.trim() || (guidance.detailRequired && !form.detail.trim()) || createSaving) return;
     setCreateSaving(true);
     setCreateError("");
     try {
@@ -91,47 +95,62 @@ export function KnowledgePage() {
       undo: () => setVisibility("knowledge", item.id, previous)
     });
   };
+  const openContextualAdd = () => {
+    if (section === "library") {
+      setModalOpen(true);
+      return;
+    }
+    const next = new URLSearchParams(params);
+    if (captureOpen) next.delete("capture"); else next.set("capture", "true");
+    setParams(next);
+  };
 
   return (
-    <AppShell>
-      <PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" />
+    <AppShell addAction={{
+      label: section === "library" ? "Nowa Wiedza" : captureOpen ? "Zamknij Skrzynkę" : "Do Skrzynki",
+      shortLabel: section === "library" ? "Wiedza" : "Skrzynka",
+      ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : captureOpen ? "Zamknij dodawanie do Skrzynki" : "Dodaj do Skrzynki",
+      active: section === "library" ? modalOpen : captureOpen,
+      onClick: openContextualAdd
+    }}>
+      <div className="knowledge-page-heading"><PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" /></div>
       <div className="knowledge-section-bar">
         <div className="knowledge-section-tabs" role="tablist" aria-label="Widoki Wiedzy">
           <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{state.knowledge.filter((item) => !item.archivedAt && !item.trashedAt).length}</small></button>
           <button type="button" role="tab" aria-selected={section === "inbox"} onClick={() => { params.set("section", "inbox"); setParams(params); }}><Inbox /><span>Skrzynka</span>{pending > 0 ? <small>{pending}</small> : null}</button>
         </div>
-        <button
-          type="button"
-          className="knowledge-add-trigger"
-          aria-label={section === "library" ? "Nowy element Biblioteki" : captureOpen ? "Zamknij dodawanie do Skrzynki" : "Dodaj do Skrzynki"}
-          aria-expanded={section === "inbox" ? captureOpen : undefined}
-          title={section === "library" ? "Nowy element Biblioteki" : captureOpen ? "Zamknij dodawanie do Skrzynki" : "Dodaj do Skrzynki"}
-          onClick={() => {
-            if (section === "library") { setModalOpen(true); return; }
-            const next = new URLSearchParams(params);
-            if (captureOpen) next.delete("capture"); else next.set("capture", "true");
-            setParams(next);
-          }}
-        ><Plus /></button>
       </div>
       {section === "inbox" ? <KnowledgeInbox /> : <>
       <div className="knowledge-controls">
-        <div className="knowledge-toolbar">
+        <div className="knowledge-filter-topbar">
           <div className="knowledge-search"><Search /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj w bibliotece…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-          <label className="sr-only" htmlFor="knowledge-kind">Filtr typu</label>
-          <select id="knowledge-kind" value={kind} onChange={(event) => { if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{Object.entries(kinds).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select>
+          <Button className="knowledge-filter-toggle" variant="secondary" aria-expanded={filtersOpen} aria-controls="knowledge-advanced-filters" onClick={() => setFiltersOpen((current) => !current)}><SlidersHorizontal /><span>Filtry</span>{advancedFilterCount ? <small>{advancedFilterCount}</small> : null}</Button>
         </div>
-        <div className="knowledge-filter-row"><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><select aria-label="Filtr Projektu" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Projekt</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
+        <div className="knowledge-kind-filters" role="group" aria-label="Rodzaj Wiedzy">
+          <button type="button" aria-pressed={kind === "all"} onClick={() => { params.delete("kind"); setParams(params); }}><BookMarked /><span>Wszystkie</span></button>
+          {filterableKnowledgeKinds.map((value) => {
+            const Icon = knowledgeKindIcons[value];
+            return <button key={value} type="button" aria-pressed={kind === value} onClick={() => { params.set("kind", value); setParams(params); }}><Icon /><span>{knowledgeKindLabels[value]}</span></button>;
+          })}
+        </div>
+        {filtersOpen ? <div className="knowledge-advanced-filters" id="knowledge-advanced-filters">
+          <div className="knowledge-filter-fields">
+            <label><span>Cel</span><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
+            <label><span>Projekt</span><select aria-label="Filtr Projektu" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Projekt</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
+          </div>
+          <div className="knowledge-visibility-filter">
+            <span>Widok</span>
+            <div role="group" aria-label="Widoczność obiektów">
+              <button type="button" aria-pressed={view === "active"} onClick={() => setView("active")}>Aktywne</button>
+              <button type="button" aria-pressed={view === "archived"} onClick={() => setView("archived")}><Archive />Archiwum</button>
+              <button type="button" aria-pressed={view === "trashed"} onClick={() => setView("trashed")}><Trash2 />Kosz</button>
+            </div>
+          </div>
+          {advancedFilterCount ? <Button className="knowledge-clear-advanced" variant="ghost" onClick={() => { setView("active"); params.delete("goal"); params.delete("area"); setParams(params); }}>Wyczyść dodatkowe filtry</Button> : null}
+        </div> : null}
       </div>
       <div className="knowledge-view-row">
-        <Tabs value={view} onValueChange={(value) => setView(value as View)} className="knowledge-views" aria-label="Widoczność obiektów">
-        <TabsList className="knowledge-view-tabs h-auto">
-          <TabsTrigger className="min-h-10" value="active">Aktywne</TabsTrigger>
-          <TabsTrigger className="min-h-10" value="archived"><Archive />Archiwum</TabsTrigger>
-          <TabsTrigger className="min-h-10" value="trashed"><Trash2 />Kosz</TabsTrigger>
-        </TabsList>
-        </Tabs>
-        <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
+        <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{view !== "active" ? ` · ${view === "archived" ? "Archiwum" : "Kosz"}` : ""}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
       </div>
       {loading || knowledgePage.isPending ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (
@@ -152,7 +171,7 @@ export function KnowledgePage() {
             );
           })}
         </div></div>
-      ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Notatki, materiały, decyzje, rezultaty i poszukiwania pojawią się tu po świadomym zapisaniu."} action={normalized || kind !== "all" || goalFilter || areaFilter ? <Button onClick={() => { setQuery(""); setParams({}); }}>Wyczyść filtry</Button> : <Button variant="primary" onClick={() => setModalOpen(true)}>Nowy element Wiedzy</Button>} />}
+      ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Wiedza na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); setView("active"); setParams({}); }}>Wyczyść filtry</Button> : undefined} />}
       {knowledgePage.isError && results.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Wiedzy.</p> : null}
       {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
       {results.length && !knowledgePage.hasNextPage && !knowledgePage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
@@ -168,18 +187,26 @@ export function KnowledgePage() {
           {mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}
         </div>;
       })()}</Modal>
-      <Modal open={modalOpen} closeDisabled={createSaving} title="Nowy element Biblioteki" onClose={() => setModalOpen(false)}>
-        <label className="field-label" htmlFor="knowledge-new-kind">Rodzaj</label>
-        <select id="knowledge-new-kind" value={form.kind} onChange={(event) => setForm((current) => ({ ...current, kind: event.target.value as KnowledgeKind }))}>{Object.entries(kinds).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select>
-        <label className="field-label" htmlFor="knowledge-title">Tytuł / pytanie</label>
-        <input id="knowledge-title" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-        <label className="field-label" htmlFor="knowledge-detail">Treść</label>
-        <textarea id="knowledge-detail" rows={5} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
+      <Modal open={modalOpen} closeDisabled={createSaving} className="knowledge-create-modal" title="Dodaj do Biblioteki" onClose={() => setModalOpen(false)}>
+        <p className="modal-intro">Wybierz rodzaj na podstawie tego, jak chcesz później użyć tego wpisu.</p>
+        <KnowledgeKindPicker
+          value={form.kind}
+          onChange={(kind) => setForm((current) => ({
+            ...current,
+            kind,
+            sourceUrl: kind === "resource" ? current.sourceUrl : ""
+          }))}
+          name="new-knowledge-kind"
+        />
+        <label className="field-label" htmlFor="knowledge-title">{knowledgeKindGuidance[form.kind].titleLabel}</label>
+        <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} autoFocus />
+        {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /></> : null}
+        <label className="field-label" htmlFor="knowledge-detail">{knowledgeKindGuidance[form.kind].detailLabel}{!knowledgeKindGuidance[form.kind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label>
+        <textarea id="knowledge-detail" rows={4} required={knowledgeKindGuidance[form.kind].detailRequired} placeholder={knowledgeKindGuidance[form.kind].detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
         <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
         <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={form.goalIds} onChange={(goalIds) => setForm((current) => ({ ...current, goalIds }))} />
-        {form.kind === "resource" && <><label className="field-label" htmlFor="knowledge-url">URL źródła</label><input id="knowledge-url" type="url" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /></>}
         {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
-        <div className="modal-actions"><Button disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button variant="primary" loading={createSaving} disabled={!form.title.trim()} onClick={() => void create()}>Zapisz w Bibliotece</Button></div>
+        <div className="modal-actions"><Button disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button variant="primary" loading={createSaving} disabled={!form.title.trim() || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())} onClick={() => void create()}>{knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
       </Modal>
       </>}
     </AppShell>

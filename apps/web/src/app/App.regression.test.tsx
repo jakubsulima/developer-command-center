@@ -43,7 +43,13 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Cele", "Rutyny", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Cele", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    await user.click(within(more).getByRole("button", { name: /Wyszukaj/ }));
+    expect(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
+    await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("button", { name: /Dodaj dowolne/ }));
+    expect(screen.getByRole("dialog", { name: "Dodaj" })).toBeInTheDocument();
   });
 
   it("otwiera działające menu profilu i zamyka je klawiszem Escape", async () => {
@@ -105,7 +111,11 @@ describe("regresje nowego modelu Celów", () => {
 
     const priority = await screen.findByRole("region", { name: "Najważniejsze teraz" });
     const today = screen.getByRole("region", { name: "Na dziś" });
+    const overviewToggle = screen.getByRole("button", { name: /Dalszy plan/ });
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(overviewToggle);
     const attention = screen.getByRole("region", { name: "Wymaga uwagi" });
+    expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
     expect(Boolean(priority.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(today.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(attention.querySelectorAll(".attention-list > a")).toHaveLength(2);
@@ -148,10 +158,19 @@ describe("regresje nowego modelu Celów", () => {
     sessionStorage.removeItem("command-global-search");
     renderApp();
     await user.click(await screen.findByRole("button", { name: "Otwórz wyszukiwanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
-    const search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
+    let dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    let search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
     await waitFor(() => expect(search).toHaveFocus());
     expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
+    await user.type(search, "x");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Wpisz co najmniej 2 znaki");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Wyszukiwanie globalne" })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Otwórz wyszukiwanie" }));
+    dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" });
+    await waitFor(() => expect(search).toHaveFocus());
     await user.type(search, "Portfolio");
     expect(await within(dialog).findByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
     const goalResult = (await within(dialog).findAllByRole("option")).find((option) => within(option).queryByText("Portfolio v2"));
@@ -169,10 +188,10 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(item).getByRole("button", { name: "Przetwórz" }));
     const decision = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
     await user.click(within(decision).getByText("Zapisz w Bibliotece").closest("button")!);
-    await user.clear(screen.getByLabelText("Tytuł"));
-    await user.type(screen.getByLabelText("Tytuł"), "Dokumentacja PostgreSQL ERD");
+    await user.clear(screen.getByLabelText("Nazwa materiału"));
+    await user.type(screen.getByLabelText("Nazwa materiału"), "Dokumentacja PostgreSQL ERD");
     const knowledgeDialog = screen.getByRole("dialog", { name: "Zapisz w Bibliotece" });
-    await user.click(within(knowledgeDialog).getByRole("button", { name: "Zapisz" }));
+    await user.click(within(knowledgeDialog).getByRole("button", { name: "Zapisz materiał" }));
     await user.click(screen.getAllByRole("link", { name: /Wiedza/ })[0]!);
     expect(await screen.findByText("Dokumentacja PostgreSQL ERD")).toBeInTheDocument();
     expect(screen.getByText(/Źródło: Skrzynka/)).toBeInTheDocument();
@@ -203,7 +222,7 @@ describe("regresje nowego modelu Celów", () => {
   it("pokazuje walidację nowego Celu przy konkretnych polach", async () => {
     const user = userEvent.setup();
     renderApp("/goals");
-    await user.click(await screen.findByRole("button", { name: "Nowy cel" }));
+    await user.click(within(await screen.findByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Cel" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy cel" });
     await user.type(within(dialog).getByLabelText("Nazwa Celu"), "   ");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz cel" }));
@@ -215,16 +234,16 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
-    await user.click(screen.getByRole("button", { name: "Nowy element Biblioteki" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowy element Biblioteki" });
-    await user.type(within(dialog).getByLabelText("Tytuł / pytanie"), "Decyzja o modelu danych");
+    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
+    const dialog = screen.getByRole("dialog", { name: "Dodaj do Biblioteki" });
+    await user.type(within(dialog).getByLabelText("Tytuł notatki"), "Decyzja o modelu danych");
     const goals = within(dialog).getByRole("combobox", { name: "Powiązane Cele" });
     await user.click(goals);
     await user.click(within(within(dialog).getByRole("listbox", { name: "Powiązane Cele" })).getAllByRole("option")[0]!);
     await user.click(goals);
     await user.click(within(within(dialog).getByRole("listbox", { name: "Powiązane Cele" })).getAllByRole("option")[0]!);
     expect(within(dialog).getAllByRole("button", { name: /Usuń powiązanie/ })).toHaveLength(2);
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz w Bibliotece" }));
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz notatkę" }));
     const created = screen.getByText("Decyzja o modelu danych").closest("section") as HTMLElement;
     expect(within(created).getByText("2 powiązania")).toBeInTheDocument();
     expect(within(created).queryByText("FinTrack API")).not.toBeInTheDocument();
@@ -297,12 +316,12 @@ describe("regresje nowego modelu Celów", () => {
     expect(screen.queryByRole("button", { name: /start|wznów|pauza|checkpoint/i })).not.toBeInTheDocument();
   });
 
-  it("dodaje z dowolnego widoku do kolejki Wiedzy bez utraty kontekstu i czyści draft po sukcesie", async () => {
+  it("otwiera pełne dodawanie skrótem z dowolnego widoku bez utraty kontekstu", async () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
-    await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    await user.keyboard("{Control>}j{/Control}");
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
@@ -317,7 +336,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.keyboard("{Control>}j{/Control}");
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
     await user.type(input, "/cel Uporządkować dokumentację");
     expect(within(dialog).getByRole("button", { name: "Cel" })).toHaveAttribute("aria-pressed", "true");
@@ -331,7 +350,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));

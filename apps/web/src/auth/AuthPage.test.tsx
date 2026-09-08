@@ -53,8 +53,8 @@ describe("AuthPage", () => {
     renderAuth({ signUp });
     await user.click(screen.getByRole("tab", { name: "Nowe konto" }));
     await user.type(screen.getByLabelText("Imię i nazwisko"), "Ada Lovelace");
-    await user.clear(screen.getByLabelText("Nazwa Workspace"));
-    await user.type(screen.getByLabelText("Nazwa Workspace"), "Laboratorium");
+    await user.clear(screen.getByLabelText("Nazwa przestrzeni pracy"));
+    await user.type(screen.getByLabelText("Nazwa przestrzeni pracy"), "Laboratorium");
     await user.type(screen.getByLabelText("Adres e-mail"), "ada@example.com");
     await user.type(screen.getByLabelText("Hasło"), "bezpieczne-haslo");
     await user.click(screen.getByRole("button", { name: "Pokaż hasło" }));

@@ -59,6 +59,7 @@ export interface GoalTemplate {
 
 export interface Goal {
   id: string;
+  version?: number;
   title: string;
   outcome: string;
   kind: GoalKind;
@@ -308,6 +309,7 @@ export interface NewLearningGoalInput { title: string; criterion: string; skill:
 
 export interface KnowledgeItem {
   id: string;
+  version?: number;
   type: KnowledgeKind;
   title: string;
   detail: string;
@@ -393,6 +395,8 @@ export interface AppState {
   reviewCompletedAt?: string;
   /** Server-side aggregate used by bootstrap without loading historical tables. */
   weeklySummary?: {
+    periodStart?: string;
+    periodEnd?: string;
     completedActions: number;
     focusMinutes: number;
     knowledgeAdded: number;

@@ -688,7 +688,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (command.title !== undefined && !command.title.trim()) throw new Error("goal_title_required");
     if (command.outcome !== undefined && !command.outcome.trim()) throw new Error("goal_outcome_required");
     return { ...state,
-      goals: state.goals.map((candidate) => candidate.id === goal.id ? { ...candidate, title: command.title?.trim() ?? candidate.title, outcome: command.outcome?.trim() ?? candidate.outcome, areaId: command.areaId === null ? undefined : command.areaId ?? candidate.areaId, priority: command.priority ?? candidate.priority, targetDate: command.targetDate === null ? undefined : command.targetDate ?? candidate.targetDate, updatedAt: command.changedAt } : candidate),
+      goals: state.goals.map((candidate) => candidate.id === goal.id ? { ...candidate, version: (candidate.version ?? 1) + 1, title: command.title?.trim() ?? candidate.title, outcome: command.outcome?.trim() ?? candidate.outcome, areaId: command.areaId === null ? undefined : command.areaId ?? candidate.areaId, priority: command.priority ?? candidate.priority, targetDate: command.targetDate === null ? undefined : command.targetDate ?? candidate.targetDate, updatedAt: command.changedAt } : candidate),
       goalCriteria: command.criteria ? [...state.goalCriteria.filter((criterion) => criterion.goalId !== goal.id), ...command.criteria.filter((criterion) => criterion.title.trim()).map((criterion) => ({ ...criterion, goalId: goal.id, title: criterion.title.trim() }))] : state.goalCriteria
     };
   }
@@ -743,6 +743,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     validateExistingKnowledgeRelations(state, item.id, nextType);
     const knowledge = state.knowledge.map((candidate) => candidate.id === command.knowledgeId ? {
       ...candidate,
+      version: (candidate.version ?? 1) + 1,
       type: command.kind ?? candidate.type,
       title: command.title?.trim() ?? candidate.title,
       detail: command.detail?.trim() ?? candidate.detail,

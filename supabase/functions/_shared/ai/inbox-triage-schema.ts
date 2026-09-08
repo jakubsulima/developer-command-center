@@ -10,7 +10,7 @@ export const inboxTriageJsonSchema: Record<string, unknown> = {
     reason: { type: "string", minLength: 1, maxLength: 800 },
     title: { type: ["string", "null"], maxLength: 300 },
     detail: { type: ["string", "null"], maxLength: 1200 },
-    knowledgeKind: { enum: ["note", "resource", "decision", "artifact", "investigation", null] },
+    knowledgeKind: { enum: ["note", "resource", "decision", null] },
     linkedType: { enum: ["goal", "project", "none"] },
     linkedId: { type: ["string", "null"], maxLength: 80 },
     targetDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
@@ -67,7 +67,7 @@ export function validateAndFinalizeInboxTriage(payload: unknown, context: InboxT
   if (linkedType === "none" && linkedId !== null) throw new Error("foreign_reference");
   if (linkedType === "goal" && (!linkedId || !allowlists.goalIds.has(linkedId))) throw new Error("foreign_reference");
   if (linkedType === "project" && (!linkedId || !allowlists.projectIds.has(linkedId))) throw new Error("foreign_reference");
-  const knowledgeKind = root.knowledgeKind === null ? null : oneOf(root.knowledgeKind, ["note", "resource", "decision", "artifact", "investigation"], "knowledgeKind");
+  const knowledgeKind = root.knowledgeKind === null ? null : oneOf(root.knowledgeKind, ["note", "resource", "decision"], "knowledgeKind");
   const title = nullableText(root.title, "title", 300);
   const detail = nullableText(root.detail, "detail", 1200);
   const targetDate = validDate(root.targetDate);
@@ -79,5 +79,5 @@ export function validateAndFinalizeInboxTriage(payload: unknown, context: InboxT
   if (decision === "knowledge" && (!title || !knowledgeKind)) throw new Error("knowledge_fields_required");
   if (decision !== "knowledge" && knowledgeKind !== null) throw new Error("knowledge_kind_not_allowed");
   if (decision === "knowledge" && targetDate !== null) throw new Error("knowledge_date_not_allowed");
-  return { schemaVersion: 1 as const, decision: decision as "goal" | "action" | "knowledge" | "keep_inbox", confidence: confidence as "low" | "medium" | "high", reason, title, detail, knowledgeKind: knowledgeKind as "note" | "resource" | "decision" | "artifact" | "investigation" | null, linkedType: linkedType as "goal" | "project" | "none", linkedId, targetDate };
+  return { schemaVersion: 1 as const, decision: decision as "goal" | "action" | "knowledge" | "keep_inbox", confidence: confidence as "low" | "medium" | "high", reason, title, detail, knowledgeKind: knowledgeKind as "note" | "resource" | "decision" | null, linkedType: linkedType as "goal" | "project" | "none", linkedId, targetDate };
 }

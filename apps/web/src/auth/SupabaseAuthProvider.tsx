@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "../lib/supabase";
 import { AuthContext, demoUser, type AuthContextValue, type CurrentUser } from "./auth-context";
-import { clearUnscopedPrivateBrowserState } from "./private-browser-state";
+import { clearPersistentDrafts, clearUnscopedPrivateBrowserState } from "./private-browser-state";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 import { clearFirstFlowSnapshot } from "../lib/firstFlow";
 
@@ -41,6 +41,7 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
       if (!active) return;
       if (event === "SIGNED_OUT") {
         queryClient.removeQueries({ queryKey: ["workspace-state"] });
+        clearPersistentDrafts();
         clearUnscopedPrivateBrowserState();
         clearFirstFlowSnapshot();
         setUser(null);
@@ -75,11 +76,13 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
     async signOut() {
       if (demoOverride) {
         clearUnscopedPrivateBrowserState();
+        clearPersistentDrafts();
         setDemoOverride(false);
         return;
       }
       await getSupabase().auth.signOut({ scope: "local" });
       queryClient.removeQueries({ queryKey: ["workspace-state"] });
+      clearPersistentDrafts();
       clearUnscopedPrivateBrowserState();
       clearFirstFlowSnapshot();
       setUser(null);

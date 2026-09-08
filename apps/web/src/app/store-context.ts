@@ -62,12 +62,12 @@ export interface AppStore {
   submitInboxTriageFeedback: (proposalId: string, rating: AIInboxTriageFeedbackRating) => Promise<void>;
   search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
-  updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;
+  updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
   createAction: (input: NewActionInput) => Promise<string>;
   updateAction: (actionId: string, changes: { title?: string; detail?: string; scheduledFor?: string | null; pinnedToToday?: boolean; goalId?: string | null; areaId?: string | null; position?: number; checklist?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;
   setActionStatus: (actionId: string, status: ActionStatus, blocker?: string) => Promise<void>;
   setNextAction: (goalId: string, actionId: string) => Promise<void>;
-  addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string) => Promise<void>;
+  addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string, idempotencyKey?: string) => Promise<void>;
   createArea: (name: string, description?: string) => Promise<string>;
   updateArea: (areaId: string, changes: { name?: string; description?: string }) => Promise<void>;
   createGoalTemplate: (name: string, kind: GoalKind, defaultActions?: Array<{ title: string; detail?: string }>) => Promise<string>;
@@ -95,7 +95,7 @@ export interface AppStore {
   releaseDueInbox: (now?: Date) => Promise<void>;
   createKnowledge: (input: CreateKnowledgeInput) => Promise<string>;
   recordActionResult: (actionId: string, result: ActionResultInput) => Promise<string>;
-  updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; goalIds?: string[] }) => Promise<void>;
+  updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
   setAIProposal: (status: AppState["aiProposal"]) => Promise<void>;
   completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string>) => Promise<boolean>;
