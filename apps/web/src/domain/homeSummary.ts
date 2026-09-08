@@ -65,13 +65,19 @@ function actionRoute(action: GoalAction) {
   return routeForEntity({ type: "action", id: action.id });
 }
 
+function actionQueueRoute(view: "blocked" | "overdue", actionId?: string) {
+  const params = new URLSearchParams({ view });
+  if (actionId) params.set("highlight", actionId);
+  return `/actions?${params.toString()}`;
+}
+
 function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeAttentionSignal {
   return {
     id: `${kind}-${action.id}`,
     kind,
     title: action.title,
     detail: kind === "blocked" ? action.blocker ?? "Wymaga decyzji, aby ruszyć dalej." : `Zaległe od ${action.scheduledFor}.`,
-    to: actionRoute(action),
+    to: actionQueueRoute(kind, action.id),
     actionId: action.id,
     goalId: action.goalId
   };
@@ -117,8 +123,8 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
   ];
 
   let recommendation: HomeRecommendation;
-  if (blocked[0]) recommendation = { kind: "blocked", title: `Odblokuj: ${blocked[0].title}`, detail: blocked[0].blocker ?? "Podejmij decyzję, która pozwoli ruszyć dalej.", to: actionRoute(blocked[0]) };
-  else if (overdue[0]) recommendation = { kind: "overdue", title: `Zdecyduj o zaległym Działaniu: ${overdue[0].title}`, detail: "Ukończ, przełóż albo anuluj — nie przenoś go bez decyzji.", to: actionRoute(overdue[0]) };
+  if (blocked[0]) recommendation = { kind: "blocked", title: `Odblokuj: ${blocked[0].title}`, detail: blocked[0].blocker ?? "Podejmij decyzję, która pozwoli ruszyć dalej.", to: actionQueueRoute("blocked", blocked[0].id) };
+  else if (overdue[0]) recommendation = { kind: "overdue", title: `Zdecyduj o zaległym Działaniu: ${overdue[0].title}`, detail: "Ukończ, przełóż albo anuluj — nie przenoś go bez decyzji.", to: actionQueueRoute("overdue", overdue[0].id) };
   else if (todayActions[0]) recommendation = { kind: "today_action", title: `Zacznij od: ${todayActions[0].title}`, detail: todayActions[0].scheduledFor === today ? "To najbliższe Działanie zaplanowane na dziś." : "To Działanie zostało przez Ciebie przypięte na dziś.", to: actionRoute(todayActions[0]) };
   else if (nextActions[0]) recommendation = { kind: "next_action", title: nextActions[0].title, detail: "To świadomie wybrane następne Działanie dla aktywnego Celu.", context: actionContext(nextActions[0], state), to: actionRoute(nextActions[0]) };
   else if (goalsWithoutNextAction[0]) recommendation = { kind: "goal_without_next_action", title: `Ustal następny krok: ${goalsWithoutNextAction[0].title}`, detail: "Aktywny Cel potrzebuje jednego konkretnego ruchu.", to: `/goals/${encodeURIComponent(goalsWithoutNextAction[0].id)}` };

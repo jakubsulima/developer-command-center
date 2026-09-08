@@ -64,8 +64,8 @@ export interface AppStore {
   createGoal: (input: NewGoalInput) => Promise<string>;
   updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
   createAction: (input: NewActionInput) => Promise<string>;
-  updateAction: (actionId: string, changes: { title?: string; detail?: string; scheduledFor?: string | null; pinnedToToday?: boolean; goalId?: string | null; areaId?: string | null; position?: number; checklist?: Array<{ id: string; title: string; completed: boolean }> }) => Promise<void>;
-  setActionStatus: (actionId: string, status: ActionStatus, blocker?: string) => Promise<void>;
+  updateAction: (actionId: string, changes: { title?: string; detail?: string; scheduledFor?: string | null; pinnedToToday?: boolean; goalId?: string | null; areaId?: string | null; position?: number; checklist?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
+  setActionStatus: (actionId: string, status: ActionStatus, blocker?: string, expectedVersion?: number) => Promise<void>;
   setNextAction: (goalId: string, actionId: string) => Promise<void>;
   addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string, idempotencyKey?: string) => Promise<void>;
   createArea: (name: string, description?: string) => Promise<string>;

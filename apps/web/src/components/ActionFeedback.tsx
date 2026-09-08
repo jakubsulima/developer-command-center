@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertCircle, CheckCircle2, RotateCcw, X } from "lucide-react";
 import { Button } from "./ui";
 import { ActionFeedbackContext, type ActionFeedbackValue, type UndoNoticeInput } from "./action-feedback-context";
+import { describeMutationError } from "../lib/mutationError";
 
 interface UndoNotice extends UndoNoticeInput {
   id: string;
@@ -43,7 +44,7 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       await notice.undo();
       dismiss(notice.id);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Nie udało się cofnąć operacji.";
+      const message = describeMutationError(caught, "Nie udało się cofnąć operacji.");
       setNotices((current) => current.map((item) => item.id === notice.id ? { ...item, working: false, error: message, expiresAt: Number.POSITIVE_INFINITY } : item));
     }
   };

@@ -348,7 +348,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return id;
     },
-    async updateAction(actionId, changes) {
+    async updateAction(actionId, changes, requestedVersion) {
       await ensureWorkspaceState();
       let expectedVersion = 1;
       let failed = false;
@@ -356,7 +356,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         key: `action:${actionId}`,
         apply: () => {
           const previousAction = stateRef.current.actions.find((action) => action.id === actionId);
-          expectedVersion = previousAction?.version ?? 1;
+          expectedVersion = requestedVersion ?? previousAction?.version ?? 1;
           const changedAt = new Date().toISOString();
           const nextState = executeDomainCommand(stateRef.current, { type: "update_action", actionId, expectedVersion, ...changes, changedAt });
           const optimisticAction = nextState.actions.find((action) => action.id === actionId);
@@ -382,11 +382,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    async setActionStatus(actionId, status, blocker) {
-      const changedAt = new Date().toISOString();
-      const command = { type: "set_action_status", actionId, status, blocker, changedAt } as const;
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${actionId}`, command, [{ collection: "actions", ids: [actionId] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setActionStatusRemote(actionId, status, blocker), `action:${actionId}`);
+    async setActionStatus(actionId, status, blocker, requestedVersion) {
+      let expectedVersion = requestedVersion ?? 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `action:${actionId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const previousAction = previous.actions.find((action) => action.id === actionId);
+          expectedVersion = requestedVersion ?? previousAction?.version ?? 1;
+          const command = { type: "set_action_status", actionId, status, blocker, expectedVersion, changedAt: new Date().toISOString() } as const;
+          const nextState = executeDomainCommand(previous, command);
+          const previousProgressIds = new Set(previous.progressEntries.map((entry) => entry.id));
+          const optimisticProgressIds = nextState.progressEntries.filter((entry) => !previousProgressIds.has(entry.id)).map((entry) => entry.id);
+          return {
+            nextState,
+            rollback: (current: AppState) => previousAction ? {
+              ...current,
+              actions: current.actions.map((action) => action.id === actionId ? previousAction : action),
+              progressEntries: current.progressEntries.filter((entry) => !optimisticProgressIds.includes(entry.id))
+            } : current,
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            await runRemote(async () => (await loadRepository()).setActionStatusRemote(actionId, expectedVersion, status, blocker), `action:${actionId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+        }
       });
     },
     async setNextAction(goalId, actionId) {

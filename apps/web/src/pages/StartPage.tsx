@@ -28,11 +28,11 @@ function StartActionRow({ action, context, relationSummary, complete, openMore, 
   action: GoalAction;
   context: ActionContext;
   relationSummary: string[];
-  complete: (actionId: string) => Promise<void>;
+  complete: (actionId: string) => Promise<boolean>;
   openMore: (actionId: string) => void;
   busy: boolean;
   error?: string;
-  retry?: () => Promise<void>;
+  retry?: () => Promise<boolean>;
   breadcrumbs: Array<{ label: string; to?: string }>;
   returnTo: string;
 }) {

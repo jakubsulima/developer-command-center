@@ -25,7 +25,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908154542_actions_list_pagination.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260908154542_actions_list_pagination.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908170000_action_status_version_checks.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -82,6 +83,19 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [userB]);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'open'))->'items')", [workspaceB])).toBe(1);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today'))->'items')", [workspaceA])).toBe(0);
+    await database.exec("reset role");
+  });
+
+  it("odrzuca wersję starszą przy cofnięciu statusu Działania", async () => {
+    const user = "d9000000-0000-0000-0000-000000000001";
+    const action = "d9000000-0000-0000-0000-000000000010";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Undo A"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.actions (id, workspace_id, title) values ($1, $2, 'Cofnij')", [action, workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("select public.set_action_status_checked($1, 1, 'completed', null, $2)", [action, "d9000000-0000-0000-0000-000000000011"]);
+    await expect(database.query("select public.set_action_status_checked($1, 1, 'ready', null, $2)", [action, "d9000000-0000-0000-0000-000000000012"])).rejects.toThrow("action_version_conflict");
     await database.exec("reset role");
   });
 

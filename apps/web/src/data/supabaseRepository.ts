@@ -434,9 +434,10 @@ export async function updateActionRemote(actionId: string, expectedVersion: numb
   }), "Edycja Działania");
 }
 
-export async function setActionStatusRemote(actionId: string, status: ActionStatus, blocker?: string) {
+export async function setActionStatusRemote(actionId: string, expectedVersion: number, status: ActionStatus, blocker?: string) {
   dataOrThrow(await getSupabase().rpc("set_action_status_checked", {
     target_action_id: actionId,
+    expected_version: expectedVersion,
     target_status: status,
     target_blocker: blocker?.trim() ?? null,
     command_idempotency_key: crypto.randomUUID()

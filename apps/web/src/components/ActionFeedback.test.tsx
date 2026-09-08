@@ -38,13 +38,13 @@ describe("ActionFeedback", () => {
   });
 
   it("po błędzie undo pozostawia komunikat i pozwala ponowić", async () => {
-    const undo = vi.fn().mockRejectedValueOnce(new Error("konflikt wersji")).mockResolvedValueOnce(undefined);
+    const undo = vi.fn().mockRejectedValueOnce(new Error("action_version_conflict")).mockResolvedValueOnce(undefined);
     const user = userEvent.setup();
     render(<ActionFeedbackProvider><Probe firstUndo={undo} /></ActionFeedbackProvider>);
     await user.click(screen.getByRole("button", { name: "Pierwsza" }));
     await user.click(screen.getByRole("button", { name: "Cofnij" }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Cofnięcie nie powiodło się: konflikt wersji");
+    expect(alert).toHaveTextContent("Działanie zmieniło się w międzyczasie. Odśwież widok i spróbuj ponownie.");
     await user.click(within(alert).getByRole("button", { name: "Cofnij" }));
     expect(undo).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());

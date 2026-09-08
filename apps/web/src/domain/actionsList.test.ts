@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
+import { executeDomainCommand } from "./commands";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter } from "./actionsList";
 import type { GoalAction } from "./types";
 
@@ -55,5 +56,11 @@ describe("lista Działań", () => {
     expect(ids("unscheduled")).toEqual(["unscheduled", "blocked"]);
     expect(ids("blocked")).toEqual(["blocked"]);
     expect(ids("completed")).toEqual(["completed"]);
+  });
+
+  it("odrzuca cofnięcie statusu na nieaktualnej wersji", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("versioned")];
+    expect(() => executeDomainCommand(state, { type: "set_action_status", actionId: "versioned", status: "completed", expectedVersion: 2, changedAt: "2026-09-08T10:00:00.000Z" })).toThrow("action_version_conflict");
   });
 });

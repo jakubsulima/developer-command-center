@@ -48,6 +48,44 @@ describe("lista wszystkich Działań", () => {
     expect(screen.queryByRole("link", { name: "Spisać stałe koszty" })).not.toBeInTheDocument();
   });
 
+  it("wykonuje przełożenie z menu wiersza i zachowuje przypięcie", async () => {
+    const state = structuredClone(demoState);
+    state.actions = [{ ...state.actions[1]!, id: "late-pinned", title: "Zaległy przypięty krok", pinnedToToday: true, scheduledFor: "2026-08-01" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue");
+    const row = (await screen.findByRole("link", { name: "Zaległy przypięty krok" })).closest("section") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Więcej opcji: Zaległy przypięty krok" }));
+    expect(screen.getByRole("button", { name: "Dzisiaj" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Jutro" }));
+    expect(await screen.findByText(/Nadal przypięte na dziś/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Zaległy przypięty krok" })).not.toBeInTheDocument();
+  });
+
+  it("anuluje pojedyncze Działanie, zachowuje rekord i pozwala je cofnąć", async () => {
+    const state = structuredClone(demoState);
+    state.actions = [{ ...state.actions[1]!, id: "late-cancel", title: "Anulowany krok", scheduledFor: "2026-08-01" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue");
+    const row = (await screen.findByRole("link", { name: "Anulowany krok" })).closest("section") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Więcej opcji: Anulowany krok" }));
+    await user.click(screen.getByRole("button", { name: "Anuluj Działanie" }));
+    expect(await screen.findByText("Działanie anulowano. Rekord zachowano.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Anulowany krok" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByRole("link", { name: "Anulowany krok" })).toBeInTheDocument();
+  });
+
+  it("odnajduje highlight spoza pierwszej strony bez ręcznego paginowania", async () => {
+    const state = structuredClone(demoState);
+    state.actions = Array.from({ length: 31 }, (_, index) => ({ ...state.actions[1]!, id: `late-${index}`, title: `Zaległy ${index}`, scheduledFor: "2026-08-01", position: index }));
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp("/actions?view=overdue&highlight=late-30");
+    const link = await screen.findByRole("link", { name: "Zaległy 30" });
+    expect(link.closest("section")).toHaveAttribute("data-highlighted", "true");
+  });
+
   it("wraca ze szczegółu do adresu listy", async () => {
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
