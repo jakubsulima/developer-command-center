@@ -321,7 +321,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
     await user.keyboard("{Control>}j{/Control}");
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
@@ -336,7 +336,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.keyboard("{Control>}j{/Control}");
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
     await user.type(input, "/cel Uporządkować dokumentację");
     expect(within(dialog).getByRole("button", { name: "Cel" })).toHaveAttribute("aria-pressed", "true");
@@ -350,7 +350,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));

@@ -459,7 +459,7 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .weekly-summary-card .review-intro small { @apply [color:#93c5fd]; @apply [font-size:11px]; @apply [font-weight:600]; @apply [text-transform:uppercase]; @apply [letter-spacing:.07em]; }
 .weekly-summary-card .review-intro h2 { @apply [margin-top:5px]; }
 .weekly-summary-card .review-intro p { @apply [max-width:720px]; @apply [line-height:1.65]; }
-.weekly-metrics { @apply [display:grid]; @apply [grid-template-columns:repeat(4,_minmax(0,_1fr))]; @apply [gap:8px]; @apply [margin-top:18px]; }
+.weekly-metrics { @apply [display:grid]; @apply [grid-template-columns:repeat(3,_minmax(0,_1fr))]; @apply [gap:8px]; @apply [margin-top:18px]; }
 .weekly-metrics > div { @apply [min-width:0]; @apply [display:flex]; @apply [align-items:center]; @apply [gap:9px]; @apply [padding:12px]; @apply [border:1px_solid_var(--border)]; @apply [border-radius:9px]; @apply [background:var(--secondary)]; }
 .weekly-metrics svg { @apply [width:18px]; @apply [flex:0_0_auto]; @apply [color:var(--ring)]; }
 .weekly-metrics strong, .weekly-metrics small { @apply [display:block]; }
@@ -3130,11 +3130,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   font-size: 14px;
 }
 
-.start-overview-toggle small {
-  margin-top: 3px;
-  color: var(--muted-foreground);
-  font-size: 11px;
-}
+  .start-overview-toggle small {
+    margin-top: 3px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 1.45;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
 
 .start-overview-toggle > svg {
   width: 18px;
@@ -3236,9 +3240,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 
   .start-overview-toggle small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .start-overview-content {

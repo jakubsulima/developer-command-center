@@ -57,6 +57,8 @@ function toWorkspaceCore(state: AppState): WorkspaceCore {
       start: state.actions.filter((action) => action.pinnedToToday && !["completed", "cancelled", "skipped"].includes(action.status)).length
     },
     weeklySummary: {
+      periodStart: weekly.startDate,
+      periodEnd: weekly.endDate,
       completedActions: weekly.completedActions,
       focusMinutes: weekly.focusMinutes,
       knowledgeAdded: weekly.knowledgeAdded,

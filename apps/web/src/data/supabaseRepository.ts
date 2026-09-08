@@ -79,13 +79,13 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const client = getSupabase();
   const membership = dataOrThrow(
     await client.from("workspace_members").select("workspace_id").eq("user_id", userId).limit(1).maybeSingle(),
-    "Nie udało się odczytać Workspace"
+    "Nie udało się odczytać przestrzeni pracy"
   ) as { workspace_id: string } | null;
-  if (!membership) throw new Error("Użytkownik nie ma przypisanego Workspace.");
+  if (!membership) throw new Error("Użytkownik nie ma przypisanej przestrzeni pracy.");
   const workspaceId = membership.workspace_id;
   const workspace = dataOrThrow(
     await client.from("workspaces").select("timezone").eq("id", workspaceId).single(),
-    "Nie udało się odczytać ustawień Workspace"
+    "Nie udało się odczytać ustawień przestrzeni pracy"
   ) as { timezone: string | null };
 
   const [entitiesResult, projectsResult, requirementsResult, commitmentsResult, workItemsResult, inboxResult, sessionsResult, checkpointsResult, evidenceResult, goalsResult, skillsResult, goalSkillsResult, proposalsResult, reviewsResult, unifiedGoalsResult, areasResult, templatesResult, criteriaResult, actionsResult, progressResult, recurringResult, knowledgeLinksResult, knowledgeContentsResult] = await Promise.all([
@@ -251,7 +251,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     },
     aiProposal: proposal?.status ?? "rejected",
     aiProposalId: proposal?.id,
-    aiProposals: proposal ? [{ id: proposal.id, command: "remote_command", preview: "Propozycja zapisana w Workspace", sources: [], risk: "low", expectedVersions: {}, expiresAt: "2099-01-01T00:00:00.000Z", status: proposal.status }] : [],
+    aiProposals: proposal ? [{ id: proposal.id, command: "remote_command", preview: "Propozycja zapisana w przestrzeni pracy", sources: [], risk: "low", expectedVersions: {}, expiresAt: "2099-01-01T00:00:00.000Z", status: proposal.status }] : [],
     aiExecutions: [],
     reviews: reviews.map((review, index) => ({ id: `remote-review-${index}-${review.completed_at}`, type: "weekly", templateVersion: 1, answers: {}, summary: "", completedAt: review.completed_at })),
     reviewCompletedAt: reviews[0]?.completed_at
@@ -273,7 +273,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
     const repository = createSupabaseWorkspaceRepository();
     const core = await repository.loadCore(userId);
     const workspaceId = core.workspaceId;
-    if (!workspaceId) throw new Error("Użytkownik nie ma przypisanego Workspace.");
+    if (!workspaceId) throw new Error("Użytkownik nie ma przypisanej przestrzeni pracy.");
     const [inbox, knowledge, progress, completedActions] = await Promise.all([
       repository.loadPage({ workspaceId, collection: "inbox", pageSize: 50 }),
       repository.loadPage({ workspaceId, collection: "knowledge", pageSize: 50 }),
@@ -298,6 +298,8 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
       progressEntries: typed(progress.items) as AppState["progressEntries"],
       reviews: core.weeklySummary.recentReviews,
       weeklySummary: {
+        periodStart: core.weeklySummary.periodStart,
+        periodEnd: core.weeklySummary.periodEnd,
         completedActions: core.weeklySummary.completedActions,
         focusMinutes: core.weeklySummary.focusMinutes,
         knowledgeAdded: core.weeklySummary.knowledgeAdded,
@@ -653,7 +655,7 @@ const exportTables = [
 export async function exportWorkspaceRemote(workspaceId: string) {
   const client = getSupabase();
   const workspaceResult = await client.from("workspaces").select("*").eq("id", workspaceId).single();
-  const workspace = dataOrThrow(workspaceResult, "Eksport Workspace");
+  const workspace = dataOrThrow(workspaceResult, "Eksport przestrzeni pracy");
   const results = await Promise.all(exportTables.map(async (table) => {
     const result = await client.from(table).select("*").eq("workspace_id", workspaceId);
     return [table, dataOrThrow(result, `Eksport ${table}`)] as const;

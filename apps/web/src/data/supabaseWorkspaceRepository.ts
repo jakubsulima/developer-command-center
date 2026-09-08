@@ -19,10 +19,27 @@ function stringPayload(value: unknown, label: string) {
   return value;
 }
 
+function optionalStringPayload(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function decodeWeeklySummary(value: unknown, label = "WorkspaceCore.weeklySummary") {
+  const weeklySummary = objectPayload(value, label);
+  return {
+    periodStart: optionalStringPayload(weeklySummary.periodStart),
+    periodEnd: optionalStringPayload(weeklySummary.periodEnd),
+    completedActions: Number(weeklySummary.completedActions ?? 0),
+    focusMinutes: Number(weeklySummary.focusMinutes ?? 0),
+    knowledgeAdded: Number(weeklySummary.knowledgeAdded ?? 0),
+    progressUpdates: Number(weeklySummary.progressUpdates ?? 0)
+  };
+}
+
 export function decodeWorkspaceCore(payload: unknown): WorkspaceCore {
   const root = objectPayload(payload, "WorkspaceCore");
   const counts = objectPayload(root.counts, "WorkspaceCore.counts");
-  const weeklySummary = objectPayload(root.weeklySummary, "WorkspaceCore.weeklySummary");
+  const weeklySummaryPayload = objectPayload(root.weeklySummary, "WorkspaceCore.weeklySummary");
+  const weeklySummary = decodeWeeklySummary(weeklySummaryPayload);
   return {
     workspaceId: typeof root.workspaceId === "string" ? root.workspaceId : undefined,
     workspaceTimezone: stringPayload(root.workspaceTimezone, "WorkspaceCore.workspaceTimezone"),
@@ -41,11 +58,8 @@ export function decodeWorkspaceCore(payload: unknown): WorkspaceCore {
       start: Number(counts.start ?? 0)
     },
     weeklySummary: {
-      completedActions: Number(weeklySummary.completedActions ?? 0),
-      focusMinutes: Number(weeklySummary.focusMinutes ?? 0),
-      knowledgeAdded: Number(weeklySummary.knowledgeAdded ?? 0),
-      progressUpdates: Number(weeklySummary.progressUpdates ?? 0),
-      recentReviews: arrayPayload(weeklySummary.recentReviews, "WorkspaceCore.weeklySummary.recentReviews")
+      ...weeklySummary,
+      recentReviews: arrayPayload(weeklySummaryPayload.recentReviews, "WorkspaceCore.weeklySummary.recentReviews")
     }
   };
 }
@@ -79,7 +93,17 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
     async loadCore(userId) {
       const { data, error } = await getSupabase().rpc("get_workspace_core", { target_user_id: userId });
       if (error) throw new Error(`WorkspaceCore: ${error.message}`);
-      return decodeWorkspaceCore(data);
+      const core = decodeWorkspaceCore(data);
+      if (!core.workspaceId) return core;
+      try {
+        const weekly = await getSupabase().rpc("get_workspace_weekly_summary", { target_workspace_id: core.workspaceId });
+        if (!weekly.error && weekly.data && typeof weekly.data === "object" && !Array.isArray(weekly.data) && Object.hasOwn(weekly.data, "completedActions")) {
+          core.weeklySummary = { ...core.weeklySummary, ...decodeWeeklySummary(weekly.data, "WorkspaceWeeklySummary") };
+        }
+      } catch {
+        // Additive compatibility: older deployments keep the core aggregate.
+      }
+      return core;
     },
     async loadPage(query) {
       const { data, error } = await getSupabase().rpc(pageRpc[query.collection], {

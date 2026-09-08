@@ -60,12 +60,36 @@ export function withinDateRange(value: string | undefined, start: Date, end: Dat
   return timestamp >= start.getTime() && timestamp < end.getTime();
 }
 
+function hasActiveVisibility(visibility: "active" | "archived" | "trashed" | undefined) {
+  return visibility === undefined || visibility === "active";
+}
+
+export function belongsToVisibleWorkspaceContext(state: AppState, item: { goalId?: string; areaId?: string }) {
+  const goal = item.goalId ? state.goals.find((candidate) => candidate.id === item.goalId) : undefined;
+  const area = item.areaId ? state.areas.find((candidate) => candidate.id === item.areaId) : undefined;
+  return (!goal || hasActiveVisibility(goal.visibility)) && (!area || hasActiveVisibility(area.visibility));
+}
+
+export function isVisibleWorkspaceAction(state: AppState, action: AppState["actions"][number]) {
+  return belongsToVisibleWorkspaceContext(state, action);
+}
+
+export function isVisibleWorkspaceProgress(state: AppState, entry: ProgressEntry) {
+  const goal = state.goals.find((candidate) => candidate.id === entry.goalId);
+  return !goal || hasActiveVisibility(goal.visibility);
+}
+
+export function isVisibleWorkspaceKnowledge(state: AppState, item: KnowledgeItem) {
+  const project = item.projectId ? state.areas.find((candidate) => candidate.id === item.projectId) : undefined;
+  return (!project || hasActiveVisibility(project.visibility)) && !item.archivedAt && !item.trashedAt;
+}
+
 export function selectWorkspaceActivity(state: AppState, now = new Date()): WorkspaceActivityCounts {
   const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
   return {
-    completedActions: state.actions.filter((action) => action.status === "completed" && withinDateRange(action.completedAt ?? action.updatedAt, start, end)).length,
-    progressUpdates: state.progressEntries.filter((entry: ProgressEntry) => withinDateRange(entry.createdAt, start, end)).length,
-    knowledgeAdded: state.knowledge.filter((item: KnowledgeItem) => withinDateRange(item.createdAt, start, end)).length,
+    completedActions: state.actions.filter((action) => action.status === "completed" && isVisibleWorkspaceAction(state, action) && withinDateRange(action.completedAt ?? action.updatedAt, start, end)).length,
+    progressUpdates: state.progressEntries.filter((entry: ProgressEntry) => isVisibleWorkspaceProgress(state, entry) && withinDateRange(entry.createdAt, start, end)).length,
+    knowledgeAdded: state.knowledge.filter((item: KnowledgeItem) => isVisibleWorkspaceKnowledge(state, item) && withinDateRange(item.createdAt, start, end)).length,
     periodStart: startDate,
     periodEnd: endDate
   };

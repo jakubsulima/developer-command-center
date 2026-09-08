@@ -15,7 +15,7 @@ import { locationAddress, navigationCardId } from "../domain/navigation";
 
 const systemTemplates = [
   { id: "blank", name: "Własny", kind: "custom" as const, outcomePrompt: "Co chcesz osiągnąć?", description: "Zacznij od pustej karty", icon: CircleDot },
-  { id: "project", name: "Projekt", kind: "project" as const, outcomePrompt: "Jaki rezultat ma dostarczyć projekt?", description: "Dostarcz konkretny rezultat", icon: Rocket },
+  { id: "project", name: "Projektowy", kind: "project" as const, outcomePrompt: "Jaki rezultat ma dostarczyć projekt?", description: "Dostarcz konkretny rezultat", icon: Rocket },
   { id: "learning", name: "Nauka", kind: "learning" as const, outcomePrompt: "Co będziesz umieć lub potrafić pokazać?", description: "Zdobądź i pokaż umiejętność", icon: BookOpen },
   { id: "personal", name: "Osobisty", kind: "personal" as const, outcomePrompt: "Jaka zmiana ma być widoczna?", description: "Wprowadź ważną zmianę", icon: Heart },
   { id: "maintenance", name: "Utrzymanie", kind: "maintenance" as const, outcomePrompt: "Jaki stan chcesz regularnie utrzymywać?", description: "Dbaj o pożądany stan", icon: RefreshCw }
@@ -171,7 +171,7 @@ export function GoalsPage() {
       <Modal open={settingsOpen} title="Własne szablony Celów" onClose={() => setSettingsOpen(false)}>
         <div className="settings-stack">
           <form onSubmit={(event) => { event.preventDefault(); const changes = { name: template.name, kind: template.kind, defaultActions: template.firstAction ? [{ title: template.firstAction }] : [] }; const operation = editingTemplateId ? updateGoalTemplate(editingTemplateId, changes) : createGoalTemplate(template.name, template.kind, changes.defaultActions).then(() => undefined); void operation.then(() => { setTemplate({ name: "", kind: "custom", firstAction: "" }); setEditingTemplateId(undefined); }); }}>
-            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon Celu"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tego Workspace.</p>
+            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon Celu"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tej przestrzeni pracy.</p>
             <label className="field-label" htmlFor="template-name">Nazwa</label><input id="template-name" value={template.name} onChange={(event) => setTemplate((current) => ({ ...current, name: event.target.value }))} required />
             <label className="field-label" htmlFor="template-kind">Charakter</label><select id="template-kind" value={template.kind} onChange={(event) => setTemplate((current) => ({ ...current, kind: event.target.value as GoalKind }))}>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <label className="field-label" htmlFor="template-action">Domyślne pierwsze Działanie</label><input id="template-action" value={template.firstAction} onChange={(event) => setTemplate((current) => ({ ...current, firstAction: event.target.value }))} />

@@ -393,6 +393,8 @@ export interface AppState {
   reviewCompletedAt?: string;
   /** Server-side aggregate used by bootstrap without loading historical tables. */
   weeklySummary?: {
+    periodStart?: string;
+    periodEnd?: string;
     completedActions: number;
     focusMinutes: number;
     knowledgeAdded: number;

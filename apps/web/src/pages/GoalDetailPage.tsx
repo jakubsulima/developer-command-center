@@ -62,7 +62,7 @@ export function GoalDetailPage() {
   const newActionInputRef = useRef<HTMLInputElement>(null);
   const goal = state.goals.find((item) => item.id === goalId);
   useEffect(() => { const id = searchParams.get("action"); if (id) requestAnimationFrame(() => { const target = document.querySelector<HTMLElement>(`[data-action-id="${CSS.escape(id)}"]`); target?.scrollIntoView?.({ block: "center", behavior: "auto" }); target?.focus(); }); }, [searchParams, state.actions]);
-  if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono Celu" detail="Cel nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/goals")}>Wróć do Celów</Button>} /></AppShell>;
+  if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono Celu" detail="Cel nie istnieje albo nie jest dostępny w tej przestrzeni pracy." action={<Button onClick={() => navigate("/goals")}>Wróć do Celów</Button>} /></AppShell>;
   const actions = state.actions.filter((item) => item.goalId === goal.id).sort((a, b) => a.position - b.position);
   const criteria = state.goalCriteria.filter((item) => item.goalId === goal.id);
   const updates = mergePagedItems(state.progressEntries.filter((item) => item.goalId === goal.id), progressPage.data?.items ?? []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));

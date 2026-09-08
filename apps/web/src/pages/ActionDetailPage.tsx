@@ -21,7 +21,7 @@ export function ActionDetailPage() {
   const mutation = useKeyedMutation();
   const [resultOpen, setResultOpen] = useState(false);
   const action = state.actions.find((candidate) => candidate.id === actionId);
-  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innego Workspace'u." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
+  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innej przestrzeni pracy." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
     const previous = action.pinnedToToday;
     await mutation.run(`action-detail:${action.id}`, async () => {

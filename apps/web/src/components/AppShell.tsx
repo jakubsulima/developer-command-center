@@ -116,7 +116,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
     };
   }, [profileMenuOpen]);
 
-  if (loading) return <AppLoading label="Ładowanie Workspace…" />;
+  if (loading) return <AppLoading label="Ładowanie przestrzeni pracy…" />;
 
   return (
     <div className={`app-shell ${aside ? "with-aside" : ""}`}>
@@ -165,12 +165,12 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
       <Suspense fallback={null}><QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
-        <section className="mobile-more-overview" aria-label="Profil i stan Workspace"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Workspace aktualny"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
+        <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
         <section aria-labelledby="mobile-more-tools-heading"><h3 id="mobile-more-tools-heading" className="mobile-more-section-heading">Szybkie narzędzia</h3><div className="mobile-more-tools">
-          <button type="button" onClick={() => { setProfileCenterOpen(false); setMobileSearchOpen(true); }}><span><Search /></span><strong>Wyszukaj</strong><small>W całym Workspace</small></button>
+          <button type="button" onClick={() => { setProfileCenterOpen(false); setMobileSearchOpen(true); }}><span><Search /></span><strong>Wyszukaj</strong><small>W całej przestrzeni pracy</small></button>
           <button type="button" onClick={() => { setProfileCenterOpen(false); openQuickAdd(); }}><span><Plus /></span><strong>Dodaj dowolne</strong><small>Pełny wybór typów</small></button>
         </div></section>
-        <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Workspace</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
+        <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>

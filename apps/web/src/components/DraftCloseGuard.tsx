@@ -15,6 +15,6 @@ export function useDraftCloseGuard({ dirty, status, formName, discard, onClose }
   };
   return {
     requestClose,
-    dialog: <AlertDialog open={open} title="Opuścić niezapisany przepływ?" objectName={formName} consequence="Wersji roboczej nie udało się zachować. Zamknięcie usunie wpisaną treść z tego urządzenia." preserved="Wcześniej zapisane dane Workspace pozostaną bez zmian." recovery="Wybierz Anuluj, skopiuj treść lub ponów zapis przed zamknięciem." confirmLabel="Odrzuć i zamknij" onCancel={() => setOpen(false)} onConfirm={discardAndClose} />
+    dialog: <AlertDialog open={open} title="Opuścić niezapisany przepływ?" objectName={formName} consequence="Wersji roboczej nie udało się zachować. Zamknięcie usunie wpisaną treść z tego urządzenia." preserved="Wcześniej zapisane dane przestrzeni pracy pozostaną bez zmian." recovery="Wybierz Anuluj, skopiuj treść lub ponów zapis przed zamknięciem." confirmLabel="Odrzuć i zamknij" onCancel={() => setOpen(false)} onConfirm={discardAndClose} />
   };
 }

@@ -119,7 +119,7 @@ describe("StoreProvider", () => {
       [],
       expect.any(String)
     ));
-    expect(screen.queryByText("Brak aktywnego Workspace.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Brak aktywnej przestrzeni pracy.")).not.toBeInTheDocument();
   });
 
   it("wycofuje optymistyczne zmiany Capture, Inboxu, AI i Review po błędach synchronizacji", async () => {
@@ -171,7 +171,7 @@ describe("StoreProvider", () => {
     repository.loadSupabaseState.mockRejectedValue(new Error("Brak połączenia"));
     const user = userEvent.setup();
     renderStore(<Probe />);
-    expect(await screen.findByRole("heading", { name: "Nie udało się otworzyć Workspace" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Nie udało się otworzyć przestrzeni pracy" })).toBeInTheDocument();
     expect(screen.getByText("Brak połączenia")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Spróbuj ponownie" }));
     expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2);

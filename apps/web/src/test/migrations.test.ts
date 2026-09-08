@@ -22,7 +22,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260825071833_add_ai_goal_reviews.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -235,6 +236,26 @@ describe("migracje Supabase", () => {
     await database.query("select public.materialize_recurring_occurrence($1, $2, $3, '2026-08-04', $4)", [workspace, seriesId, occurrenceId, "80000000-0000-0000-0000-000000000097"]);
     await database.query("select public.materialize_recurring_occurrence($1, $2, $3, '2026-08-04', $4)", [workspace, seriesId, "80000000-0000-0000-0000-000000000014", "80000000-0000-0000-0000-000000000096"]);
     expect(await scalar<number>("select count(*)::int from public.actions where recurring_template_id = $1 and occurrence_date = '2026-08-04'", [seriesId])).toBe(1);
+    await database.exec("reset role");
+  });
+
+  it("liczy bieżące podsumowanie w strefie Workspace i pomija archiwalnego rodzica", async () => {
+    const user = "82000000-0000-0000-0000-000000000008";
+    const activeGoalId = "82000000-0000-0000-0000-000000000010";
+    const archivedGoalId = "82000000-0000-0000-0000-000000000011";
+    const activeActionId = "82000000-0000-0000-0000-000000000012";
+    const archivedActionId = "82000000-0000-0000-0000-000000000013";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Workspace Weekly"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $3, 'Aktywny Cel', 'Rezultat'), ($2, $3, 'Archiwalny Cel', 'Stary rezultat')", [activeGoalId, archivedGoalId, workspace]);
+    await database.query("update public.goals set archived_at = now() where id = $1", [archivedGoalId]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title, status, completed_at) values ($1, $3, $4, 'Bieżące Działanie', 'completed', now()), ($2, $3, $5, 'Archiwalne Działanie', 'completed', now())", [activeActionId, archivedActionId, workspace, activeGoalId, archivedGoalId]);
+    const summary = await scalar<{ completedActions: number; periodStart: string; periodEnd: string }>("select public.get_workspace_weekly_summary($1)::jsonb", [workspace]);
+    expect(summary.completedActions).toBe(1);
+    expect(summary.periodStart).toMatch(/^20\d\d-\d\d-\d\d$/);
+    expect(summary.periodEnd).toMatch(/^20\d\d-\d\d-\d\d$/);
     await database.exec("reset role");
   });
 

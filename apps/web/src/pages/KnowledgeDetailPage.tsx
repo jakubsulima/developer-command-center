@@ -62,7 +62,7 @@ export function KnowledgeDetailPage() {
     return [...contexts.values()];
   }, [knowledgeId, links, state]);
   if (!localItem && itemQuery.isPending) return <AppShell><EmptyState icon={<BookMarked />} title="Ładowanie Wiedzy" detail="Pobieram element…" /></AppShell>;
-  if (!resolvedItem) return <AppShell><EmptyState icon={<BookMarked />} title="Nie znaleziono elementu Wiedzy" detail="Element nie istnieje albo nie jest dostępny w tym Workspace." action={<Button onClick={() => navigate("/knowledge")}>Wróć do Wiedzy</Button>} /></AppShell>;
+  if (!resolvedItem) return <AppShell><EmptyState icon={<BookMarked />} title="Nie znaleziono elementu Wiedzy" detail="Element nie istnieje albo nie jest dostępny w tej przestrzeni pracy." action={<Button onClick={() => navigate("/knowledge")}>Wróć do Wiedzy</Button>} /></AppShell>;
   const item = resolvedItem;
   const editableKind = isCreatableKnowledgeKind(form.kind) ? form.kind : undefined;
   const editGuidance = editableKind ? knowledgeKindGuidance[editableKind] : undefined;
