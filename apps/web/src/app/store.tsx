@@ -304,11 +304,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return goalId;
     },
-    async updateGoal(goalId, changes) {
-      const changedAt = new Date().toISOString();
-      const command = { type: "update_goal", goalId, ...changes, changedAt } as const;
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, changes), `goal:${goalId}`);
+    async updateGoal(goalId, changes, requestedVersion) {
+      await ensureWorkspaceState();
+      let expectedVersion = 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `goal:${goalId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const previousGoal = previous.goals.find((goal) => goal.id === goalId);
+          expectedVersion = requestedVersion ?? previousGoal?.version ?? 1;
+          const command = { type: "update_goal", goalId, ...changes, changedAt: new Date().toISOString() } as const;
+          return {
+            nextState: executeDomainCommand(previous, command),
+            rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "goals", ids: [goalId] }, { collection: "goalCriteria", ids: previous.goalCriteria.filter((criterion) => criterion.goalId === goalId).map((criterion) => criterion.id) }]),
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            await runRemote(async () => (await loadRepository()).updateGoalRemote(goalId, expectedVersion, changes), `goal:${goalId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+        }
       });
     },
     async createAction(input) {
@@ -370,8 +396,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId), `goal:${goalId}:next-action`);
       });
     },
-    async addProgress(goalId, kind, content, actionId, knowledgeItemId) {
-      const id = crypto.randomUUID();
+    async addProgress(goalId, kind, content, actionId, knowledgeItemId, idempotencyKey) {
+      const id = idempotencyKey ?? crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
@@ -764,21 +790,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return knowledgeId;
     },
-    async updateKnowledge(knowledgeId, changes) {
-      const previous = stateRef.current;
-      const changedAt = new Date().toISOString();
-      const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
-        id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
-        goalId
-      }));
-      const { goalIds: _goalIds, ...knowledgeChanges } = changes;
-      void _goalIds;
-      const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge:${knowledgeId}`, { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt }, [
-        { collection: "knowledge", ids: [knowledgeId] },
-        { collection: "knowledgeLinks", ids: linkIds }
-      ], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, knowledgeChanges, goalLinks), `knowledge:${knowledgeId}`);
+    async updateKnowledge(knowledgeId, changes, requestedVersion) {
+      await ensureWorkspaceState();
+      let expectedVersion = 1;
+      let failed = false;
+      await mutationCoordinator.run({
+        key: `knowledge:${knowledgeId}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const previousItem = previous.knowledge.find((item) => item.id === knowledgeId);
+          expectedVersion = requestedVersion ?? previousItem?.version ?? 1;
+          const changedAt = new Date().toISOString();
+          const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
+            id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
+            goalId
+          }));
+          const { goalIds: _goalIds, ...knowledgeChanges } = changes;
+          void _goalIds;
+          const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
+          const command = { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt } as const;
+          return {
+            nextState: executeDomainCommand(previous, command),
+            rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "knowledge", ids: [knowledgeId] }, { collection: "knowledgeLinks", ids: linkIds }]),
+            reapply: (fresh: AppState) => executeDomainCommand(fresh, command)
+          };
+        },
+        persist: async () => {
+          if (mode === "demo") return;
+          try {
+            const previous = stateRef.current;
+            const { goalIds: _goalIds, ...knowledgeChanges } = changes;
+            const goalLinks = changes.goalIds === undefined ? undefined : [...new Set(changes.goalIds)].map((goalId) => ({
+              id: previous.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeId && link.goalId === goalId)?.id ?? crypto.randomUUID(),
+              goalId
+            }));
+            void _goalIds;
+            await runRemote(async () => (await loadRepository()).updateKnowledgeRemote(knowledgeId, expectedVersion, knowledgeChanges, goalLinks), `knowledge:${knowledgeId}`);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        },
+        reconcile: async () => {
+          if (!failed) return undefined;
+          const refreshed = await remoteQuery.refetch();
+          return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+        }
       });
     },
     async setVisibility(entityType, entityId, visibility) {

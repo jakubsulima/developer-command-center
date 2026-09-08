@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { BookMarked, CheckCircle2, ExternalLink, FolderKanban, Link2, Plus, RotateCcw } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -19,6 +19,10 @@ import { ContextNavigation, NavigationLink } from "../components/ContextNavigati
 import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationBreadcrumb } from "../domain/navigation";
 import { resolveKnowledgeProjectContexts } from "../domain/knowledge";
 import { creatableKnowledgeKinds, isCreatableKnowledgeKind, knowledgeKindGuidance } from "../domain/knowledge-kinds";
+import { usePersistentDraft } from "../hooks/usePersistentDraft";
+import { DraftStatus } from "../components/DraftStatus";
+import { DraftConflictNotice } from "../components/DraftConflictNotice";
+import { isDraftVersionConflict } from "../components/draftConflict";
 
 export function KnowledgeDetailPage() {
   const { knowledgeId } = useParams();
@@ -41,12 +45,12 @@ export function KnowledgeDetailPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
   const [supportingId, setSupportingId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [form, setForm] = useState({ kind: "note" as KnowledgeKind, title: "", detail: "", sourceUrl: "", goalIds: [] as string[] });
-  useEffect(() => {
-    if (resolvedItem) setForm({ kind: resolvedItem.type, title: resolvedItem.title, detail: resolvedItem.detail, sourceUrl: resolvedItem.sourceUrl ?? "", goalIds: state.knowledgeLinks.filter((link) => link.knowledgeItemId === resolvedItem.id && link.goalId).map((link) => link.goalId!) });
-  }, [resolvedItem, state.knowledgeLinks]);
+  const formDraft = usePersistentDraft("knowledge-edit", { kind: (resolvedItem?.type ?? "note") as KnowledgeKind, title: resolvedItem?.title ?? "", detail: resolvedItem?.detail ?? "", sourceUrl: resolvedItem?.sourceUrl ?? "", goalIds: resolvedItem ? state.knowledgeLinks.filter((link) => link.knowledgeItemId === resolvedItem.id && link.goalId).map((link) => link.goalId!) : [] }, 450, { targetId: knowledgeId ?? "new", baseVersion: resolvedItem?.version, enabled: Boolean(resolvedItem) });
+  const form = formDraft.value;
+  const setForm = formDraft.setValue;
   const links = useMemo(() => state.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId), [knowledgeId, state.knowledgeLinks]);
   const supportingLinks = useMemo(() => state.knowledgeLinks.filter((link) => link.targetKnowledgeItemId === knowledgeId), [knowledgeId, state.knowledgeLinks]);
   const projectContexts = useMemo(() => {
@@ -76,8 +80,8 @@ export function KnowledgeDetailPage() {
     event.preventDefault();
     if (editGuidance?.detailRequired && !form.detail.trim()) return;
     setSaving(true); setError("");
-    try { await updateKnowledge(item.id, { kind: form.kind, title: form.title, detail: form.detail, sourceUrl: form.sourceUrl || null, goalIds: form.goalIds }); setEditing(false); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Nie udało się zapisać zmian."); }
+    try { await updateKnowledge(item.id, { kind: form.kind, title: form.title, detail: form.detail, sourceUrl: form.sourceUrl || null, goalIds: form.goalIds }, typeof formDraft.baseVersion === "number" ? formDraft.baseVersion : undefined); formDraft.clear(); setConflict(false); setEditing(false); }
+    catch (caught) { if (isDraftVersionConflict(caught)) setConflict(true); setError(caught instanceof Error ? caught.message : "Nie udało się zapisać zmian."); }
     finally { setSaving(false); }
   };
   const linkedTargets = links.filter((link) => !link.areaId).map((link) => ({ link, goal: state.goals.find((goal) => goal.id === link.goalId), action: state.actions.find((action) => action.id === link.actionId), series: state.recurringActionTemplates.find((series) => series.id === link.recurringTemplateId), knowledge: state.knowledge.find((candidate) => candidate.id === link.targetKnowledgeItemId) }));
@@ -113,8 +117,8 @@ export function KnowledgeDetailPage() {
         <textarea id="knowledge-edit-detail" rows={12} required={editGuidance?.detailRequired} placeholder={editGuidance?.detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
         <span className="field-label">Powiązane Cele</span>
         <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={form.goalIds} onChange={(goalIds) => setForm((current) => ({ ...current, goalIds }))} />
-        {error ? <p className="auth-message error" role="alert">{error}</p> : null}
-        <div className="modal-actions"><Button type="button" disabled={saving} onClick={() => setEditing(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.title.trim() || Boolean(editGuidance?.detailRequired && !form.detail.trim())}>Zapisz zmiany</Button></div>
+        {error ? <p className="auth-message error" role="alert">{error}</p> : null}{conflict ? <DraftConflictNotice onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} onOpenCurrent={() => { formDraft.clear(); setConflict(false); setEditing(false); }} /> : null}
+        <div className="modal-actions"><DraftStatus status={formDraft.status} errorMessage={formDraft.errorMessage} onRetry={() => void formDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} />{formDraft.dirty ? <Button type="button" variant="ghost" onClick={formDraft.discard}>Odrzuć szkic</Button> : null}<Button type="button" disabled={saving} onClick={() => setEditing(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.title.trim() || Boolean(editGuidance?.detailRequired && !form.detail.trim())}>Zapisz zmiany</Button></div>
       </form> : <><div className="knowledge-body">{item.detail || <span className="muted-copy">Brak treści.</span>}</div>{sourceHref ? <a className="source-link" href={sourceHref} target="_blank" rel="noopener noreferrer">Otwórz źródło <ExternalLink /></a> : null}</>}
     </Panel></div><aside className="detail-aside">
       <Panel className="knowledge-projects-panel"><h2><FolderKanban />Projekty i transfer wiedzy</h2><p className="muted-copy">Ten sam wniosek może pracować w kilku Projektach bez kopiowania treści.</p>{projectContexts.length > 1 ? <div className="cross-project-signal">Łączy {projectContexts.length} Projekty</div> : null}{projectContexts.map((context) => <div className="linked-knowledge linked-project-context" key={context.project.id}><span><NavigationLink to={`/projects/${context.project.id}`} breadcrumbs={breadcrumbs} returnTo={itemNavigation.returnTo} returnLabel={itemNavigation.returnLabel}><span>{context.project.name}</span></NavigationLink><small>{[...context.sources].join(" · ")}</small></span>{context.directLinks.map((link) => <Button key={link.id} variant="ghost" aria-label={`Odłącz Projekt: ${context.project.name}`} onClick={() => void mutation.run(`project-context:${item.id}`, () => unlinkKnowledge(link.id))}>×</Button>)}</div>)}{!projectContexts.length ? <p className="muted-copy">Nie połączono jeszcze z żadnym Projektem.</p> : null}<div className="inline-link"><select aria-label="Połącz z kolejnym Projektem" value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Wybierz Projekt…</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><Button disabled={!projectId} loading={mutation.isBusy(`project-context:${item.id}`)} onClick={() => void mutation.run(`project-context:${item.id}`, async () => { await linkKnowledge(item.id, { areaId: projectId }, "reference"); setProjectId(""); })}><Plus />Połącz Projekt</Button></div>{mutation.error(`project-context:${item.id}`) ? <p className="inline-mutation-error" role="alert">{mutation.error(`project-context:${item.id}`)} <button type="button" onClick={() => void mutation.retry(`project-context:${item.id}`)?.()}>Spróbuj ponownie</button></p> : null}</Panel>

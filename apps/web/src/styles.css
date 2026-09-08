@@ -1465,6 +1465,12 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .draft-status svg { @apply [width:15px]; @apply [height:15px]; }
 .draft-status-saved { @apply [color:#6ee7b7]; }
 .draft-status-error { @apply [color:#fca5a5]; }
+.draft-status-action { @apply [display:inline-flex] [align-items:center] [gap:4px] [margin-left:6px] [border:0] [background:transparent] [color:inherit] [text-decoration:underline] [cursor:pointer] [font:inherit]; }
+.draft-status-action svg { @apply [width:13px] [height:13px]; }
+.draft-footer { @apply [display:flex] [align-items:center] [gap:8px] [flex-wrap:wrap]; }
+.draft-conflict { @apply [margin-top:14px] [padding:12px] [border:1px_solid_#d97706] [border-radius:8px] [background:#3b2611] [color:#fed7aa] [font-size:13px]; }
+.draft-conflict p { @apply [margin:5px_0_10px] [color:#fde68a]; }
+.draft-conflict-actions { @apply [display:flex] [gap:8px] [flex-wrap:wrap]; }
 
 .undo-stack { @apply [position:fixed]; @apply [right:20px]; @apply [bottom:20px]; @apply [z-index:80]; @apply [width:min(460px,_calc(100vw_-_40px))]; @apply [display:flex]; @apply [flex-direction:column]; @apply [gap:10px]; @apply [pointer-events:none]; }
 .undo-notice { @apply [min-height:66px]; @apply [display:grid]; @apply [grid-template-columns:28px_minmax(0,_1fr)_auto_32px]; @apply [align-items:center]; @apply [gap:10px]; @apply [padding:10px_12px]; @apply [border:1px_solid_#17634d]; @apply [border-radius:10px]; @apply [background:#0d2924]; @apply [box-shadow:0_14px_44px_rgba(0,0,0,.42)]; @apply [pointer-events:auto]; }

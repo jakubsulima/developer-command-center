@@ -59,6 +59,7 @@ export interface GoalTemplate {
 
 export interface Goal {
   id: string;
+  version?: number;
   title: string;
   outcome: string;
   kind: GoalKind;
@@ -308,6 +309,7 @@ export interface NewLearningGoalInput { title: string; criterion: string; skill:
 
 export interface KnowledgeItem {
   id: string;
+  version?: number;
   type: KnowledgeKind;
   title: string;
   detail: string;

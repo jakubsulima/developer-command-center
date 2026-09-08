@@ -23,7 +23,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -331,6 +332,17 @@ describe("migracje Supabase", () => {
     await database.query("select public.update_knowledge_item($1, '{\"title\":\"Powtórzona próba\"}'::jsonb, $2::jsonb, $3)", [knowledgeId, replacementLinks, updateKnowledgeCommand]);
     expect(await scalar<string>("select title from public.entities where id = $1", [knowledgeId])).toBe("Nowa notatka");
     expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id = $1 and goal_id is not null", [knowledgeId])).toBe(0);
+
+    const goalVersion = await scalar<number>("select version from public.goals where id = $1", [goalId]);
+    await database.query("select public.update_goal_details_checked($1, $2, '{\"title\":\"Cel po kontroli\"}'::jsonb, $3)", [goalId, goalVersion, "90000000-0000-0000-0000-000000000037"]);
+    await expect(database.query("select public.update_goal_details_checked($1, $2, '{\"title\":\"Stary szkic\"}'::jsonb, $3)", [goalId, goalVersion, "90000000-0000-0000-0000-000000000038"])).rejects.toThrow("goal_version_conflict");
+    const knowledgeVersion = await scalar<number>("select version from public.entities where id = $1", [knowledgeId]);
+    await database.query("select public.update_knowledge_item_checked($1, $2, '{\"title\":\"Wiedza po kontroli\"}'::jsonb, '[]'::jsonb, $3)", [knowledgeId, knowledgeVersion, "90000000-0000-0000-0000-000000000039"]);
+    await expect(database.query("select public.update_knowledge_item_checked($1, $2, '{\"title\":\"Stary szkic\"}'::jsonb, '[]'::jsonb, $3)", [knowledgeId, knowledgeVersion, "90000000-0000-0000-0000-000000000040"])).rejects.toThrow("knowledge_version_conflict");
+    const stableProgressId = "90000000-0000-0000-0000-000000000041";
+    await database.query("select public.add_progress_checked($1, $2, $3, 'note', 'Stabilny wpis', null, null, $4)", [workspace, stableProgressId, goalId, stableProgressId]);
+    await database.query("select public.add_progress_checked($1, $2, $3, 'note', 'Nie twórz duplikatu', null, null, $4)", [workspace, stableProgressId, goalId, stableProgressId]);
+    expect(await scalar<number>("select count(*)::int from public.progress_entries where id = $1", [stableProgressId])).toBe(1);
 
     await database.query("select public.create_knowledge_with_goal_links($1, $2, 'decision', 'Wybieramy PostgreSQL', 'Uzasadnienie', null, '[]'::jsonb, 'decision', $3)", [workspace, decisionId, "90000000-0000-0000-0000-000000000036"]);
     await database.query("insert into public.knowledge_links (workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ($1, $2, $3, 'material')", [workspace, knowledgeId, decisionId]);

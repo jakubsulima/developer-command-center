@@ -7,7 +7,7 @@ import { emptyState } from "./empty";
 import { createSupabaseWorkspaceRepository } from "./supabaseWorkspaceRepository";
 import type { WorkspacePageItem } from "./workspaceRepository";
 
-interface EntityRow { id: string; type: string; title: string; archived_at: string | null; trashed_at: string | null }
+interface EntityRow { id: string; type: string; title: string; version: number; archived_at: string | null; trashed_at: string | null }
 interface ProjectRow { entity_id: string; outcome: string; constraints_md: string; status: string }
 interface RequirementRow { entity_id: string; project_id: string; description: string; status: string }
 interface CommitmentRow { id: string; target_entity_id: string; status: string; is_primary: boolean; effort_budget_minutes: number | null }
@@ -21,7 +21,7 @@ interface SkillRow { entity_id: string }
 interface GoalSkillRow { learning_goal_id: string; skill_id: string }
 interface ProposalRow { id: string; status: "pending" | "approved" | "rejected"; created_at: string }
 interface ReviewRow { completed_at: string }
-interface GoalRow { id: string; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
+interface GoalRow { id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
 interface AreaRow { id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalTemplateRow { id: string; name: string; kind: AppState["goalTemplates"][number]["kind"]; outcome_prompt: string; criterion_prompt: string | null; default_actions: Array<{ title: string; detail?: string }>; is_system: boolean; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalCriterionRow { id: string; goal_id: string; title: string; completed: boolean; legacy_source_id: string | null }
@@ -89,7 +89,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   ) as { timezone: string | null };
 
   const [entitiesResult, projectsResult, requirementsResult, commitmentsResult, workItemsResult, inboxResult, sessionsResult, checkpointsResult, evidenceResult, goalsResult, skillsResult, goalSkillsResult, proposalsResult, reviewsResult, unifiedGoalsResult, areasResult, templatesResult, criteriaResult, actionsResult, progressResult, recurringResult, knowledgeLinksResult, knowledgeContentsResult] = await Promise.all([
-    client.from("entities").select("id,type,title,archived_at,trashed_at"),
+    client.from("entities").select("id,type,title,version,archived_at,trashed_at"),
     client.from("projects").select("entity_id,outcome,constraints_md,status"),
     client.from("requirements").select("entity_id,project_id,description,status"),
     client.from("commitments").select("id,target_entity_id,status,is_primary,effort_budget_minutes"),
@@ -103,7 +103,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     client.from("learning_goal_skills").select("learning_goal_id,skill_id"),
     client.from("ai_proposals").select("id,status,created_at").in("status", ["pending", "approved", "rejected"]).order("created_at", { ascending: false }).limit(1),
     client.from("reviews").select("completed_at").order("completed_at", { ascending: false }).limit(1),
-    client.from("goals").select("id,title,outcome,kind,status,priority,area_id,template_id,target_date,archived_at,trashed_at,legacy_source,created_at,updated_at"),
+    client.from("goals").select("id,version,title,outcome,kind,status,priority,area_id,template_id,target_date,archived_at,trashed_at,legacy_source,created_at,updated_at"),
     client.from("areas").select("id,name,description,color,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_templates").select("id,name,kind,outcome_prompt,criterion_prompt,default_actions,is_system,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_criteria").select("id,goal_id,title,completed,legacy_source_id").order("position"),
@@ -193,7 +193,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     workspaceTimezone: workspace.timezone || "Europe/Warsaw",
     areas: areas.map((area) => ({ id: area.id, name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
     goalTemplates: templates.map((template) => ({ id: template.id, name: template.name, kind: template.kind, outcomePrompt: template.outcome_prompt, criterionPrompt: template.criterion_prompt ?? undefined, defaultActions: template.default_actions, system: template.is_system, visibility: template.trashed_at ? "trashed" : template.archived_at ? "archived" : "active", createdAt: template.created_at, updatedAt: template.updated_at })),
-    goals: unifiedGoals.map((goal) => ({ id: goal.id, title: goal.title, outcome: goal.outcome, kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
+    goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
     goalCriteria: criteria.map((criterion) => ({ id: criterion.id, goalId: criterion.goal_id, title: criterion.title, completed: criterion.completed, legacySourceId: criterion.legacy_source_id ?? undefined })),
     actions: actionRows.map((action) => ({ id: action.id, version: action.version, goalId: action.goal_id ?? undefined, areaId: action.area_id ?? undefined, title: action.title, detail: action.detail, status: action.status, blocker: action.blocker ?? undefined, position: action.position, isNext: action.is_next, pinnedToToday: action.pinned_to_today, scheduledFor: action.scheduled_for ?? undefined, completedAt: action.completed_at ?? undefined, skippedAt: action.skipped_at ?? undefined, cancelledAt: action.cancelled_at ?? undefined, recurringTemplateId: action.recurring_template_id ?? undefined, occurrenceDate: action.occurrence_date ?? undefined, checklist: action.checklist, legacySourceId: action.legacy_source_id ?? undefined, createdAt: action.created_at, updatedAt: action.updated_at })),
     progressEntries: progressRows.map((entry) => ({ id: entry.id, goalId: entry.goal_id, actionId: entry.action_id ?? undefined, knowledgeItemId: entry.knowledge_entity_id ?? undefined, kind: entry.kind, content: entry.content, legacySource: entry.legacy_source ?? undefined, legacySourceId: entry.legacy_source_id ?? undefined, createdAt: entry.created_at })),
@@ -230,7 +230,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     })),
     knowledge: entities
       .filter((item): item is EntityRow & { type: KnowledgeKind } => ["note", "resource", "decision", "artifact", "investigation"].includes(item.type))
-      .map((item) => { const content = knowledgeContentMap.get(item.id); return { id: item.id, type: item.type, title: item.title, detail: content?.detail ?? "", sourceUrl: content?.source_url ?? undefined, sourceInboxItemId: content?.source_inbox_item_id ?? undefined, archivedAt: item.archived_at ?? undefined, trashedAt: item.trashed_at ?? undefined, createdAt: content?.created_at, updatedAt: content?.updated_at }; }),
+      .map((item) => { const content = knowledgeContentMap.get(item.id); return { id: item.id, version: item.version, type: item.type, title: item.title, detail: content?.detail ?? "", sourceUrl: content?.source_url ?? undefined, sourceInboxItemId: content?.source_inbox_item_id ?? undefined, archivedAt: item.archived_at ?? undefined, trashedAt: item.trashed_at ?? undefined, createdAt: content?.created_at, updatedAt: content?.updated_at }; }),
     focusSessions: sessions.map((session) => ({
       id: session.id,
       projectId: workItemMap.get(session.work_item_id)?.primary_context_entity_id ?? "",
@@ -407,8 +407,8 @@ export async function createGoalRemote(workspaceId: string, goalId: string, acti
   }), "Utworzenie Celu");
 }
 
-export async function updateGoalRemote(goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) {
-  dataOrThrow(await getSupabase().rpc("update_goal_details", { target_goal_id: goalId, goal_changes: changes, command_idempotency_key: crypto.randomUUID() }), "Edycja Celu");
+export async function updateGoalRemote(goalId: string, expectedVersion: number, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) {
+  dataOrThrow(await getSupabase().rpc("update_goal_details_checked", { target_goal_id: goalId, expected_version: expectedVersion, goal_changes: changes, command_idempotency_key: crypto.randomUUID() }), "Edycja Celu");
 }
 
 export async function createActionRemote(workspaceId: string, id: string, input: NewActionInput) {
@@ -452,10 +452,16 @@ export async function setNextActionRemote(goalId: string, actionId: string) {
 }
 
 export async function addProgressRemote(workspaceId: string, id: string, goalId: string, kind: string, content: string, actionId?: string, knowledgeItemId?: string) {
-  dataOrThrow(await getSupabase().from("progress_entries").insert({
-    id, workspace_id: workspaceId, goal_id: goalId, kind, content: content.trim(),
-    action_id: actionId ?? null, knowledge_entity_id: knowledgeItemId ?? null
-  }).select("id").single(), "Aktualizacja postępu");
+  dataOrThrow(await getSupabase().rpc("add_progress_checked", {
+    target_workspace_id: workspaceId,
+    target_progress_id: id,
+    target_goal_id: goalId,
+    progress_kind: kind,
+    progress_content: content.trim(),
+    target_action_id: actionId ?? null,
+    target_knowledge_id: knowledgeItemId ?? null,
+    command_idempotency_key: id
+  }), "Aktualizacja postępu");
 }
 
 export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string) {
@@ -595,9 +601,10 @@ export async function recordActionResultRemote(workspaceId: string, actionId: st
   }), "Zapis rezultatu Działania");
 }
 
-export async function updateKnowledgeRemote(knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
-  dataOrThrow(await getSupabase().rpc("update_knowledge_item", {
+export async function updateKnowledgeRemote(knowledgeId: string, expectedVersion: number, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
+  dataOrThrow(await getSupabase().rpc("update_knowledge_item_checked", {
     target_knowledge_id: knowledgeId,
+    expected_version: expectedVersion,
     knowledge_changes: changes,
     goal_links: goalLinks,
     command_idempotency_key: crypto.randomUUID()
