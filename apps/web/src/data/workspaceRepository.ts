@@ -1,4 +1,5 @@
 import type { DomainCommand } from "../domain/commands";
+import type { ActionListFilter } from "../domain/actionsList";
 import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
@@ -21,6 +22,7 @@ export type WorkspaceQuery =
   | { type: "core"; userId: string }
   | { type: "page"; query: WorkspacePageQuery }
   | { type: "knowledge-item"; id: string }
+  | { type: "action-item"; id: string }
   | { type: "legacy-focus-session"; id: string }
   | { type: "search"; query: string; limit?: number }
   | { type: "export"; workspaceId: string };
@@ -28,7 +30,8 @@ export type WorkspaceQuery =
 export type WorkspaceQueryResult<Q extends WorkspaceQuery> =
   Q extends { type: "core" } ? WorkspaceCore
     : Q extends { type: "page" } ? Page<WorkspacePageItem>
-      : Q extends { type: "knowledge-item" } ? KnowledgeItem | undefined
+    : Q extends { type: "knowledge-item" } ? KnowledgeItem | undefined
+      : Q extends { type: "action-item" } ? GoalAction | undefined
         : Q extends { type: "legacy-focus-session" } ? FocusSessionRecord | undefined
           : Q extends { type: "search" } ? SearchResult[]
             : Q extends { type: "export" } ? WorkspaceExport
@@ -87,13 +90,14 @@ export interface Page<T> {
   nextCursor?: PageCursor;
 }
 
-export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "reviews";
+export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "actions" | "reviews";
 
 export interface WorkspacePageQuery {
   workspaceId: string;
   collection: WorkspacePageCollection;
   pageSize: number;
   goalId?: string;
+  actionFilter?: ActionListFilter;
   cursor?: PageCursor;
 }
 
@@ -143,6 +147,7 @@ export interface WorkspaceRepository {
   loadCore(userId: string): Promise<WorkspaceCore>;
   loadPage(query: WorkspacePageQuery): Promise<Page<WorkspacePageItem>>;
   loadKnowledgeItem(id: string): Promise<KnowledgeItem | undefined>;
+  loadAction(id: string): Promise<GoalAction | undefined>;
   loadLegacyFocusSession(id: string): Promise<FocusSessionRecord | undefined>;
   search(query: string, limit?: number): Promise<SearchResult[]>;
   exportWorkspace(workspaceId: string): Promise<WorkspaceExport>;
@@ -162,10 +167,19 @@ export interface SearchResult {
   route: string;
 }
 
-export function pageByCursor<T extends { id: string }>(items: T[], pageSize: number, cursor: PageCursor | undefined, sortValue: (item: T) => string): Page<T> {
-  const ordered = [...items].sort((left, right) => sortValue(left).localeCompare(sortValue(right)) || left.id.localeCompare(right.id));
+export function pageByCursor<T extends { id: string }>(items: T[], pageSize: number, cursor: PageCursor | undefined, sortValue: (item: T) => string, direction: "asc" | "desc" = "asc"): Page<T> {
+  const compare = (left: T, right: T) => {
+    const sortComparison = sortValue(left).localeCompare(sortValue(right));
+    return (direction === "desc" ? -sortComparison : sortComparison) || (direction === "desc" ? right.id.localeCompare(left.id) : left.id.localeCompare(right.id));
+  };
+  const ordered = [...items].sort(compare);
   const afterCursor = cursor
-    ? ordered.filter((item) => sortValue(item) > cursor.sortValue || (sortValue(item) === cursor.sortValue && item.id > cursor.id))
+    ? ordered.filter((item) => {
+      const sortComparison = sortValue(item).localeCompare(cursor.sortValue);
+      return direction === "desc"
+        ? sortComparison < 0 || (sortComparison === 0 && item.id < cursor.id)
+        : sortComparison > 0 || (sortComparison === 0 && item.id > cursor.id);
+    })
     : ordered;
   const page = afterCursor.slice(0, pageSize + 1);
   const hasMore = page.length > pageSize;

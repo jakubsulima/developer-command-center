@@ -25,6 +25,7 @@ Pakiet obejmuje wszystkie pozycje P1 audytu oraz U06 (język), potrzebne do zamk
 - 02 — **lokalnie gotowy, staging oczekuje** — [raport 02](../../testing/priority-2026-09-08/02-report.md)
 - 03 — **lokalnie gotowy, staging oczekuje** — [raport 03](../../testing/priority-2026-09-08/03-report.md)
 - 04 — **lokalnie gotowy, staging oczekuje** — [raport 04](../../testing/priority-2026-09-08/04-report.md)
+- 05 — **lokalnie gotowy, staging oczekuje** — [raport 05](../../testing/priority-2026-09-08/05-report.md)
 
 Przed pierwszą zmianą backendu wykonaj przygotowawczy, tylko do odczytu etap planu 09. Końcowe E2E wykonaj po gotowym pakiecie. Plan 08 można pominąć, jawnie wpisując to do zakresu wydania. Pozostałe zależne plany otrzymują kod i raport poprzednika; sam plik planu nie oznacza wykonania zależności.
 

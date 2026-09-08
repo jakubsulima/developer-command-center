@@ -1,5 +1,5 @@
 import type { AppState, Goal, GoalAction, InboxItem } from "./types";
-import { isVisibleWorkspaceAction, localDateForTimeZone, selectWorkspaceActivity } from "./activity";
+import { isActionInTodayProjection, isVisibleWorkspaceAction, localDateForTimeZone, selectWorkspaceActivity } from "./activity";
 import { routeForEntity } from "./routes";
 import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
@@ -103,7 +103,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
     .sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.goalId!.localeCompare(b.goalId!) || a.id.localeCompare(b.id));
   const queue = [...knowledgeQueue(state)].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const todayActions = state.actions
-    .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && (action.scheduledFor === today || (!action.scheduledFor && action.pinnedToToday)))
+    .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && isActionInTodayProjection(action, today))
     .sort((a, b) => (a.scheduledFor ?? today).localeCompare(b.scheduledFor ?? today) || a.position - b.position || a.id.localeCompare(b.id));
   const upcomingActions = state.actions
     .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && Boolean(action.scheduledFor && action.scheduledFor > today && action.scheduledFor <= shiftDate(today, 7)))

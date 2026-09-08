@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
+import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
@@ -20,6 +20,7 @@ const navigation = [
   { to: "/projects", label: "Projekty", icon: FolderKanban },
   { to: "/routines", label: "Rutyny", icon: Repeat2 },
   { to: "/goals", label: "Cele", icon: Flag },
+  { to: "/actions", label: "Działania", icon: CheckSquare },
   { to: "/knowledge", label: "Wiedza", icon: Archive, badge: true },
   { to: "/review", label: "Podsumowanie", icon: CalendarCheck },
 ];
@@ -51,7 +52,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const addActionRef = useRef(addAction);
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
-  const moreActive = ["/goals", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const moreActive = ["/goals", "/actions", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback(() => {
     beginPerformanceTiming("quick-add");
     setQuickAddOpen(true);
@@ -172,6 +173,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         </div></section>
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
+          <NavLink to="/actions" onClick={() => setProfileCenterOpen(false)}><span><CheckSquare /></span><span><strong>Działania</strong><small>Wszystkie kroki</small></span><ChevronRight /></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>

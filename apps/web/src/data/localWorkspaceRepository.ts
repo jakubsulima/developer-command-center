@@ -5,6 +5,7 @@ import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
 import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
+import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import { emptyState } from "./empty";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
@@ -68,15 +69,17 @@ function toWorkspaceCore(state: AppState): WorkspaceCore {
   };
 }
 
-function pageItems(state: AppState, collection: WorkspacePageQuery["collection"], goalId?: string): WorkspacePageItem[] {
+function pageItems(state: AppState, collection: WorkspacePageQuery["collection"], goalId?: string, actionFilter?: ActionListFilter): WorkspacePageItem[] {
   if (collection === "inbox") return state.inbox;
   if (collection === "knowledge") return state.knowledge;
   if (collection === "goal-progress") return state.progressEntries.filter((entry) => !goalId || entry.goalId === goalId);
   if (collection === "completed-actions") return state.actions.filter((action) => action.status === "completed");
+  if (collection === "actions") return state.actions.filter((action) => actionFilter && matchesActionListFilter(state, action, actionFilter));
   return state.reviews;
 }
 
 function pageSortValue(item: WorkspacePageItem, collection: WorkspacePageQuery["collection"]) {
+  if (collection === "actions") return actionListSortValue(item as AppState["actions"][number], "open");
   if (collection === "completed-actions") return (item as AppState["actions"][number]).completedAt ?? (item as AppState["actions"][number]).updatedAt ?? "";
   if (collection === "reviews") return (item as AppState["reviews"][number]).completedAt;
   if (collection === "goal-progress") return (item as AppState["progressEntries"][number]).createdAt;
@@ -166,8 +169,14 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
-      const items = pageItems(state, query.collection, query.goalId);
+      const items = pageItems(state, query.collection, query.goalId, query.actionFilter);
+      if (query.collection === "actions" && query.actionFilter) {
+        return pageByCursor(items, query.pageSize, query.cursor, (item) => actionListSortValue(item as AppState["actions"][number], query.actionFilter!.view), actionListSortDirection(query.actionFilter.view));
+      }
       return pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection));
+    },
+    async loadAction(id) {
+      return (await load())?.actions.find((action) => action.id === id);
     },
     async loadKnowledgeItem(id: string) {
       return (await load())?.knowledge.find((item) => item.id === id);

@@ -17,7 +17,7 @@ describe("regresje nowego modelu Celów", () => {
   it.each([
     ["/", "Start"], ["/routines", "Rutyny"], ["/goals", "Cele"], ["/inbox", "Wiedza"], ["/knowledge", "Wiedza"],
     ["/focus", "Start"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
-    ["/learning", "Cele"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
+    ["/learning", "Cele"], ["/actions?view=unknown", "Działania"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
   ])("renderuje lub przekierowuje trasę %s", async (path, heading) => {
     renderApp(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Cele", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Cele", "Działania", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     await user.click(within(more).getByRole("button", { name: /Wyszukaj/ }));
     expect(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
