@@ -139,7 +139,7 @@ export function GoalsPage() {
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Cel na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Dodaj na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>

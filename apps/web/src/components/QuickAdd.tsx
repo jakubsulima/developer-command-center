@@ -19,9 +19,9 @@ const modes = [
 ];
 
 const copy = {
-  action: { label: "Co chcesz zrobić?", placeholder: "Np. Spisać trzy pytania do rozmowy\nW kolejnych liniach możesz dodać szczegóły", submit: "Dodaj Działanie", detail: "Konkretny krok, termin i kontekst" },
-  goal: { label: "Co chcesz osiągnąć?", placeholder: "Np. Zbudować spokojny budżet domowy\nOpisz rezultat w kolejnych liniach", submit: "Utwórz Cel", detail: "Rezultat, który chcesz doprowadzić do końca" },
-  knowledge: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść — uporządkujesz później", submit: "Zapisz do Skrzynki", detail: "Zapiszesz teraz, uporządkujesz później" }
+  action: { label: "Co chcesz zrobić?", placeholder: "Np. Spisać trzy pytania do rozmowy\nSzczegóły dopisz niżej", submit: "Dodaj Działanie", detail: "Konkretny krok, termin i kontekst" },
+  goal: { label: "Co chcesz osiągnąć?", placeholder: "Np. Zbudować spokojny budżet domowy\nOpisz rezultat niżej", submit: "Utwórz Cel", detail: "Rezultat, który chcesz doprowadzić do końca" },
+  knowledge: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść\nUporządkujesz później", submit: "Zapisz do Skrzynki", detail: "Zapiszesz teraz, uporządkujesz później" }
 } satisfies Record<QuickAddMode, { label: string; placeholder: string; submit: string; detail: string }>;
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };

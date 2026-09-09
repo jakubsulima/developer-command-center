@@ -70,16 +70,15 @@ export function ProjectsPage() {
         </div>
         {view === "active" ? <NavigationLink className="project-card-cta entity-card-open" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={`project-${project.id}`}>Otwórz projekt <ArrowRight /></NavigationLink> : <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>}
       </Panel>;
-    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Użyj przycisku Projekt na dole, aby utworzyć trwałe miejsce dla Celów, Działań i Wiedzy." : "Nie ma tutaj żadnych Projektów."} />}
+    })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Użyj przycisku Dodaj na dole, aby utworzyć trwałe miejsce dla Celów, Działań i Wiedzy." : "Nie ma tutaj żadnych Projektów."} />}
 
-    <Modal open={open} title="Nowy projekt" onClose={() => setOpen(false)}>
-      <form onSubmit={submit}>
-        <p className="modal-intro">Projekt nie ma daty końcowej. Jest stałym miejscem dla powiązanych rezultatów i materiałów.</p>
+    <Modal open={open} title="Nowy projekt" className="project-create-modal" onClose={() => setOpen(false)}>
+      <form className="project-create-form" onSubmit={submit}>
+        <p className="modal-intro">Nadaj Projektowi nazwę. Opis możesz dodać teraz albo później.</p>
         <label className="field-label" htmlFor="project-name">Nazwa Projektu</label>
         <input id="project-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Np. Finanse osobiste" required autoFocus />
-        <label className="field-label" htmlFor="project-description">Krótki kontekst <span className="optional-label">opcjonalnie</span></label>
+        <label className="field-label" htmlFor="project-description" aria-label="Krótki kontekst opcjonalnie">Opis <span className="optional-label">opcjonalnie</span></label>
         <textarea id="project-description" rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Co należy do tego Projektu?" />
-        <div className="project-preview"><FolderKanban /><span><small>Stały Projekt</small><strong>{form.name.trim() || "Nowy Projekt"}</strong><p>{form.description.trim() || "Cele, Działania i Wiedza będą zebrane w jednym miejscu."}</p></span></div>
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}
         <div className="modal-actions"><Button type="button" onClick={() => setOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.name.trim()}><Plus />Utwórz Projekt</Button></div>
       </form>

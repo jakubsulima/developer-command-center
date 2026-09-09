@@ -171,7 +171,7 @@ export function KnowledgePage() {
             );
           })}
         </div></div>
-      ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Wiedza na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); setView("active"); setParams({}); }}>Wyczyść filtry</Button> : undefined} />}
+      ) : <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Dodaj na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); setView("active"); setParams({}); }}>Wyczyść filtry</Button> : undefined} />}
       {knowledgePage.isError && results.length ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Wiedzy.</p> : null}
       {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
       {results.length && !knowledgePage.hasNextPage && !knowledgePage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}

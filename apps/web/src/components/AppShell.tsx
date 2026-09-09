@@ -60,6 +60,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const addActionRef = useRef(addAction);
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
+  const addIsOpen = quickAddOpen || Boolean(addAction?.active);
   const moreActive = ["/goals", "/actions", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback(() => {
     beginPerformanceTiming("quick-add");
@@ -157,7 +158,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} onClick={triggerAdd}><Plus />{addAction?.label ?? "Dodaj"} <kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
@@ -168,7 +169,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab ${quickAddOpen || addAction?.active ? "active" : ""}`} aria-expanded={addAction ? addAction.active : quickAddOpen} onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"}><span className="capture-fab-icon"><Plus /></span><span>{addAction?.shortLabel ?? addAction?.label ?? "Dodaj"}</span></button>
+        <button className={`capture-fab${addIsOpen ? " active" : ""}`} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
         <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
