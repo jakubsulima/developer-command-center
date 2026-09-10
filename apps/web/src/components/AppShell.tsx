@@ -15,6 +15,8 @@ import { useNavigationRestoration } from "../hooks/useNavigationRestoration";
 
 const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 
+export type AppShellQuickAddRequest = import("./QuickAdd").QuickAddRequest;
+
 const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
   { to: "/projects", label: "Projekty", icon: FolderKanban },
@@ -30,7 +32,8 @@ export type AppShellAddAction = {
   shortLabel?: string;
   ariaLabel: string;
   active?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
+  quickAdd?: AppShellQuickAddRequest;
 };
 
 export function AppShell({ children, aside, addAction }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction }) {
@@ -52,6 +55,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         ? `Dane odświeżone ${new Date(dataFreshness.lastSuccessfulAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
         : "Dane nie zostały jeszcze odświeżone";
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddRequest, setQuickAddRequest] = useState<AppShellQuickAddRequest | undefined>();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -62,17 +66,18 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
   const moreActive = ["/goals", "/actions", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-  const openQuickAdd = useCallback(() => {
+  const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     beginPerformanceTiming("quick-add");
+    setQuickAddRequest(request);
     setQuickAddOpen(true);
   }, []);
   const triggerAdd = useCallback(() => {
     const contextualAction = addActionRef.current;
-    if (contextualAction) {
+    if (contextualAction?.onClick) {
       contextualAction.onClick();
       return;
     }
-    openQuickAdd();
+    openQuickAdd(contextualAction?.quickAdd);
   }, [openQuickAdd]);
 
   const downloadExport = async () => {
@@ -104,12 +109,12 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
-        openQuickAdd();
+        triggerAdd();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openQuickAdd]);
+  }, [triggerAdd]);
   useEffect(() => {
     if (!profileMenuOpen) return;
     const closeOutside = (event: PointerEvent) => {
@@ -158,7 +163,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus />Dodaj <kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
@@ -173,7 +178,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
-      <Suspense fallback={null}><QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} /></Suspense>
+      <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
         <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>

@@ -24,6 +24,7 @@ export interface PersistentDraftOptions<T> {
   baseVersion?: DraftBaseVersion;
   enabled?: boolean;
   validate?: (value: unknown) => value is T;
+  migrate?: (value: unknown) => T | undefined;
 }
 
 const PREFIX = "command-center-draft-v2";
@@ -47,15 +48,17 @@ function defaultValidate(value: unknown): value is object | string {
   return value !== null && (typeof value === "object" || typeof value === "string");
 }
 
-function readDraft<T>(key: string | undefined, legacyKey: string | undefined, initialValue: T, validate: (value: unknown) => value is T): DraftRead<T> {
+function readDraft<T>(key: string | undefined, legacyKey: string | undefined, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined): DraftRead<T> {
   if (!key || typeof localStorage === "undefined") return { value: initialValue, restored: false };
   try {
     let raw = localStorage.getItem(key);
     if (!raw && legacyKey) raw = localStorage.getItem(legacyKey);
     if (!raw) return { value: initialValue, restored: false };
     const parsed = JSON.parse(raw) as Partial<DraftEnvelope<T>>;
-    if ((parsed.version !== 1 && parsed.version !== 2) || !validate(parsed.value)) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
-    return { value: parsed.value, restored: true, baseVersion: parsed.baseVersion };
+    if (parsed.version !== 1 && parsed.version !== 2) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
+    const migrated = validate(parsed.value) ? parsed.value : migrate?.(parsed.value);
+    if (migrated === undefined) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
+    return { value: migrated, restored: true, baseVersion: parsed.baseVersion };
   } catch {
     return { value: initialValue, restored: false, error: "Nie udało się odczytać szkicu z tego urządzenia." };
   }
@@ -74,7 +77,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   // The initial value is intentionally read only when the scoped key changes;
   // the following effect handles late server hydration without resetting edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const loaded = useMemo(() => readDraft(key, legacyKey, initialValue, validate), [key, legacyKey, validate]);
+  const loaded = useMemo(() => readDraft(key, legacyKey, initialValue, validate, options.migrate), [key, legacyKey, options.migrate, validate]);
   const [value, setValueState] = useState<T>(loaded.value);
   const [status, setStatus] = useState<DraftSaveStatus>(loaded.error ? "error" : loaded.restored ? "saved" : "idle");
   const [dirty, setDirty] = useState(loaded.restored);

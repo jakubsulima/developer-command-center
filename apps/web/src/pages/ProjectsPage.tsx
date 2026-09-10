@@ -76,7 +76,7 @@ export function ProjectsPage() {
       <form className="project-create-form" onSubmit={submit}>
         <p className="modal-intro">Nadaj Projektowi nazwę. Opis możesz dodać teraz albo później.</p>
         <label className="field-label" htmlFor="project-name">Nazwa Projektu</label>
-        <input id="project-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Np. Finanse osobiste" required autoFocus />
+        <input id="project-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Np. Finanse osobiste" required />
         <label className="field-label" htmlFor="project-description" aria-label="Krótki kontekst opcjonalnie">Opis <span className="optional-label">opcjonalnie</span></label>
         <textarea id="project-description" rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Co należy do tego Projektu?" />
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}

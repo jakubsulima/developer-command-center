@@ -1,5 +1,5 @@
 import { Archive, BookMarked, Box, FileText, GitBranch, Inbox, Library, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -21,6 +21,7 @@ import { projectKnowledgeIds } from "../domain/projectModule";
 import { filterableKnowledgeKinds, isFilterableKnowledgeKind, knowledgeKindGuidance, type CreatableKnowledgeKind } from "../domain/knowledge-kinds";
 import { knowledgeKindLabels } from "../domain/labels";
 import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
+import { normalizeHttpUrl } from "../domain/http-url";
 
 type View = "active" | "archived" | "trashed";
 
@@ -52,7 +53,7 @@ export function KnowledgePage() {
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
   const [actionsItemId, setActionsItemId] = useState<string>();
-  const [form, setForm] = useState<{ kind: CreatableKnowledgeKind; title: string; detail: string; goalIds: string[]; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
+  const [form, setForm] = useState<{ kind: CreatableKnowledgeKind; title: string; detail: string; goalIds: string[]; areaId: string; sourceUrl: string }>({ kind: "note", title: "", detail: "", goalIds: [], areaId: "", sourceUrl: "" });
   const normalized = query.trim().toLocaleLowerCase("pl");
   const advancedFilterCount = Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(view !== "active");
   const areaKnowledgeIds = useMemo(() => areaFilter ? projectKnowledgeIds(state, areaFilter) : undefined, [areaFilter, state]);
@@ -72,14 +73,20 @@ export function KnowledgePage() {
     const linkedToArea = !areaFilter || areaKnowledgeIds?.has(item.id);
     return visible && linkedToGoal && linkedToArea && (kind === "all" || item.type === kind) && (!normalized || `${item.title} ${item.detail}`.toLocaleLowerCase("pl").includes(normalized));
   });
-  const create = async () => {
+  const create = async (event?: FormEvent) => {
+    event?.preventDefault();
     const guidance = knowledgeKindGuidance[form.kind];
     if (!form.title.trim() || (guidance.detailRequired && !form.detail.trim()) || createSaving) return;
     setCreateSaving(true);
     setCreateError("");
     try {
-      await createKnowledge({ kind: form.kind, title: form.title, detail: form.detail, sourceUrl: form.sourceUrl || undefined, relations: form.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { goalId } })) });
-      setForm({ kind: "note", title: "", detail: "", goalIds: [], sourceUrl: "" });
+      const sourceUrl = form.kind === "resource" ? normalizeHttpUrl(form.sourceUrl) : undefined;
+      const relations = [
+        ...(form.areaId ? [{ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { areaId: form.areaId } }] : []),
+        ...form.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { goalId } }))
+      ];
+      await createKnowledge({ kind: form.kind, title: form.title, detail: form.detail, sourceUrl, relations });
+      setForm({ kind: "note", title: "", detail: "", goalIds: [], areaId: "", sourceUrl: "" });
       setModalOpen(false);
     } catch (caught) {
       setCreateError(caught instanceof Error ? caught.message : "Nie udało się zapisać elementu Wiedzy.");
@@ -189,24 +196,24 @@ export function KnowledgePage() {
       })()}</Modal>
       <Modal open={modalOpen} closeDisabled={createSaving} className="knowledge-create-modal" title="Dodaj do Biblioteki" onClose={() => setModalOpen(false)}>
         <p className="modal-intro">Wybierz rodzaj na podstawie tego, jak chcesz później użyć tego wpisu.</p>
+        <form className="knowledge-create-form" noValidate onSubmit={(event) => void create(event)}>
         <KnowledgeKindPicker
           value={form.kind}
-          onChange={(kind) => setForm((current) => ({
-            ...current,
-            kind,
-            sourceUrl: kind === "resource" ? current.sourceUrl : ""
-          }))}
+          onChange={(kind) => setForm((current) => ({ ...current, kind }))}
           name="new-knowledge-kind"
         />
         <label className="field-label" htmlFor="knowledge-title">{knowledgeKindGuidance[form.kind].titleLabel}</label>
-        <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} autoFocus />
+        <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
         {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /></> : null}
         <label className="field-label" htmlFor="knowledge-detail">{knowledgeKindGuidance[form.kind].detailLabel}{!knowledgeKindGuidance[form.kind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label>
         <textarea id="knowledge-detail" rows={4} required={knowledgeKindGuidance[form.kind].detailRequired} placeholder={knowledgeKindGuidance[form.kind].detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
         <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
         <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={form.goalIds} onChange={(goalIds) => setForm((current) => ({ ...current, goalIds }))} />
+        <label className="field-label" htmlFor="knowledge-project">Powiązany Projekt <span className="optional-label">opcjonalnie</span></label>
+        <select id="knowledge-project" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
         {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
-        <div className="modal-actions"><Button disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button variant="primary" loading={createSaving} disabled={!form.title.trim() || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())} onClick={() => void create()}>{knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
+        <div className="modal-actions"><Button type="button" disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={createSaving} disabled={!form.title.trim() || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())}>{knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
+        </form>
       </Modal>
       </>}
     </AppShell>

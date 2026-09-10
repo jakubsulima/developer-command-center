@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { QuickAdd } from "../components/QuickAdd";
 import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { ActionDecisionMenu } from "../components/ActionDecisionMenu";
 import { NavigationLink } from "../components/ContextNavigation";
@@ -48,7 +47,6 @@ export function ActionsPage() {
   const queryClient = useQueryClient();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string>();
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
@@ -186,7 +184,7 @@ export function ActionsPage() {
   const retry = () => void actionsPage.refetch();
 
   return (
-    <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", active: quickAddOpen, onClick: () => setQuickAddOpen(true) }}>
+    <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", quickAdd: { mode: "action", pinnedToToday: false, draftKey: "actions-list" } }}>
       <PageHeading title="Działania" eyebrow="Jedna lista wszystkich bieżących kroków" />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-view-tabs" role="tablist" aria-label="Widoki Działań">
@@ -222,7 +220,6 @@ export function ActionsPage() {
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
       <ActionDecisionMenu action={items.find((action) => action.id === actionMenuId)} open={Boolean(actionMenuId)} busy={Boolean(actionMenuId && mutation.isBusy(`actions-list:${actionMenuId}`))} today={today} tomorrow={shiftDate(today, 1)} error={actionMenuId ? mutation.error(`actions-list:${actionMenuId}`) : undefined} onClose={() => setActionMenuId(undefined)} onComplete={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? complete(action) : false; }} onReschedule={(scheduledFor) => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? reschedule(action, scheduledFor) : false; }} onCancel={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? cancel(action) : false; }} onUnblock={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? unblock(action) : false; }} onRetry={() => actionMenuId ? mutation.retry(`actions-list:${actionMenuId}`)?.() ?? false : false} />
-      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </AppShell>
   );
 }

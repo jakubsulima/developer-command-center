@@ -1989,7 +1989,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .quick-add-composer textarea { @apply [min-height:126px]; }
   .quick-add-date-choices > button { @apply [min-height:44px]; }
   .quick-add-recurring { @apply [min-height:62px]; }
-  .quick-add-footer { @apply [position:sticky]; @apply [bottom:calc(-24px_-_env(safe-area-inset-bottom))]; @apply [z-index:3]; @apply [align-items:stretch]; @apply [flex-direction:column]; @apply [margin-inline:-2px]; @apply [padding:15px_2px_calc(16px_+_env(safe-area-inset-bottom))]; @apply [background:linear-gradient(transparent,_#0a1626_18%)]; }
+  .quick-add-footer { @apply [position:static]; @apply [z-index:3]; @apply [align-items:stretch]; @apply [flex-direction:column]; @apply [margin-inline:-2px]; @apply [padding:15px_2px_calc(16px_+_env(safe-area-inset-bottom))]; @apply [background:var(--popover)]; }
   .quick-add-footer > .button { @apply [width:100%]; }
   .quick-add-draft { @apply [min-height:32px]; }
   .knowledge-list .badge { @apply [display:inline-flex]; @apply [grid-column:2]; @apply [justify-self:start]; }
@@ -3676,4 +3676,93 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     font-size: 12px;
     line-height: 17px;
   }
+}
+
+/* Creation panels use the actual visual viewport. This final override is
+   intentionally last so older mobile-density rules cannot reintroduce a
+   scrolling footer or a keyboard-sized gap. */
+.modal-backdrop {
+  inset-block-start: var(--modal-viewport-offset-top, 0px);
+  height: var(--modal-viewport-height, 100dvh);
+}
+
+.modal {
+  max-height: calc(var(--modal-viewport-height, 100dvh) - 40px);
+}
+
+.creation-hub-modal {
+  display: flex;
+  height: auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(var(--modal-viewport-height, 100dvh) - 20px);
+}
+
+.modal.knowledge-create-modal {
+  height: auto;
+  max-height: calc(var(--modal-viewport-height, 100dvh) - 20px);
+}
+
+.creation-hub-modal .modal-head { flex: 0 0 auto; }
+.creation-hub-modal .quick-add { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 14px; overflow: hidden; }
+.creation-hub-modal .quick-add-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-inline: 2px;
+}
+.creation-hub-modal .quick-add-footer {
+  flex: 0 0 auto;
+  position: static;
+  margin-inline: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--popover);
+}
+.quick-add-context-summary {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.quick-add-context-summary strong { color: var(--secondary-foreground); }
+.quick-add-library-fields { display: grid; gap: 8px; }
+.quick-add-library-fields .field-label { margin-top: 4px; }
+.knowledge-create-form { display: grid; gap: 8px; }
+.quick-add-weekdays { margin: 4px 0 0; padding: 0; border: 0; }
+.quick-add-weekdays > .field-label { display: block; margin-bottom: 4px; }
+.quick-add-weekdays > div { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.quick-add-weekdays label { display: grid; place-items: center; min-height: 34px; border: 1px solid var(--border); border-radius: 7px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; }
+.quick-add-weekdays label:has(input:checked) { border-color: var(--ring); color: var(--secondary-foreground); background: rgba(96, 165, 250, .12); }
+.quick-add-weekdays input { position: absolute; opacity: 0; pointer-events: none; }
+.quick-add-type-picker { border: 1px solid var(--border); border-radius: 10px; background: rgba(7, 17, 31, .24); }
+.quick-add-type-picker > summary { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 8px 10px; color: var(--secondary-foreground); cursor: pointer; list-style: none; }
+.quick-add-type-picker > summary::-webkit-details-marker { display: none; }
+.quick-add-type-picker > summary > span:last-child { color: var(--ring); font-size: 12px; }
+.quick-add-type-picker .quick-add-modes { margin: 0 8px 8px; }
+.topbar-add-label { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 767px) {
+  .modal-backdrop.quick-add-backdrop { align-items: flex-end; padding: 0 8px calc(82px + env(safe-area-inset-bottom)); }
+  .modal.creation-hub-modal {
+    width: min(520px, 100%);
+    height: auto;
+    max-height: calc(var(--modal-viewport-height, 100dvh) - 20px);
+    border-radius: 0;
+    padding: max(10px, env(safe-area-inset-top)) 12px 0;
+  }
+  .creation-hub-modal .modal-head { top: 0; margin: 0 0 8px; padding: 2px 2px 6px; background: var(--popover); }
+  .creation-hub-modal .quick-add-body { padding-bottom: 8px; }
+  .creation-hub-modal .quick-add-footer { margin-inline: -12px; padding: 10px 12px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(96, 165, 250, .16); }
+  .creation-hub-modal .quick-add-footer > .button { width: 100%; min-height: 48px; }
+  .creation-hub-modal .quick-add-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .creation-hub-modal .quick-add-modes > button { min-height: 52px; }
+  .creation-hub-modal .quick-add-composer textarea { min-height: 112px; max-height: none; font-size: 16px; }
+  .topbar-add-label { max-width: none; font-size: 0; }
+  .topbar-add-label::after { content: "Dodaj"; font-size: 14px; }
 }
