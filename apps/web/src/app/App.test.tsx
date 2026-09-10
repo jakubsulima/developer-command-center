@@ -23,7 +23,7 @@ describe("goal-centric workspace", () => {
   it("przechwytuje treść bez wcześniejszej klasyfikacji", async () => {
     const user = userEvent.setup();
     renderApp("/knowledge?section=inbox&capture=true");
-    const capture = await screen.findByPlaceholderText("Zapisz myśl, Działanie lub link…");
+    const capture = await screen.findByPlaceholderText("Zapisz treść lub link…");
     await user.type(capture, "Sprawdzić indeks na tabeli transakcji");
     await user.click(screen.getByRole("button", { name: "Zapisz do Skrzynki" }));
     expect(screen.getAllByText("Sprawdzić indeks na tabeli transakcji").length).toBeGreaterThanOrEqual(1);
@@ -192,7 +192,7 @@ describe("goal-centric workspace", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Otwórz centrum dodawania" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj" });
     await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
@@ -207,7 +207,7 @@ describe("goal-centric workspace", () => {
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
     expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Otwórz centrum dodawania" })).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
   });
 
   it("pokazuje propozycję AI i nie zmienia Skrzynki przed zatwierdzeniem", async () => {

@@ -150,7 +150,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
 
   const contextOptions = <><option value="">Bez powiązania</option>{activeGoals.length ? <optgroup label="Cele">{activeGoals.map((goal) => <option key={goal.id} value={`goal:${goal.id}`}>{goal.title}{goal.areaId ? " · w Projekcie" : ""}</option>)}</optgroup> : null}{activeAreas.length ? <optgroup label="Projekty">{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</optgroup> : null}</>;
 
-  return <Modal open={open} title={titleForMode} ariaLabel={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving}>
+  return <Modal open={open} title={titleForMode} ariaLabel="Dodaj" className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving}>
     <form className="quick-add" noValidate onSubmit={(event) => void submit(event)}>
       <div className="quick-add-body">
         <div className="create-hub-intro"><span><Sparkles /></span><div><strong>Jedno miejsce do tworzenia</strong><p>Typ i miejsce zapisu są jawne. Szczegóły możesz dopisać niżej.</p></div></div>

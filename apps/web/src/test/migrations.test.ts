@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const bootstrapUrl = new URL("../../../../supabase/tests/bootstrap.sql", import.meta.url);
 const migrationUrls = [
@@ -45,6 +45,11 @@ describe("migracje Supabase", () => {
     }
   }, 30_000);
 
+  afterEach(async () => {
+    await database.exec("reset role");
+    await database.query("select set_config('request.jwt.claim.sub', '', false)");
+  });
+
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
@@ -79,7 +84,7 @@ describe("migracje Supabase", () => {
     const second = await scalar<{ items: unknown[]; nextCursor: unknown }>("select public.get_actions_page($1, 'today', null, $2, '2026-09-08', 1, $3, $4)", [workspaceA, goalId, first.nextCursor!.sortValue, first.nextCursor!.id]);
     expect(second.items).toHaveLength(1);
     expect(second.nextCursor).toBeNull();
-    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today'))->'items')", [workspaceA])).toBe(2);
+    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today', null, null, '2026-09-08'))->'items')", [workspaceA])).toBe(2);
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [userB]);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'open'))->'items')", [workspaceB])).toBe(1);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today'))->'items')", [workspaceA])).toBe(0);

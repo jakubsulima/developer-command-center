@@ -71,8 +71,9 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
 
+    await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Otwórz centrum dodawania" }));
+    await user.click(await within(screen.getByRole("banner")).findByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).not.toHaveClass("mobile-chooser");
@@ -349,7 +350,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
