@@ -1,4 +1,4 @@
-import type { FocusSessionRecord, KnowledgeItem } from "../domain/types";
+import type { FocusSessionRecord, GoalAction, KnowledgeItem } from "../domain/types";
 import { getSupabase } from "../lib/supabase";
 import type { Page, PageCursor, SearchResult, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
 import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent, type AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
@@ -85,8 +85,12 @@ const pageRpc: Record<WorkspacePageQuery["collection"], string> = {
   knowledge: "get_knowledge_page",
   "goal-progress": "get_goal_progress_page",
   "completed-actions": "get_completed_actions_page",
+  actions: "get_actions_page",
   reviews: "get_reviews_page"
 };
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: string | undefined) => !value || uuidPattern.test(value);
 
 export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
   return {
@@ -106,9 +110,18 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       return core;
     },
     async loadPage(query) {
+      if (query.collection === "actions" && (!isUuid(query.actionFilter?.projectId) || !isUuid(query.actionFilter?.goalId))) {
+        return { items: [], nextCursor: undefined } as Page<WorkspacePageItem>;
+      }
       const { data, error } = await getSupabase().rpc(pageRpc[query.collection], {
         target_workspace_id: query.workspaceId,
         ...(query.collection === "goal-progress" ? { target_goal_id: query.goalId ?? null } : {}),
+        ...(query.collection === "actions" ? {
+          target_view: query.actionFilter?.view ?? "open",
+          target_project_id: query.actionFilter?.projectId ?? null,
+          target_goal_id: query.actionFilter?.goalId ?? null,
+          target_today: query.actionFilter?.today ?? null
+        } : {}),
         page_size: query.pageSize,
         ...cursorParams(query.cursor)
       });
@@ -119,6 +132,11 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       const { data, error } = await getSupabase().rpc("get_knowledge_item", { target_item_id: id });
       if (error) throw new Error(`KnowledgeItem: ${error.message}`);
       return (data ?? undefined) as KnowledgeItem | undefined;
+    },
+    async loadAction(id): Promise<GoalAction | undefined> {
+      const { data, error } = await getSupabase().rpc("get_action_item", { target_action_id: id });
+      if (error) throw new Error(`ActionItem: ${error.message}`);
+      return (data ?? undefined) as GoalAction | undefined;
     },
     async loadLegacyFocusSession(id): Promise<FocusSessionRecord | undefined> {
       const { data, error } = await getSupabase().rpc("get_legacy_focus_session", { target_session_id: id });

@@ -51,6 +51,7 @@ export type DomainCommand = {
   actionId: string;
   status: ActionStatus;
   blocker?: string;
+  expectedVersion?: number;
   changedAt: string;
 } | {
   type: "set_next_action";
@@ -582,6 +583,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   if (command.type === "set_action_status") {
     const action = state.actions.find((item) => item.id === command.actionId);
     if (!action) throw new Error("action_not_found");
+    if (command.expectedVersion !== undefined && action.version !== command.expectedVersion) throw new Error("action_version_conflict");
     const blocker = command.blocker?.trim();
     if (command.status === "blocked" && !blocker) throw new Error("action_blocker_required");
     if (action.status === command.status && (command.status !== "blocked" || action.blocker === blocker)) return state;

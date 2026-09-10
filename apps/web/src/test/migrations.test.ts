@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const bootstrapUrl = new URL("../../../../supabase/tests/bootstrap.sql", import.meta.url);
 const migrationUrls = [
@@ -23,8 +23,10 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260827164703_ai_inbox_triage.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830120000_workspace_architecture_invariants.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260830121000_current_project_read_boundary.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908090000_workspace_weekly_summary_timezone.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260908090100_workspace_weekly_summary_timezone.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908154542_actions_list_pagination.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260908170000_action_status_version_checks.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -43,6 +45,11 @@ describe("migracje Supabase", () => {
     }
   }, 30_000);
 
+  afterEach(async () => {
+    await database.exec("reset role");
+    await database.query("select set_config('request.jwt.claim.sub', '', false)");
+  });
+
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
@@ -55,6 +62,46 @@ describe("migracje Supabase", () => {
       "select indexname from pg_indexes where schemaname = 'public' and indexname = 'knowledge_links_one_result_per_action_idx'"
     );
     expect(result.rows).toHaveLength(1);
+  });
+
+  it("paginates the filtered Actions collection and keeps the Workspace boundary", async () => {
+    const userA = "e1000000-0000-0000-0000-000000000001";
+    const userB = "f1000000-0000-0000-0000-000000000002";
+    const goalId = "e1000000-0000-0000-0000-000000000010";
+    const archivedGoalId = "e1000000-0000-0000-0000-000000000011";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $3::jsonb), ($2, $4::jsonb)", [userA, userB, '{"workspace_name":"Actions A"}', '{"workspace_name":"Actions B"}']);
+    const workspaceA = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [userA]);
+    const workspaceB = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [userB]);
+    await database.query("insert into public.areas (id, workspace_id, name) values ($1, $2, 'Projekt A')", ["e1000000-0000-0000-0000-000000000020", workspaceA]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome, area_id) values ($1, $2, 'Cel A', 'Rezultat', $3), ($4, $2, 'Cel archiwalny', 'Historia', $3)", [goalId, workspaceA, "e1000000-0000-0000-0000-000000000020", archivedGoalId]);
+    await database.query("update public.goals set archived_at = now() where id = $1", [archivedGoalId]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title, scheduled_for, position) values ('e1000000-0000-0000-0000-000000000030', $1, $2, 'Krok 1', '2026-09-08', 1), ('e1000000-0000-0000-0000-000000000031', $1, $2, 'Krok 2', '2026-09-08', 2), ('e1000000-0000-0000-0000-000000000032', $1, $3, 'Ukryty krok', '2026-09-08', 3), ('f1000000-0000-0000-0000-000000000033', $4, null, 'Obcy krok', '2026-09-08', 4)", [workspaceA, goalId, archivedGoalId, workspaceB]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [userA]);
+    const first = await scalar<{ items: unknown[]; nextCursor: { sortValue: string; id: string } | null }>("select public.get_actions_page($1, 'today', null, $2, '2026-09-08', 1, null, null)", [workspaceA, goalId]);
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).toMatchObject({ id: "e1000000-0000-0000-0000-000000000030" });
+    const second = await scalar<{ items: unknown[]; nextCursor: unknown }>("select public.get_actions_page($1, 'today', null, $2, '2026-09-08', 1, $3, $4)", [workspaceA, goalId, first.nextCursor!.sortValue, first.nextCursor!.id]);
+    expect(second.items).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today', null, null, '2026-09-08'))->'items')", [workspaceA])).toBe(2);
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [userB]);
+    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'open'))->'items')", [workspaceB])).toBe(1);
+    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today'))->'items')", [workspaceA])).toBe(0);
+    await database.exec("reset role");
+  });
+
+  it("odrzuca wersję starszą przy cofnięciu statusu Działania", async () => {
+    const user = "d9000000-0000-0000-0000-000000000001";
+    const action = "d9000000-0000-0000-0000-000000000010";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Undo A"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.actions (id, workspace_id, title) values ($1, $2, 'Cofnij')", [action, workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("select public.set_action_status_checked($1, 1, 'completed', null, $2)", [action, "d9000000-0000-0000-0000-000000000011"]);
+    await expect(database.query("select public.set_action_status_checked($1, 1, 'ready', null, $2)", [action, "d9000000-0000-0000-0000-000000000012"])).rejects.toThrow("action_version_conflict");
+    await database.exec("reset role");
   });
 
   it("nie wystawia tabel bez polityk ani uprzywilejowanych funkcji publicznych", async () => {

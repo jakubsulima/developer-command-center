@@ -139,7 +139,7 @@ export function GoalsPage() {
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Cel na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Dodaj na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>
@@ -153,7 +153,7 @@ export function GoalsPage() {
           </section></details>
           <section className="guided-section"><div className="guided-section-title"><span>1</span><div><strong>Nazwij Cel</strong><small>Krótko i konkretnie — jak rezultat, który można zamknąć.</small></div></div>
             <label className="field-label" htmlFor="goal-title">Nazwa Celu</label>
-            <input id="goal-title" placeholder="Np. Zbudować spokojny budżet domowy" aria-invalid={Boolean(fieldErrors.title)} aria-describedby={fieldErrors.title ? "goal-title-error" : undefined} value={form.title} onChange={(event) => { setFieldErrors((current) => ({ ...current, title: undefined })); setForm((current) => ({ ...current, title: event.target.value })); }} required autoFocus />
+            <input id="goal-title" placeholder="Np. Zbudować spokojny budżet domowy" aria-invalid={Boolean(fieldErrors.title)} aria-describedby={fieldErrors.title ? "goal-title-error" : undefined} value={form.title} onChange={(event) => { setFieldErrors((current) => ({ ...current, title: undefined })); setForm((current) => ({ ...current, title: event.target.value })); }} required />
             {fieldErrors.title ? <p id="goal-title-error" className="field-error" role="alert">{fieldErrors.title}</p> : null}
             <label className="field-label" htmlFor="goal-outcome">Po czym poznasz, że Cel jest gotowy? <span className="optional-label">opcjonalnie</span></label>
             <textarea id="goal-outcome" placeholder="Np. budżet na kolejny miesiąc jest zatwierdzony" rows={3} aria-invalid={Boolean(fieldErrors.outcome)} aria-describedby={fieldErrors.outcome ? "goal-outcome-error" : undefined} value={form.outcome} onChange={(event) => { setFieldErrors((current) => ({ ...current, outcome: undefined })); setForm((current) => ({ ...current, outcome: event.target.value })); }} />

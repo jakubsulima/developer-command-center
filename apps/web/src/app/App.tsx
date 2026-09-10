@@ -45,6 +45,7 @@ const GoalDetailPage = lazy(() => timedImport("goal-detail", () => import("../pa
 const LegacyFocusHistoryPage = lazy(() => timedImport("focus-history", () => import("../pages/LegacyFocusHistoryPage").then((module) => ({ default: module.LegacyFocusHistoryPage }))));
 const KnowledgeDetailPage = lazy(() => timedImport("knowledge-detail", () => import("../pages/KnowledgeDetailPage").then((module) => ({ default: module.KnowledgeDetailPage }))));
 const ActionDetailPage = lazy(() => timedImport("action-detail", () => import("../pages/ActionDetailPage").then((module) => ({ default: module.ActionDetailPage }))));
+const ActionsPage = lazy(() => timedImport("actions", () => import("../pages/ActionsPage").then((module) => ({ default: module.ActionsPage }))));
 const RoutinesPage = lazy(() => timedImport("routines", () => import("../pages/RoutinesPage").then((module) => ({ default: module.RoutinesPage }))));
 const ProjectsPage = lazy(() => timedImport("projects", () => import("../pages/ProjectsPage").then((module) => ({ default: module.ProjectsPage }))));
 const ProjectDetailPage = lazy(() => timedImport("project-detail", () => import("../pages/ProjectDetailPage").then((module) => ({ default: module.ProjectDetailPage }))));
@@ -71,6 +72,7 @@ export function App() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/goals/:goalId" element={<LegacyGoalActionRedirectOrDetail />} />
         <Route path="/actions/:actionId" element={<ActionDetailPage />} />
+        <Route path="/actions" element={<ActionsPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="/learning" element={<Navigate to="/goals?kind=learning" replace />} />

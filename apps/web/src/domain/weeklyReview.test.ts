@@ -41,6 +41,14 @@ describe("automatyczne podsumowanie tygodnia", () => {
     expect(result.generatedSummary).not.toContain("min");
   });
 
+  it("prowadzi decyzje do kolejek Działań, a pojedynczą sprawę zaznacza", () => {
+    const state: AppState = {
+      ...emptyState,
+      actions: [{ id: "blocked", version: 1, title: "Blokada", detail: "", status: "blocked", position: 0, isNext: false, pinnedToToday: false, checklist: [] }]
+    };
+    expect(deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z")).suggestions[0]).toMatchObject({ id: "blocked", to: "/actions?view=blocked&highlight=blocked" });
+  });
+
   it("odrzuca aktywność i blokady należące do archiwalnych rodziców", () => {
     const state: AppState = {
       ...emptyState,

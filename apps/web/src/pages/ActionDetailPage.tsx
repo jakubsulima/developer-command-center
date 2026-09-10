@@ -1,5 +1,6 @@
 import { CalendarDays, Check, Pin, PinOff } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -12,15 +13,22 @@ import { ActionResultDialog } from "../components/ActionResultDialog";
 import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 import { ContextNavigation } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, readNavigationState, type NavigationBreadcrumb } from "../domain/navigation";
+import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 
 export function ActionDetailPage() {
   const { actionId } = useParams();
   const location = useLocation();
-  const { state, updateAction, setActionStatus } = useStore();
+  const { state, mode, loading, updateAction, setActionStatus } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [resultOpen, setResultOpen] = useState(false);
-  const action = state.actions.find((candidate) => candidate.id === actionId);
+  const actionQuery = useQuery({
+    queryKey: ["workspace-action", mode, state.workspaceId, actionId],
+    enabled: mode === "supabase" && !loading && Boolean(actionId) && !state.actions.some((candidate) => candidate.id === actionId),
+    queryFn: () => createSupabaseWorkspaceRepository().loadAction(actionId!),
+  });
+  const action = state.actions.find((candidate) => candidate.id === actionId) ?? actionQuery.data;
+  if (!action && actionQuery.isPending) return <AppShell><div role="status" className="app-loading">Ładowanie Działania…</div></AppShell>;
   if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innej przestrzeni pracy." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
     const previous = action.pinnedToToday;
@@ -71,7 +79,7 @@ export function ActionDetailPage() {
       </div>
       {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
       <div className="action-detail-actions">
-        <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button>
+        {state.actions.some((candidate) => candidate.id === action.id) ? <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button> : null}
         {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}
       </div>
     </Panel><ActionKnowledgeRelations action={action} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Działanie: ${action.title}` }} />

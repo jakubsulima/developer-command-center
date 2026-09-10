@@ -43,6 +43,10 @@ export class WorkspaceMutationCoordinator<State> {
   private readonly errors: Record<string, string> = {};
   private syncSnapshot: SyncState = { status: "idle", pendingCount: 0, errors: {} };
   private nextId = 0;
+  private writeRevision = 0;
+  private activeOperations = 0;
+  private readonly idleWaiters = new Set<() => void>();
+  private generation = 0;
 
   public constructor(private readonly options: WorkspaceMutationCoordinatorOptions<State>) {}
 
@@ -65,23 +69,52 @@ export class WorkspaceMutationCoordinator<State> {
   }
 
   /** Overlay all still-active optimistic entity changes on a fresh snapshot. */
-  public refresh(snapshot: State) {
+  public refresh(snapshot: State, readRevision?: number) {
+    if (readRevision !== undefined && readRevision < this.writeRevision) return false;
     this.options.setState(this.withOverlays(snapshot));
+    return true;
+  }
+
+  public getWriteRevision() {
+    return this.writeRevision;
+  }
+
+  public whenIdle() {
+    if (this.activeOperations === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
+  }
+
+  /** Drop local work from an old User/Workspace generation. In-flight network
+   * promises cannot be cancelled here, but their completions are ignored. */
+  public reset() {
+    this.generation += 1;
+    this.pending.clear();
+    this.lanes.clear();
+    for (const key of Object.keys(this.errors)) delete this.errors[key];
+    this.emit();
   }
 
   public run(mutation: WorkspaceMutation<State>): Promise<void> {
     const previous = this.lanes.get(mutation.key) ?? Promise.resolve();
+    this.activeOperations += 1;
     const task = previous.then(() => this.execute(mutation));
     const lane = task.catch(() => undefined);
     this.lanes.set(mutation.key, lane);
     void lane.finally(() => {
       if (this.lanes.get(mutation.key) === lane) this.lanes.delete(mutation.key);
+      this.activeOperations -= 1;
+      if (this.activeOperations === 0) {
+        for (const resolve of this.idleWaiters) resolve();
+        this.idleWaiters.clear();
+      }
     });
     return task;
   }
 
   private async execute(mutation: WorkspaceMutation<State>) {
+    const generation = this.generation;
     const application = mutation.apply();
+    this.writeRevision += 1;
     const id = ++this.nextId;
     this.pending.set(id, { id, key: mutation.key, application });
     this.options.setState(application.nextState);
@@ -89,12 +122,14 @@ export class WorkspaceMutationCoordinator<State> {
 
     try {
       await mutation.persist();
+      if (generation !== this.generation) return;
       this.pending.delete(id);
       const reconciled = await mutation.reconcile?.();
       if (reconciled !== undefined) this.options.setState(this.withOverlays(reconciled));
       this.clearError(mutation.key);
       this.emit();
     } catch (caught) {
+      if (generation !== this.generation) throw caught;
       this.options.onError?.(mutation.key, caught);
       this.pending.delete(id);
       const rolledBack = application.rollback(this.options.getState());

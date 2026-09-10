@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   captureRemote, completeReviewRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
   decideAIProposalRemote, endFocusRemote, exportWorkspaceRemote, loadSupabaseState,
-  recordLearningEvidenceRemote, resolveInboxRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
+  recordLearningEvidenceRemote, resolveInboxRemote, setActionStatusRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
   setGoalVisibilityRemote, setInboxStatusRemote, setLearningGoalStatusRemote, setNextActionRemote, setRecurringStatusRemote,
   startFocusRemote, updateRecurringTemplateRemote, updateScratchpadRemote
 } from "./supabaseRepository";
@@ -131,6 +131,7 @@ describe("repozytorium Supabase", () => {
     await setCommitmentStatusRemote(projectId, "released");
     await setLearningGoalStatusRemote("goal", "abandoned", "Zmiana kierunku");
     await createActionRemote(workspaceId, "action", { title: "Krok", goalId: "goal" });
+    await setActionStatusRemote("action", 1, "completed");
     await setNextActionRemote("goal", "action");
     await setGoalVisibilityRemote("goal", "archived");
     await createRecurringTemplateRemote(workspaceId, { id: "series", title: "Przegląd", detail: "", timezone: "Europe/Warsaw", startsOn: "2026-08-05", rule: { unit: "week", interval: 1 }, missedPolicy: "skip_missed", status: "active", checklist: [], skippedOccurrenceCount: 0, createdAt: "2026-08-05T00:00:00Z", updatedAt: "2026-08-05T00:00:00Z" });
@@ -144,7 +145,7 @@ describe("repozytorium Supabase", () => {
       "approve_ai_proposal", "reject_ai_proposal", "complete_weekly_review", "create_shaped_project", "create_learning_goal",
       "set_entity_visibility", "set_inbox_item_status", "set_commitment_status", "set_learning_goal_status",
       "create_action_item", "set_next_action_checked", "set_goal_visibility_checked", "create_recurring_action_template",
-      "update_recurring_action_template", "set_recurring_action_template_status"
+      "update_recurring_action_template", "set_recurring_action_template_status", "set_action_status_checked"
     ]));
   });
 

@@ -42,6 +42,12 @@ export function knowledgeQueue(state: AppState) {
   return state.inbox.filter((item) => item.status === "unprocessed");
 }
 
+function actionQueueRoute(view: "blocked" | "overdue", actionId?: string) {
+  const params = new URLSearchParams({ view });
+  if (actionId) params.set("highlight", actionId);
+  return `/actions?${params.toString()}`;
+}
+
 export function weekBounds(now = new Date(), timeZone = "Europe/Warsaw") {
   const { start, end } = workspaceWeekBounds(now, timeZone);
   return { start, end };
@@ -73,7 +79,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     id: "blocked",
     title: `Odblokuj ${blocked.length === 1 ? "jedno Działanie" : polishCount(blocked.length, "Działanie", "Działania", "Działań")}`,
     detail: "Najpierw podejmij decyzję albo nazwij osobę, od której zależy dalszy ruch.",
-    to: "/"
+    to: actionQueueRoute("blocked", blocked.length === 1 ? blocked[0]!.id : undefined)
   });
   if (goalsWithoutNextAction.length) suggestions.push({
     id: "next-actions",
@@ -85,7 +91,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     id: "overdue",
     title: `Zdecyduj o ${overdue.length === 1 ? "jednym zaległym Działaniu" : polishCount(overdue.length, "zaległym Działaniu", "zaległych Działaniach", "zaległych Działaniach")}`,
     detail: "Przełóż, ukończ lub anuluj je, zamiast przenosić cały ciężar na kolejny tydzień.",
-    to: "/"
+    to: actionQueueRoute("overdue", overdue.length === 1 ? overdue[0]!.id : undefined)
   });
   if (unprocessedInbox.length) suggestions.push({
     id: "inbox",

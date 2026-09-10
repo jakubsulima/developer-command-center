@@ -17,7 +17,7 @@ describe("regresje nowego modelu Celów", () => {
   it.each([
     ["/", "Start"], ["/routines", "Rutyny"], ["/goals", "Cele"], ["/inbox", "Wiedza"], ["/knowledge", "Wiedza"],
     ["/focus", "Start"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
-    ["/learning", "Cele"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
+    ["/learning", "Cele"], ["/actions?view=unknown", "Działania"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
   ])("renderuje lub przekierowuje trasę %s", async (path, heading) => {
     renderApp(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Cele", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Cele", "Działania", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     await user.click(within(more).getByRole("button", { name: /Wyszukaj/ }));
     expect(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
@@ -71,8 +71,9 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
 
+    await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Otwórz centrum dodawania" }));
+    await user.click(await within(screen.getByRole("banner")).findByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).not.toHaveClass("mobile-chooser");
@@ -349,7 +350,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.click(screen.getByRole("button", { name: "Otwórz szybkie dodawanie" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
@@ -379,7 +380,7 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
     const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
-    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Wiedza · 0" });
+    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj materiał" });
     expect(relationToggle).toHaveAttribute("aria-expanded", "false");
     await user.click(relationToggle);
     expect(relationToggle).toHaveAttribute("aria-expanded", "true");

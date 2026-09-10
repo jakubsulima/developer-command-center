@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
-import { resolveActionContext } from "./actionContext";
+import { describeActionContext, describeCompactActionContext, resolveActionContext } from "./actionContext";
 
 const baseAction = { id: "action-1", version: 1, title: "Krok", detail: "", status: "ready" as const, position: 0, isNext: false, pinnedToToday: false, checklist: [] };
 
@@ -21,5 +21,13 @@ describe("resolver kontekstu Działania", () => {
     const state = structuredClone(emptyState);
     expect(resolveActionContext(baseAction, state)).toMatchObject({ kind: "standalone", label: "Samodzielne Działanie", to: "/" });
     expect(resolveActionContext({ ...baseAction, areaId: "missing" }, state)).toMatchObject({ kind: "missing-project", label: "Projekt niedostępny", name: "Niedostępny Projekt" });
+  });
+
+  it("ma krótkie etykiety do list mobilnych bez utraty nazwy kontekstu", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [{ id: "goal-1", title: "Ten sam krok", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    expect(describeActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Działanie w Celu · Ten sam krok");
+    expect(describeCompactActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Cel · Ten sam krok");
+    expect(describeCompactActionContext(resolveActionContext(baseAction, state))).toBe("Samodzielne");
   });
 });

@@ -111,7 +111,7 @@ export function KnowledgeDetailPage() {
           {item.type === "investigation" ? <p className="field-help">Nowe poszukiwania zapisuj jako Działania. Ten historyczny wpis możesz zmienić w Notatkę, Materiał lub Decyzję.</p> : null}
         </>}
         <label className="field-label" htmlFor="knowledge-edit-title">{editGuidance?.titleLabel ?? "Tytuł rezultatu"}</label>
-        <input id="knowledge-edit-title" placeholder={editGuidance?.titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} autoFocus required />
+        <input id="knowledge-edit-title" placeholder={editGuidance?.titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
         {(form.kind === "resource" || form.sourceUrl) ? <><label className="field-label" htmlFor="knowledge-edit-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-edit-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /></> : null}
         <label className="field-label" htmlFor="knowledge-edit-detail">{editGuidance?.detailLabel ?? "Opis rezultatu"}{editGuidance && !editGuidance.detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label>
         <textarea id="knowledge-edit-detail" rows={12} required={editGuidance?.detailRequired} placeholder={editGuidance?.detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />

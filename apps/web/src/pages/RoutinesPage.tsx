@@ -80,7 +80,7 @@ export function RoutinesPage() {
         {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
         <div className="routine-card-actions"><Link className="button button-secondary" to={`/routines?editSeries=${encodeURIComponent(routine.id)}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
       </Panel>;
-    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku Rutyna na dole, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
+    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku Dodaj na dole, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
     <RecurringActionForm open={formOpen} templateId={editingTemplateId} onClose={closeForm} />
   </AppShell>;
 }

@@ -44,6 +44,15 @@ describe("deriveHomeSummary", () => {
     expect(deriveHomeSummary(state, now).recommendation.to).toBe("/actions/next");
   });
 
+  it("kieruje decyzje zaległych i zablokowanych do właściwych kolejek z zaznaczeniem", () => {
+    const overdueState = { ...structuredClone(emptyState), actions: [action("late", { scheduledFor: "2026-08-20" })] } as AppState;
+    expect(deriveHomeSummary(overdueState, now).recommendation.to).toBe("/actions?view=overdue&highlight=late");
+    expect(deriveHomeSummary(overdueState, now).attentionSignals[0]?.to).toBe("/actions?view=overdue&highlight=late");
+
+    const blockedState = { ...structuredClone(emptyState), actions: [action("blocked", { status: "blocked", blocker: "Czekam" })] } as AppState;
+    expect(deriveHomeSummary(blockedState, now).recommendation.to).toBe("/actions?view=blocked&highlight=blocked");
+  });
+
   it("prefers a conscious next action across multiple goals", () => {
     const state = structuredClone(emptyState);
     state.goals = [

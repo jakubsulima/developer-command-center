@@ -6,10 +6,10 @@ describe("quick add commands", () => {
     ["/zadanie Spisać pytania", "action", "Spisać pytania"],
     ["/działanie Odpisać Ani", "action", "Odpisać Ani"],
     ["/cel Uporządkować finanse", "goal", "Uporządkować finanse"],
-    ["/wiedza Wzorzec repozytorium", "knowledge", "Wzorzec repozytorium"],
-    ["/notatka Pytania do rozmowy", "knowledge", "Pytania do rozmowy"],
-    ["/inbox Luźna myśl", "knowledge", "Luźna myśl"],
-    ["/skrzynka Pomysł do późniejszego triage", "knowledge", "Pomysł do późniejszego triage"]
+    ["/wiedza Wzorzec repozytorium", "library", "Wzorzec repozytorium"],
+    ["/notatka Pytania do rozmowy", "library", "Pytania do rozmowy"],
+    ["/inbox Luźna myśl", "inbox", "Luźna myśl"],
+    ["/skrzynka Pomysł do późniejszego triage", "inbox", "Pomysł do późniejszego triage"]
   ] as const)("rozpoznaje %s", (value, mode, content) => {
     expect(parseQuickAddCommand(value)).toEqual({ mode, content });
   });

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
+import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
@@ -15,11 +15,14 @@ import { useNavigationRestoration } from "../hooks/useNavigationRestoration";
 
 const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 
+export type AppShellQuickAddRequest = import("./QuickAdd").QuickAddRequest;
+
 const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
   { to: "/projects", label: "Projekty", icon: FolderKanban },
   { to: "/routines", label: "Rutyny", icon: Repeat2 },
   { to: "/goals", label: "Cele", icon: Flag },
+  { to: "/actions", label: "Działania", icon: CheckSquare },
   { to: "/knowledge", label: "Wiedza", icon: Archive, badge: true },
   { to: "/review", label: "Podsumowanie", icon: CalendarCheck },
 ];
@@ -29,11 +32,12 @@ export type AppShellAddAction = {
   shortLabel?: string;
   ariaLabel: string;
   active?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
+  quickAdd?: AppShellQuickAddRequest;
 };
 
 export function AppShell({ children, aside, addAction }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction }) {
-  const { state, mode, loading, resetDemo, exportData, reload, syncState } = useStore();
+  const { state, mode, loading, resetDemo, exportData, reload, syncState, dataFreshness } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
   useNavigationRestoration();
@@ -42,7 +46,16 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const activeRoutines = state.recurringActionTemplates.filter((routine) => routine.status === "active").length;
   const syncing = syncState.status === "syncing";
   const error = Object.values(syncState.errors)[0];
+  const freshnessError = dataFreshness.status === "error";
+  const dataStatus = dataFreshness.status === "refreshing"
+    ? "Odświeżanie…"
+    : freshnessError
+      ? "Nie udało się odświeżyć — pokazujemy poprzednie dane"
+      : dataFreshness.lastSuccessfulAt
+        ? `Dane odświeżone ${new Date(dataFreshness.lastSuccessfulAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
+        : "Dane nie zostały jeszcze odświeżone";
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddRequest, setQuickAddRequest] = useState<AppShellQuickAddRequest | undefined>();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -51,18 +64,20 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   const addActionRef = useRef(addAction);
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
-  const moreActive = ["/goals", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-  const openQuickAdd = useCallback(() => {
+  const addIsOpen = quickAddOpen || Boolean(addAction?.active);
+  const moreActive = ["/goals", "/actions", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     beginPerformanceTiming("quick-add");
+    setQuickAddRequest(request);
     setQuickAddOpen(true);
   }, []);
   const triggerAdd = useCallback(() => {
     const contextualAction = addActionRef.current;
-    if (contextualAction) {
+    if (contextualAction?.onClick) {
       contextualAction.onClick();
       return;
     }
-    openQuickAdd();
+    openQuickAdd(contextualAction?.quickAdd);
   }, [openQuickAdd]);
 
   const downloadExport = async () => {
@@ -94,12 +109,12 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
-        openQuickAdd();
+        triggerAdd();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openQuickAdd]);
+  }, [triggerAdd]);
   useEffect(() => {
     if (!profileMenuOpen) return;
     const closeOutside = (event: PointerEvent) => {
@@ -131,8 +146,9 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         </nav>
         <div className="sidebar-bottom" ref={profileMenuRef}>
           {profileMenuOpen ? <div className="profile-popover" id="profile-menu" role="menu" aria-label="Opcje profilu">
-            <div className={`profile-menu-status ${error ? "error" : ""}`}>{error ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
-            {error ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload(); }}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+            <div className={`profile-menu-status ${error || freshnessError ? "error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
+            {mode === "supabase" ? <div className="profile-menu-freshness" data-testid="data-freshness"><small>{dataStatus}</small>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div> : null}
+            {mode === "supabase" ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload().catch(() => undefined); }}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button> : null}
             {mode === "demo" ? <button role="menuitem" onClick={() => { resetDemo(); setProfileMenuOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
             <button role="menuitem" disabled={exportState === "loading"} onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksportuj dane"}</span></button>
             {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
@@ -147,8 +163,8 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} onClick={triggerAdd}><Plus />{addAction?.label ?? "Dodaj"} <kbd className="quick-add-shortcut">⌘J</kbd></Button>
-          {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error ? "sync-error" : ""}`}>{error ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
+          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
 
@@ -158,11 +174,11 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab ${quickAddOpen || addAction?.active ? "active" : ""}`} aria-expanded={addAction ? addAction.active : quickAddOpen} onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"}><span className="capture-fab-icon"><Plus /></span><span>{addAction?.shortLabel ?? addAction?.label ?? "Dodaj"}</span></button>
+        <button className={`capture-fab${addIsOpen ? " active" : ""}`} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
         <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
-      <Suspense fallback={null}><QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} /></Suspense>
+      <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
         <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
@@ -172,12 +188,13 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         </div></section>
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
+          <NavLink to="/actions" onClick={() => setProfileCenterOpen(false)}><span><CheckSquare /></span><span><strong>Działania</strong><small>Wszystkie kroki</small></span><ChevronRight /></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
         </nav></section>
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
-          {error ? <button type="button" onClick={() => void reload()}><RotateCcw /><span>Spróbuj ponownie</span></button> : null}
+          {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}
           <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
           {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
           {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}

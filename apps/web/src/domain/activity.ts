@@ -19,6 +19,11 @@ export function localDateForTimeZone(now: Date, timeZone: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
+/** Shared projection rule for Start and the complete Działania list. */
+export function isActionInTodayProjection(action: AppState["actions"][number], today: string) {
+  return action.scheduledFor === today || (!action.scheduledFor && action.pinnedToToday);
+}
+
 function shiftDate(value: string, amount: number) {
   const result = new Date(`${value}T12:00:00Z`);
   result.setUTCDate(result.getUTCDate() + amount);
