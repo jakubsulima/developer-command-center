@@ -102,7 +102,7 @@ export function GoalsPage() {
   };
 
   return (
-    <AppShell addAction={{ label: "Nowy Cel", shortLabel: "Cel", ariaLabel: "Dodaj nowy Cel", active: newOpen, onClick: () => setNewOpen(true) }}>
+    <AppShell addAction={{ label: "Nowy Cel", shortLabel: "Cel", ariaLabel: "Dodaj nowy Cel", active: newOpen, quickAdd: { mode: "goal", pinnedToToday: false, draftKey: "goals-list" }, onClick: () => setNewOpen(true) }}>
       <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" />
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
@@ -141,7 +141,7 @@ export function GoalsPage() {
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
       })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Dodaj na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
-      <Modal open={newOpen} title="Nowy cel" onClose={() => setNewOpen(false)}>
+      <Modal open={newOpen} closeDisabled={loading} title="Nowy cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>
           <p className="modal-intro">Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.</p>
           <details className="advanced-options"><summary>Więcej opcji <span className="optional-label">szablon, pierwszy krok i kryteria</span></summary><section className="guided-section"><div className="guided-section-title"><div><strong>Jaki to rodzaj Celu?</strong><small>Wybór zmienia tylko podpowiedzi.</small></div></div>

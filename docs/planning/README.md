@@ -1,5 +1,13 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## „Dodaj” na telefonie — plan z 11 września 2026
+
+[Plan wdrożenia „Dodaj” — mobile](./2026-09-11-dodaj-mobile-plan.md)
+obejmuje sześć etapów: poprawność zapisu, szkice, mobilny panel i klawiaturę,
+wspólne formularze, podłączenie wszystkich wejść i odbiór na urządzeniach.
+Podstawą jest [aktualny audyt](./2026-09-11-dodaj-mobile-audit.md).
+Status: zaplanowane, implementacja nierozpoczęta.
+
 ## Zadania gotowe do przekazania czatowi
 
 [Najważniejsze wdrożenia — pakiet z 8 września 2026](./priority-implementation-2026-09-08/README.md)

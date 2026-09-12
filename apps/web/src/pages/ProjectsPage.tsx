@@ -49,7 +49,7 @@ export function ProjectsPage() {
     }
   };
 
-  return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", active: open, onClick: () => setOpen(true) }}>
+  return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", active: open, quickAdd: { mode: "project", pinnedToToday: false, draftKey: "projects-list" }, onClick: () => setOpen(true) }}>
     <PageHeading title="Projekty" eyebrow={`${activeProjects} aktywne · stałe konteksty pracy`} />
     <p className="page-lead">Projekt przechowuje wspólny kontekst przez długi czas. W jego ramach tworzysz prostsze Cele, Działania i Wiedzę.</p>
     <div className="knowledge-views" role="group" aria-label="Widoczność Projektów">
@@ -72,7 +72,7 @@ export function ProjectsPage() {
       </Panel>;
     })}</div> : <EmptyState icon={<FolderKanban />} title={view === "active" ? "Nie masz jeszcze Projektu" : "Ten widok jest pusty"} detail={view === "active" ? "Użyj przycisku Dodaj na dole, aby utworzyć trwałe miejsce dla Celów, Działań i Wiedzy." : "Nie ma tutaj żadnych Projektów."} />}
 
-    <Modal open={open} title="Nowy projekt" className="project-create-modal" onClose={() => setOpen(false)}>
+    <Modal open={open} closeDisabled={saving} title="Nowy projekt" className="project-create-modal" onClose={() => setOpen(false)}>
       <form className="project-create-form" onSubmit={submit}>
         <p className="modal-intro">Nadaj Projektowi nazwę. Opis możesz dodać teraz albo później.</p>
         <label className="field-label" htmlFor="project-name">Nazwa Projektu</label>

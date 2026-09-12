@@ -92,7 +92,7 @@ describe("lista wszystkich Działań", () => {
     await user.click(await screen.findByRole("link", { name: "Pobrać historię transakcji" }));
     expect(await screen.findByRole("heading", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
     expect(within(document.querySelector(".context-navigation")!).getByRole("link", { name: "Działania" })).toHaveAttribute("href", "/actions?view=overdue");
-    await user.click(screen.getByRole("button", { name: "Wszystkie Działania" }));
+    await user.click(within(document.querySelector(".context-navigation")!).getByRole("link", { name: "Działania" }));
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue");
   });
