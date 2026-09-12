@@ -1,3 +1,4 @@
+import "./focus-detail.css";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, FolderKanban, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";

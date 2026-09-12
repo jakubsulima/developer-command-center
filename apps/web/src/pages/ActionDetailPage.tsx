@@ -1,3 +1,4 @@
+import "./focus-detail.css";
 import { CalendarDays, Check, Circle, Flag, FolderKanban, Pin, PinOff, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";

@@ -1,3 +1,4 @@
+import "./focus-detail.css";
 import { useMemo, useState, type FormEvent } from "react";
 import { BookMarked, CheckCircle2, ExternalLink, FolderKanban, Link2, Plus, RotateCcw, Flag, ListTodo, Repeat2, ChevronRight, Pencil } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
