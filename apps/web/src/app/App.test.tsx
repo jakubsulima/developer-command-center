@@ -138,7 +138,7 @@ describe("goal-centric workspace", () => {
     await user.click(screen.getByRole("link", { name: "Otwórz Cel: Cel nawigacji" }));
 
     expect(await screen.findByRole("heading", { name: "Cel nawigacji" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Projekt: Projekt nawigacji" }));
+    await user.click(within(document.querySelector(".context-navigation")!).getByRole("link", { name: "Projekt nawigacji" }));
 
     expect(await screen.findByRole("heading", { name: "Projekt nawigacji" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cele" })).toHaveAttribute("aria-selected", "true");
@@ -193,7 +193,7 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
     await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj" });
+    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie" });
     await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
     expect(await screen.findByText("Przygotować plan rozmowy")).toBeInTheDocument();

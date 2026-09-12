@@ -37,16 +37,16 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Cel Nawigacji");
 
-    await user.click(screen.getByRole("button", { name: "Wiedza · 1" }));
+    expect(screen.getByRole("link", { name: /Wiedza Nawigacji/ })).toBeVisible();
     await user.click(screen.getByRole("link", { name: /Wiedza Nawigacji/ }));
     expect(await screen.findByRole("heading", { name: "Wiedza Nawigacji" })).toBeInTheDocument();
     const breadcrumbs = screen.getByRole("navigation", { name: "Ścieżka kontekstu" });
     expect(within(breadcrumbs).getByLabelText("Pominięte poziomy")).toBeInTheDocument();
-    expect(within(breadcrumbs).getByText("Wiedza: Wiedza Nawigacji")).toHaveAttribute("aria-current", "page");
+    expect(within(breadcrumbs).queryByText("Wiedza: Wiedza Nawigacji")).not.toBeInTheDocument();
 
-    await user.click(within(breadcrumbs).getByRole("button", { name: "Działanie: Wykonać krok" }));
+    await user.click(within(breadcrumbs).getByRole("link", { name: "Działanie: Wykonać krok" }));
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cel: Cel Nawigacji" }));
+    await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Cel: Cel Nawigacji" }));
     expect(await screen.findByRole("heading", { name: "Cel Nawigacji" })).toBeInTheDocument();
   });
 
@@ -64,7 +64,7 @@ describe("spójna nawigacja kontekstowa", () => {
     renderApp("/projects/nav-project?view=goals");
     const goalLink = await screen.findByRole("link", { name: "Otwórz Cel: Cel Nawigacji" });
     await user.click(goalLink);
-    await user.click(screen.getByRole("button", { name: "Projekt: Projekt Nawigacji" }));
+    await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Projekt Nawigacji" }));
     const card = await screen.findByText("Cel Nawigacji");
     await waitFor(() => expect(card.closest("[data-navigation-card-id=\"goal-nav-goal\"]")).toHaveFocus());
     expect(card.closest("[data-navigation-card-id=\"goal-nav-goal\"]")).toHaveClass("navigation-card-highlight");

@@ -1,0 +1,65 @@
+[
+  {
+    "width": 360,
+    "screen": "goal",
+    "columns": "none",
+    "cssWidth": 360,
+    "overflow": false
+  },
+  {
+    "width": 360,
+    "screen": "action",
+    "columns": "none",
+    "cssWidth": 360,
+    "overflow": false
+  },
+  {
+    "width": 360,
+    "screen": "knowledge",
+    "columns": "305px",
+    "cssWidth": 360,
+    "overflow": false
+  },
+  {
+    "width": 768,
+    "screen": "goal",
+    "columns": "none",
+    "cssWidth": 768,
+    "overflow": false
+  },
+  {
+    "width": 768,
+    "screen": "action",
+    "columns": "none",
+    "cssWidth": 768,
+    "overflow": false
+  },
+  {
+    "width": 768,
+    "screen": "knowledge",
+    "columns": "620.781px",
+    "cssWidth": 768,
+    "overflow": false
+  },
+  {
+    "width": 1440,
+    "screen": "goal",
+    "columns": "634.188px 422.797px",
+    "cssWidth": 1440,
+    "overflow": false
+  },
+  {
+    "width": 1440,
+    "screen": "action",
+    "columns": "634.188px 422.797px",
+    "cssWidth": 1440,
+    "overflow": false
+  },
+  {
+    "width": 1440,
+    "screen": "knowledge",
+    "columns": "634.188px 422.797px",
+    "cssWidth": 1440,
+    "overflow": false
+  }
+]

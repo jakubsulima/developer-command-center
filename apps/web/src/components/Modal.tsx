@@ -16,7 +16,10 @@ function readViewportMetrics(): ViewportMetrics {
 
 function isFocusable(element: HTMLElement) {
   if (element.hasAttribute("hidden") || element.getAttribute("aria-hidden") === "true") return false;
-  if (element.closest("details:not([open])")) return false;
+  // The summary is the control that opens a closed details section. Its
+  // descendants remain hidden, but the summary itself must stay tabbable.
+  const closedDetails = element.closest("details:not([open])");
+  if (closedDetails && (closedDetails.querySelector(":scope > summary") !== element || closedDetails.parentElement?.closest("details:not([open])"))) return false;
   let current: HTMLElement | null = element;
   while (current) {
     if (current.hasAttribute("hidden") || current.getAttribute("aria-hidden") === "true") return false;
@@ -27,10 +30,12 @@ function isFocusable(element: HTMLElement) {
   return true;
 }
 
-export function Modal({ open, title, ariaLabel, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0 }: { open: boolean; title: string; ariaLabel?: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: InitialFocus; exitDurationMs?: number }) {
+export function Modal({ open, title, ariaLabel, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0, headingAction, onEscape }: { open: boolean; title: string; ariaLabel?: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: InitialFocus; exitDurationMs?: number; headingAction?: ReactNode; onEscape?: () => boolean }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
   const [present, setPresent] = useState(open);
   const [closing, setClosing] = useState(false);
   const [viewportMetrics, setViewportMetrics] = useState<ViewportMetrics>(() => readViewportMetrics());
@@ -53,7 +58,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     document.body.style.top = `-${scrollY}px`;
     document.body.style.width = "100%";
     const inerted: Array<{ element: HTMLElement; value: boolean }> = [];
-    const backdrop = document.querySelector<HTMLElement>("[data-modal-backdrop]:not(.modal-backdrop-closing)");
+    const backdrop = dialogRef.current?.closest<HTMLElement>("[data-modal-backdrop]");
     const parent = backdrop?.parentElement;
     for (const element of parent ? Array.from(parent.children) : []) {
       if (element instanceof HTMLElement && element !== backdrop && !element.matches("[data-modal-backdrop]")) {
@@ -102,7 +107,16 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
         event.preventDefault();
+        if (closeDisabledRef.current || onEscapeRef.current?.()) return;
+        const targetDetails = event.target instanceof Element ? event.target.closest<HTMLDetailsElement>("details[open]") : null;
+        const openDetails = targetDetails ?? dialogRef.current?.querySelector<HTMLDetailsElement>(".quick-add-type-picker[open]");
+        if (openDetails) {
+          openDetails.removeAttribute("open");
+          openDetails.querySelector<HTMLElement>(":scope > summary")?.focus();
+          return;
+        }
         if (closeOnBackdrop && !closeDisabledRef.current) onCloseRef.current();
         return;
       }
@@ -111,7 +125,8 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
       if (!focusable.length) return;
       const first = focusable[0]!;
       const last = focusable.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (document.activeElement === dialogRef.current || !dialogRef.current.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", handler);
@@ -150,6 +165,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
       <DialogContent ref={dialogRef} tabIndex={-1} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" {...(ariaLabel ? { "aria-label": ariaLabel } : { "aria-labelledby": titleId })} showClose={false}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
+          {headingAction}
           <button className="icon-button" disabled={closeDisabled} onClick={onClose} aria-label="Zamknij okno"><X /></button>
         </div>
         {children}

@@ -55,7 +55,7 @@ export function RoutinesPage() {
     });
   };
 
-  return <AppShell addAction={{ label: "Nowa Rutyna", shortLabel: "Rutyna", ariaLabel: "Dodaj nową Rutynę", active: formOpen && !editingTemplateId, onClick: openNew }}>
+  return <AppShell addAction={{ label: "Nowa Rutyna", shortLabel: "Rutyna", ariaLabel: "Dodaj nową Rutynę", active: formOpen && !editingTemplateId, quickAdd: { mode: "routine", pinnedToToday: false, draftKey: "routines-list" }, onClick: openNew }}>
     <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" />
     <div className="routine-overview" aria-label="Podsumowanie Rutyn">
       <div><Repeat2 /><span><strong>{activeCount}</strong><small>aktywne</small></span></div>

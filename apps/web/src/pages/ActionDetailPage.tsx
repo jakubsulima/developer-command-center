@@ -1,17 +1,17 @@
-import { CalendarDays, Check, Pin, PinOff } from "lucide-react";
+import { CalendarDays, Check, Circle, Flag, FolderKanban, Pin, PinOff, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { AppShell, PageHeading } from "../components/AppShell";
+import { AppShell } from "../components/AppShell";
 import { useActionFeedback } from "../components/action-feedback-context";
-import { Badge, Button, EmptyState, Panel } from "../components/ui";
+import { Button, EmptyState } from "../components/ui";
 import { actionStatusLabels } from "../domain/labels";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { resolveActionContext } from "../domain/actionContext";
 import { ActionResultDialog } from "../components/ActionResultDialog";
 import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
-import { ContextNavigation } from "../components/ContextNavigation";
+import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, readNavigationState, type NavigationBreadcrumb } from "../domain/navigation";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 
@@ -60,28 +60,20 @@ export function ActionDetailPage() {
   const actionRoute = `/actions/${encodeURIComponent(action.id)}`;
   const currentBreadcrumb = { label: `Działanie: ${action.title}`, to: actionRoute };
   const breadcrumbs = breadcrumbsForPage(location.state, fallbackBreadcrumbs, currentBreadcrumb);
-  return <AppShell><div className="action-detail-page">
+  const parentLabel = context.kind === "goal" ? "Cel" : context.kind === "project" ? "Projekt" : undefined;
+  const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
+  return <AppShell appearance="focus-detail"><div className="action-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} />
-    <PageHeading title={action.title} eyebrow={context.name ? `${context.label} · ${context.name}` : context.label} />
-    {projectName ? <div className="action-context-summary"><span>Projekt</span><h2>{projectName}</h2></div> : null}
-    <Panel className="detail-section" aria-busy={mutation.isBusy(key)}>
-      <div className="section-heading">
-        <h2>Szczegóły</h2>
-        <Badge tone={action.status === "completed" ? "success" : action.status === "blocked" ? "danger" : "info"}>{actionStatusLabels[action.status]}</Badge>
-      </div>
-      {context.kind === "missing-project" ? <p className="muted-copy" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
-      <div className="action-detail-content">
-        <div>
-          <span className="action-detail-label">Opis</span>
-          <p className={action.detail ? "" : "action-detail-empty"}>{action.detail || "Bez dodatkowego opisu."}</p>
-        </div>
-        {scheduledFor ? <div className="action-detail-date"><CalendarDays /><span><small>Termin</small><strong>{scheduledFor}</strong></span></div> : null}
-      </div>
-      {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
-      <div className="action-detail-actions">
-        {state.actions.some((candidate) => candidate.id === action.id) ? <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button> : null}
-        {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ</Button> : null}
-      </div>
-    </Panel><ActionKnowledgeRelations action={action} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Działanie: ${action.title}` }} />
+    <header className="detail-title-block"><h1>{action.title}</h1><div className="action-status-row"><span className={`action-status-icon ${action.status}`}>{action.status === "completed" ? <Check /> : <Circle />}</span><strong>{actionStatusLabels[action.status]}</strong>{scheduledFor ? <span className="action-date"><CalendarDays />{scheduledFor}</span> : null}</div></header>
+    <div className="action-detail-layout">
+    {parentLabel && context.name ? <NavigationLink className="action-parent-row" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><small>Powiązany {parentLabel}</small><span className="action-parent-icon">{parentIcon}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
+    <section className="action-description-block"><span className="detail-kicker">Opis</span><p className={action.detail ? "" : "action-detail-empty"}>{action.detail || "Bez dodatkowego opisu."}</p></section>
+    {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
+    <ActionKnowledgeRelations action={action} variant="detail" onAddResult={() => setResultOpen(true)} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Działanie: ${action.title}` }} />
+    <div className="action-detail-actions">
+      {state.actions.some((candidate) => candidate.id === action.id) ? <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button> : null}
+      {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ działanie</Button> : null}
+    </div>
+    </div>
   </div><ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} /></AppShell>;
 }

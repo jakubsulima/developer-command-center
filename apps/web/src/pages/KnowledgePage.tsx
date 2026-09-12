@@ -20,6 +20,7 @@ import { locationAddress, navigationCardId } from "../domain/navigation";
 import { projectKnowledgeIds } from "../domain/projectModule";
 import { filterableKnowledgeKinds, isFilterableKnowledgeKind, knowledgeKindGuidance, type CreatableKnowledgeKind } from "../domain/knowledge-kinds";
 import { knowledgeKindLabels } from "../domain/labels";
+import { FormTransition } from "../components/FormTransition";
 import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
 import { normalizeHttpUrl } from "../domain/http-url";
 
@@ -118,6 +119,7 @@ export function KnowledgePage() {
       shortLabel: section === "library" ? "Wiedza" : "Skrzynka",
       ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : captureOpen ? "Zamknij dodawanie do Skrzynki" : "Dodaj do Skrzynki",
       active: section === "library" ? modalOpen : captureOpen,
+      quickAdd: captureOpen ? undefined : section === "library" ? { mode: "library", pinnedToToday: false, draftKey: "knowledge-library" } : { mode: "inbox", pinnedToToday: false, draftKey: "knowledge-inbox" },
       onClick: openContextualAdd
     }}>
       <div className="knowledge-page-heading"><PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" /></div>
@@ -202,6 +204,7 @@ export function KnowledgePage() {
           onChange={(kind) => setForm((current) => ({ ...current, kind }))}
           name="new-knowledge-kind"
         />
+        <FormTransition stateKey={form.kind}>
         <label className="field-label" htmlFor="knowledge-title">{knowledgeKindGuidance[form.kind].titleLabel}</label>
         <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
         {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /></> : null}
@@ -212,6 +215,7 @@ export function KnowledgePage() {
         <label className="field-label" htmlFor="knowledge-project">Powiązany Projekt <span className="optional-label">opcjonalnie</span></label>
         <select id="knowledge-project" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
         {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
+        </FormTransition>
         <div className="modal-actions"><Button type="button" disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={createSaving} disabled={!form.title.trim() || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())}>{knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
         </form>
       </Modal>

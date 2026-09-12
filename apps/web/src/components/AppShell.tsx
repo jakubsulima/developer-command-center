@@ -36,7 +36,7 @@ export type AppShellAddAction = {
   quickAdd?: AppShellQuickAddRequest;
 };
 
-export function AppShell({ children, aside, addAction }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction }) {
+export function AppShell({ children, aside, addAction, appearance }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail" }) {
   const { state, mode, loading, resetDemo, exportData, reload, syncState, dataFreshness } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
@@ -72,7 +72,13 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
     setQuickAddOpen(true);
   }, []);
   const triggerAdd = useCallback(() => {
+    // Keyboard shortcuts must not open a second editor over an active dialog.
+    if (document.querySelector('[aria-modal="true"]')) return;
     const contextualAction = addActionRef.current;
+    if (contextualAction?.quickAdd && window.matchMedia?.("(max-width: 767px)").matches) {
+      openQuickAdd(contextualAction.quickAdd);
+      return;
+    }
     if (contextualAction?.onClick) {
       contextualAction.onClick();
       return;
@@ -104,6 +110,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        if (document.querySelector('[aria-modal="true"]')) return;
         if (window.matchMedia("(max-width: 767px)").matches) setMobileSearchOpen(true);
         else document.getElementById("global-search")?.focus();
       }
@@ -134,7 +141,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
   if (loading) return <AppLoading label="Ładowanie przestrzeni pracy…" />;
 
   return (
-    <div className={`app-shell ${aside ? "with-aside" : ""}`}>
+    <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></div>
         <nav className="side-nav" aria-label="Główna nawigacja">
@@ -162,6 +169,7 @@ export function AppShell({ children, aside, addAction }: { children: ReactNode; 
         <span className="mobile-brand" aria-hidden="true"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></span>
         <div className="desktop-global-search"><GlobalSearch /></div>
         <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
+        {appearance === "focus-detail" ? <button className="mobile-profile-trigger" type="button" aria-label="Otwórz menu profilu" onClick={() => setProfileCenterOpen(true)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar></button> : null}
         <div className="top-actions">
           <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}

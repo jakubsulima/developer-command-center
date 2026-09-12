@@ -22,7 +22,7 @@ describe("goal-centric experience", () => {
     expect(screen.getByRole("heading", { name: "Szybki wpis postępu" })).toBeInTheDocument();
     expect(screen.getByLabelText("Treść aktualizacji")).toBeInTheDocument();
     expect(screen.getByText("Kryteria sukcesu")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Postęp kryteriów/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Kryteria sukcesu" })).getAllByRole("checkbox").length).toBeGreaterThan(0);
     expect(screen.queryByText("Bez daty docelowej")).not.toBeInTheDocument();
     const goalOptions = screen.getByText("Opcje Celu").closest("details") as HTMLDetailsElement;
     expect(within(goalOptions).getByRole("button", { name: "Edytuj Cel" })).not.toBeVisible();
@@ -37,7 +37,7 @@ describe("goal-centric experience", () => {
     const actionsSection = within(details).getByText("Działania", { selector: "strong" }).closest("details") as HTMLDetailsElement;
     expect(actionsSection).not.toHaveAttribute("open");
     await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj Działanie do Celu FinTrack API" }));
-    const quickAdd = screen.getByRole("dialog", { name: "Dodaj" });
+    const quickAdd = screen.getByRole("dialog", { name: "Nowe Działanie" });
     expect(within(quickAdd).getByLabelText("Co chcesz zrobić?")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(details).getByText("Działania", { selector: "strong" }));

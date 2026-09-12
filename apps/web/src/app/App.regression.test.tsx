@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { demoState } from "../data/demo";
 import { App } from "./App";
@@ -21,6 +21,33 @@ describe("regresje nowego modelu Celów", () => {
   ])("renderuje lub przekierowuje trasę %s", async (path, heading) => {
     renderApp(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["/", "Start", "Dodaj nowe Działanie na Starcie", "Nowe Działanie"],
+    ["/actions", "Działania", "Dodaj nowe Działanie", "Nowe Działanie"],
+    ["/goals", "Cele", "Dodaj nowy Cel", "Nowy Cel"],
+    ["/projects", "Projekty", "Dodaj nowy Projekt", "Nowy Projekt"],
+    ["/routines", "Rutyny", "Dodaj nową Rutynę", "Nowa Rutyna"],
+    ["/knowledge", "Wiedza", "Dodaj nowy element Wiedzy", "Dodaj do Biblioteki"],
+    ["/knowledge?section=inbox", "Wiedza", "Dodaj do Skrzynki", "Dodaj do Skrzynki"],
+    ["/goals/fintrack-api", "FinTrack API", "Dodaj Działanie do Celu FinTrack API", "Nowe Działanie"],
+    ["/projects/fintrack-api", "FinTrack API", "Dodaj w Projekcie FinTrack API", "Nowe Działanie"],
+    ["/projects/fintrack-api?view=actions", "FinTrack API", "Dodaj Działanie do Projektu FinTrack API", "Nowe Działanie"],
+    ["/projects/fintrack-api?view=goals", "FinTrack API", "Dodaj Cel do Projektu FinTrack API", "Nowy Cel"],
+    ["/projects/fintrack-api?view=knowledge", "FinTrack API", "Dodaj Wiedzę do Projektu FinTrack API", "Dodaj do Biblioteki"]
+  ])("mobilne Dodaj otwiera właściwy formularz: %s", async (path, heading, trigger, title) => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(max-width: 767px)", media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    try {
+      const user = userEvent.setup();
+      renderApp(path);
+      await screen.findByRole("heading", { name: heading, level: 1 });
+      await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: trigger }));
+      const dialog = await screen.findByRole("dialog", { name: title });
+      if (path.includes("/projects/fintrack-api")) expect(dialog).toHaveTextContent("Projekt: FinTrack API");
+      await user.keyboard("{Control>}j{/Control}");
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("pokazuje Projekty i Cele jako osobne kierunki nawigacji i nie eksponuje Fokusów", async () => {
@@ -49,7 +76,7 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("button", { name: /Dodaj dowolne/ }));
-    expect(screen.getByRole("dialog", { name: "Dodaj" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("otwiera działające menu profilu i zamyka je klawiszem Escape", async () => {
@@ -74,13 +101,15 @@ describe("regresje nowego modelu Celów", () => {
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
     await user.click(await within(screen.getByRole("banner")).findByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
-    const createCenter = screen.getByRole("dialog", { name: "Dodaj" });
+    const createCenter = screen.getByRole("dialog");
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).not.toHaveClass("mobile-chooser");
+    await user.click(within(createCenter).getByText("Zmień", { exact: true }));
     for (const mode of ["Działanie", "Cel", "Do Skrzynki"]) expect(within(createCenter).getByRole("button", { name: mode })).toBeInTheDocument();
-    await waitFor(() => expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus());
+    await user.click(within(createCenter).getByLabelText("Co chcesz zrobić?"));
+    expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus();
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
-    expect(within(createCenter).getByRole("button", { name: /Działanie cykliczne/ })).toBeInTheDocument();
+    expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
     await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
     const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
     await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));
@@ -269,6 +298,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/knowledge/know-2");
     await screen.findByRole("heading", { name: "Typ danych dla kwot pieniężnych" });
+    await user.click(screen.getByText("Dodaj potwierdzenie", { selector: "summary" }));
     await user.selectOptions(screen.getByLabelText("Materiał potwierdzający decyzję"), "know-3");
     await user.click(screen.getByRole("button", { name: "Dołącz" }));
     expect(await screen.findByRole("link", { name: "PostgreSQL: constraints and normalization" })).toBeInTheDocument();
@@ -278,11 +308,12 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/knowledge/know-3");
     await screen.findByRole("heading", { name: "PostgreSQL: constraints and normalization" });
-    const panel = screen.getByRole("heading", { name: "Projekty i transfer wiedzy" }).closest("section") as HTMLElement;
-    expect(within(panel).getByRole("link", { name: "Finanse" })).toBeInTheDocument();
+    const panel = screen.getByRole("region", { name: "Powiązania" });
+    expect(within(panel).getByRole("link", { name: /Finanse/ })).toBeInTheDocument();
+    await user.click(within(panel).getByText("Połącz wiedzę", { selector: "summary" }));
     await user.selectOptions(within(panel).getByLabelText("Połącz z kolejnym Projektem"), "portfolio-v2");
     await user.click(within(panel).getByRole("button", { name: "Połącz Projekt" }));
-    expect(await within(panel).findByRole("link", { name: "Portfolio v2" })).toBeInTheDocument();
+    expect(await within(panel).findByRole("link", { name: /Portfolio v2/ })).toBeInTheDocument();
     expect(within(panel).getByText("Łączy 2 Projekty")).toBeInTheDocument();
   });
 
@@ -322,13 +353,14 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
     await user.keyboard("{Control>}j{/Control}");
-    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
+    await user.click(within(dialog).getByText("Zmień", { exact: true }));
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Dodaj" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
   });
 
@@ -337,10 +369,10 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.keyboard("{Control>}j{/Control}");
-    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog");
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
     await user.type(input, "/cel Uporządkować dokumentację");
-    expect(within(dialog).getByRole("button", { name: "Cel" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("heading", { name: "Nowy Cel" })).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Co chcesz osiągnąć?")).toHaveValue("Uporządkować dokumentację");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Cel utworzony.");
@@ -351,7 +383,8 @@ describe("regresje nowego modelu Celów", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
     await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
-    const dialog = await screen.findByRole("dialog", { name: "Dodaj" });
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByText("Zmień", { exact: true }));
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
     await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
     await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
@@ -373,17 +406,16 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(screen.getByText("Opcje Celu"));
     await user.selectOptions(screen.getByLabelText("Stan Celu"), "paused");
     expect(screen.getByRole("option", { name: "Wstrzymany", selected: true })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edytuj: Zaprojektuj encje i relacje dla transakcji" }));
+    await user.click(screen.getByRole("button", { name: "Więcej opcji: Zaprojektuj encje i relacje dla transakcji" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Działanie — więcej opcji" })).getByRole("button", { name: "Edytuj" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj Działanie" });
     await user.clear(within(edit).getByLabelText("Nazwa"));
     await user.type(within(edit).getByLabelText("Nazwa"), "Zaprojektuj model transakcji");
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
-    expect(await screen.findByRole("button", { name: "Edytuj: Zaprojektuj model transakcji" })).toBeInTheDocument();
-    const actionKnowledge = screen.getAllByRole("region", { name: "Wiedza Działania" })[0];
-    const relationToggle = within(actionKnowledge).getByRole("button", { name: "Dodaj materiał" });
-    expect(relationToggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(relationToggle);
-    expect(relationToggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(await screen.findByRole("link", { name: "Zaprojektuj model transakcji" }));
+    const actionKnowledge = await screen.findByRole("region", { name: "Wiedza Działania" });
+    expect(within(actionKnowledge).getByText("Materiały")).toBeVisible();
+    await user.click(within(actionKnowledge).getByText("Połącz wiedzę", { selector: "summary" }));
     await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
     await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
     expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();
