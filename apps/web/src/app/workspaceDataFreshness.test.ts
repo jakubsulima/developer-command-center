@@ -44,6 +44,23 @@ describe("WorkspaceDataFreshness", () => {
     expect(freshness.getSnapshot().status).toBe("success");
   });
 
+  it("throttles automatic retries after a failed read", async () => {
+    let now = 30_000;
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce("fresh");
+    const freshness = new WorkspaceDataFreshness({ now: () => now });
+
+    await expect(freshness.request(load)).rejects.toThrow("network down");
+    now += 1;
+    await expect(freshness.request(load)).resolves.toBeUndefined();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    now += WORKSPACE_FRESHNESS_THRESHOLD_MS;
+    await expect(freshness.request(load)).resolves.toBe("fresh");
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores a response belonging to a previous identity after reset", async () => {
     const load = deferred<string>();
     const changes: string[] = [];

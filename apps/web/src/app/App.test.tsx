@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -111,13 +111,22 @@ describe("goal-centric workspace", () => {
     await user.click(screen.getByRole("tab", { name: "Działania" }));
     const actions = screen.getByRole("region", { name: "Działania" });
     expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
+    expect(within(actions).queryByText("Do zrobienia")).not.toBeInTheDocument();
     expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
+    expect(within(actions).queryByRole("button", { name: "Więcej opcji: Otwarte Działanie" })).not.toBeInTheDocument();
+    expect(within(actions).queryByRole("button", { name: "Ukończ: Otwarte Działanie" })).not.toBeInTheDocument();
+    await user.click(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Otwarte Działanie" }));
+    const statusDialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    expect(within(statusDialog).queryByText("Pominięte")).not.toBeInTheDocument();
+    await user.click(within(statusDialog).getByRole("button", { name: /W toku/ }));
+    await waitFor(() => expect(actions.querySelector('[data-action-id="action-current"]')).toHaveClass("in_progress"));
     await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Działanie do Projektu Projekt z historią" }));
     expect(screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(actions).getByText("Więcej opcji Działań"));
     await user.click(within(actions).getByRole("button", { name: /Pokaż historię/ }));
     expect(within(actions).getByText("Ukończone Działanie")).toBeInTheDocument();
+    expect(actions.querySelector('[data-action-id="action-history"]')).toHaveClass("completed");
     expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
     expect(within(actions).getByText("Historia Działań")).toBeInTheDocument();
 

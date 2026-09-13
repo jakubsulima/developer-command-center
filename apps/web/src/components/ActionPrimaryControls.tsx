@@ -6,7 +6,7 @@ export function ActionPrimaryControls({ action, busy, onToggleComplete, onMore, 
   action: GoalAction;
   busy: boolean;
   onToggleComplete: () => void;
-  onMore: () => void;
+  onMore?: () => void;
   ariaLabelPrefix?: string;
 }) {
   return <>
@@ -19,8 +19,8 @@ export function ActionPrimaryControls({ action, busy, onToggleComplete, onMore, 
     >
       {action.status === "completed" ? <Check /> : <Circle />}
     </button>
-    <div className="mobile-action-primary">
+    {onMore ? <div className="mobile-action-primary">
       <Button className="mobile-action-more" variant="ghost" aria-label={`Więcej opcji: ${action.title}`} title="Więcej opcji" disabled={busy} onClick={onMore}><MoreHorizontal /></Button>
-    </div>
+    </div> : null}
   </>;
 }
