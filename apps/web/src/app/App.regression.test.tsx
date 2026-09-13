@@ -413,7 +413,8 @@ describe("regresje nowego modelu Celów", () => {
     await user.type(within(edit).getByLabelText("Nazwa"), "Zaprojektuj model transakcji");
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     await user.click(await screen.findByRole("link", { name: "Zaprojektuj model transakcji" }));
-    await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Zaprojektuj model transakcji" }));
+    await screen.findByRole("heading", { name: "Zaprojektuj model transakcji", level: 1 });
+    await user.click(await screen.findByRole("button", { name: "Zmień status: Do zrobienia — Zaprojektuj model transakcji" }));
     const statusDialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
     expect(within(statusDialog).getByText("Wymaga usunięcia przeszkody")).toBeInTheDocument();
     await user.click(within(statusDialog).getByRole("button", { name: /Zablokowane/ }));

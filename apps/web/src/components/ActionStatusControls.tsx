@@ -1,3 +1,4 @@
+import "./ActionStatusControls.css";
 import { useState } from "react";
 import { ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, SkipForward, type LucideIcon } from "lucide-react";
 import { actionStatusLabels } from "../domain/labels";
