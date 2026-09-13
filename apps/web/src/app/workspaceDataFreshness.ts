@@ -22,6 +22,7 @@ export class WorkspaceDataFreshness {
   private readonly onChange?: (state: WorkspaceFreshnessState) => void;
   private state: WorkspaceFreshnessState = { status: "idle" };
   private inFlight?: Promise<unknown>;
+  private lastAttemptAt?: number;
   private generation = 0;
 
   public constructor(options: WorkspaceDataFreshnessOptions = {}) {
@@ -43,17 +44,21 @@ export class WorkspaceDataFreshness {
   public reset() {
     this.generation += 1;
     this.inFlight = undefined;
+    this.lastAttemptAt = undefined;
     this.state = { status: "idle" };
     this.onChange?.(this.state);
   }
 
   public request<T>(read: () => Promise<T>, force = false): Promise<T | undefined> {
     if (this.inFlight) return this.inFlight as Promise<T | undefined>;
+    const requestedAt = this.now();
     const lastSuccessfulAt = this.state.lastSuccessfulAt;
-    if (!force && lastSuccessfulAt !== undefined && this.now() - lastSuccessfulAt <= WORKSPACE_FRESHNESS_THRESHOLD_MS) {
+    const throttleAt = Math.max(lastSuccessfulAt ?? Number.NEGATIVE_INFINITY, this.lastAttemptAt ?? Number.NEGATIVE_INFINITY);
+    if (!force && requestedAt - throttleAt <= WORKSPACE_FRESHNESS_THRESHOLD_MS) {
       return Promise.resolve(undefined);
     }
 
+    this.lastAttemptAt = requestedAt;
     const generation = this.generation;
     this.state = { ...this.state, status: "refreshing", error: undefined };
     this.onChange?.(this.state);

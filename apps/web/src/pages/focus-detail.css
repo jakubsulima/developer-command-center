@@ -8,11 +8,8 @@
 .focus-detail .detail-title-block h1, .focus-detail .goal-overview h1, .focus-detail .knowledge-detail-head h1 { margin: 0; font-size: clamp(28px, 3vw, 36px); font-weight: 600; line-height: 1.18; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .focus-detail .detail-kicker { display: block; margin-bottom: 8px; color: var(--muted-foreground); font-size: 14px; font-weight: 400; }
 .focus-detail .action-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; font-size: 14px; }
-.focus-detail .action-status-row > strong { font-weight: 450; }
-.focus-detail .action-status-icon { display: grid; place-items: center; width: 24px; height: 24px; color: var(--secondary-foreground); }
-.focus-detail .action-status-icon svg { width: 24px; height: 24px; }
-.focus-detail .action-status-icon.completed { color: var(--success); }
-.focus-detail .action-status-icon.blocked { color: var(--danger); }
+.focus-detail .action-detail-status-trigger { min-height:36px; margin:0; padding:7px 9px; border:1px solid color-mix(in srgb, var(--action-status-color) 38%, var(--border)); border-radius:9px; background:color-mix(in srgb, var(--action-status-color) 9%, transparent); font-size:13px; }
+.focus-detail .action-detail-status-trigger > svg:first-child { width:18px; height:18px; }
 .focus-detail .action-date { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; padding-left: 14px; border-left: 1px solid var(--border); color: var(--muted-foreground); }
 .focus-detail .action-date svg { width: 18px; height: 18px; }
 .focus-detail .action-parent-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; gap: 8px 10px; align-items: center; padding: 16px 0; border-block: 1px solid var(--border); }
@@ -128,24 +125,8 @@
 }
 @media (max-width: 767px) {
   .app-shell.focus-detail .main-content { padding: 16px 20px calc(96px + env(safe-area-inset-bottom)); }
-  .focus-detail .topbar { justify-content: flex-start; gap: 12px; padding-inline: 20px; }
-  .focus-detail .mobile-brand { font-size: 18px; font-weight: 600; }
-  .focus-detail .mobile-brand .brand-mark { display: none; }
-  .focus-detail .desktop-global-search { display: block; flex: 1; min-width: 0; margin-left: 8px; }
-  .focus-detail .desktop-global-search .global-search, .focus-detail .desktop-global-search .search-wrap { width: 100%; }
-  .focus-detail .desktop-global-search input { min-width: 0; height: 36px; padding: 0 10px 0 32px; border-radius: 999px; font-size: 13px; }
-  .focus-detail .desktop-global-search .search-wrap > svg { left: 10px; width: 16px; height: 16px; }
-  .focus-detail .mobile-search-trigger { display: none; }
-  .focus-detail .mobile-profile-trigger { display: grid; flex: 0 0 44px; width: 44px; height: 44px; place-items: center; padding: 0; border: 0; background: transparent; }
-  .focus-detail .mobile-profile-trigger .avatar { width: 34px; height: 34px; font-size: 11px; }
   .focus-detail .detail-title-block h1, .focus-detail .goal-overview h1, .focus-detail .knowledge-detail-head h1 { font-size: 27px; }
   .focus-detail .context-navigation { margin-bottom: 18px; }
   .focus-detail .goal-detail-toolbar .context-navigation { margin-bottom: 0; }
   .focus-detail .goal-detail-toolbar { margin-bottom: 14px; }
-  .focus-detail .bottom-nav .mobile-nav-icon { position: relative; }
-  .focus-detail .bottom-nav .capture-fab { height: 52px; transform: none; align-self: center; }
-  .focus-detail .bottom-nav .capture-fab > span:last-child { display: none; }
-  .focus-detail .bottom-nav .capture-fab-icon { width: 48px; height: 48px; }
-  .focus-detail .bottom-nav .capture-fab-icon::before { display: none; }
-  .focus-detail .bottom-nav .nav-badge { top: -6px; right: -10px; }
 }
