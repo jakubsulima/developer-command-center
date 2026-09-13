@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,13 +69,21 @@ function DirtyDraftProbe() {
   return <><input aria-label="Treść lokalnego szkicu" value={draft.value.text} onChange={(event) => draft.setValue({ text: event.target.value })} /><button onClick={() => void store.reload().catch(() => undefined)}>Odśwież</button></>;
 }
 
+function ActivePageProbe({ load }: { load: () => Promise<string> }) {
+  useQuery({ queryKey: ["workspace-page", "inbox", "test"], queryFn: load });
+  return null;
+}
+
 describe("StoreProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    repository.loadSupabaseState.mockReset();
+    repository.releaseDueInboxItemsRemote.mockReset();
     repository.loadSupabaseState.mockResolvedValue({ ...structuredClone(demoState), workspaceId: "workspace-1", aiProposalId: "proposal-1" });
     repository.captureRemote.mockImplementation(async (_workspace: string, content: string) => ({ id: "server-item", kind: "text", content, createdAt: "2026-08-01T08:00:00Z", status: "unprocessed" }));
     repository.startFocusRemote.mockResolvedValue({ id: "server-session", startedAt: Date.now() });
     repository.exportWorkspaceRemote.mockResolvedValue({ format: "export" });
+    repository.releaseDueInboxItemsRemote.mockResolvedValue(undefined);
   });
 
   it("ładuje prywatny Workspace i zapisuje capture przez repozytorium", async () => {
@@ -211,6 +219,85 @@ describe("StoreProvider", () => {
     await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2));
     refresh.resolve(updated);
     expect(await screen.findByText("Zmiana z drugiego klienta")).toBeInTheDocument();
+  });
+
+  it("nie uruchamia automatycznego pełnego refetchu dla wyniku starszego od zapisu", async () => {
+    const initial = { ...structuredClone(demoState), workspaceId: "workspace-1" };
+    const staleRead = deferred<typeof initial>();
+    const pendingCapture = deferred<Awaited<ReturnType<typeof repository.captureRemote>>>();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    repository.loadSupabaseState.mockReset()
+      .mockResolvedValueOnce(initial)
+      .mockImplementationOnce(() => staleRead.promise)
+      .mockResolvedValue(initial);
+    repository.captureRemote.mockImplementationOnce(() => pendingCapture.promise);
+    const user = userEvent.setup();
+
+    renderStore(<Probe />, auth, queryClient);
+    await screen.findByText("workspace-1");
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(1));
+    void queryClient.invalidateQueries({ queryKey: ["workspace-state", "user-1"] });
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Capture" }));
+    await waitFor(() => expect(repository.captureRemote).toHaveBeenCalled());
+
+    staleRead.resolve(structuredClone(initial));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(repository.loadSupabaseState).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Nowy zdalny capture")).toBeInTheDocument();
+
+    pendingCapture.resolve({ id: "server-item", kind: "text", content: "Nowy zdalny capture", createdAt: "2026-09-13T06:00:00.000Z", status: "unprocessed" });
+  });
+
+  it("nie omija limitu odświeżania po zdarzeniu online", async () => {
+    renderStore(<Probe />);
+    await screen.findByText("workspace-1");
+    await waitFor(() => expect(repository.loadSupabaseState).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new Event("online"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(repository.loadSupabaseState).toHaveBeenCalledTimes(1);
+  });
+
+  it("nie zapętla automatycznego uwalniania Inboxu po błędzie zapisu", async () => {
+    const initial = { ...structuredClone(demoState), workspaceId: "workspace-1" };
+    initial.inbox = [{
+      id: "due-inbox",
+      kind: "text",
+      content: "Odłożone przechwycenie",
+      createdAt: "2026-09-11T08:00:00.000Z",
+      status: "snoozed",
+      snoozedUntil: "2026-09-12T08:00:00.000Z"
+    }];
+    repository.loadSupabaseState.mockResolvedValue(initial);
+    repository.releaseDueInboxItemsRemote.mockRejectedValueOnce(new Error("temporary_failure"));
+
+    renderStore(<Probe />);
+    await waitFor(() => expect(repository.releaseDueInboxItemsRemote).toHaveBeenCalled(), { timeout: 5_000 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(repository.releaseDueInboxItemsRemote).toHaveBeenCalledTimes(1);
+  });
+
+  it("odświeża aktywne zapytanie strony tylko raz przy ręcznym reloadzie", async () => {
+    repository.loadSupabaseState.mockImplementation(async () => ({ ...structuredClone(demoState), workspaceId: "workspace-1", aiProposalId: "proposal-1" }));
+    const pageRead = vi.fn().mockResolvedValue("page");
+    const user = userEvent.setup();
+    renderStore(<><Probe /><ActivePageProbe load={pageRead} /></>);
+    await screen.findByText("workspace-1");
+    await waitFor(() => expect(pageRead).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pageRead.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    await waitFor(() => expect(pageRead).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pageRead).toHaveBeenCalledTimes(1);
   });
 
   it("ponawia odczyt po wyścigu read/write i zachowuje zmianę optymistyczną", async () => {

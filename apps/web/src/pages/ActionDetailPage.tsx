@@ -1,5 +1,5 @@
 import "./focus-detail.css";
-import { CalendarDays, Check, Circle, Flag, FolderKanban, Pin, PinOff, ChevronRight } from "lucide-react";
+import { CalendarDays, Check, Flag, FolderKanban, Pin, PinOff, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
@@ -15,6 +15,7 @@ import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, readNavigationState, type NavigationBreadcrumb } from "../domain/navigation";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
+import { ActionStatusDialog, ActionStatusTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
 
 export function ActionDetailPage() {
   const { actionId } = useParams();
@@ -23,6 +24,7 @@ export function ActionDetailPage() {
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [resultOpen, setResultOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
   const actionQuery = useQuery({
     queryKey: ["workspace-action", mode, state.workspaceId, actionId],
     enabled: mode === "supabase" && !loading && Boolean(actionId) && !state.actions.some((candidate) => candidate.id === actionId),
@@ -46,6 +48,14 @@ export function ActionDetailPage() {
     });
   };
   const key = `action-detail:${action.id}`;
+  const statusKey = `action-detail-status:${action.id}`;
+  const changeStatus = async (status: ProjectActionStatus, blocker?: string) => {
+    const previous = { status: action.status, blocker: action.blocker };
+    return mutation.run(statusKey, async () => {
+      await setActionStatus(action.id, status, blocker);
+      notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker) });
+    });
+  };
   const scheduledFor = action.scheduledFor
     ? new Date(`${action.scheduledFor}T12:00:00Z`).toLocaleDateString("pl-PL")
     : null;
@@ -65,7 +75,7 @@ export function ActionDetailPage() {
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} />
-    <header className="detail-title-block"><h1>{action.title}</h1><div className="action-status-row"><span className={`action-status-icon ${action.status}`}>{action.status === "completed" ? <Check /> : <Circle />}</span><strong>{actionStatusLabels[action.status]}</strong>{scheduledFor ? <span className="action-date"><CalendarDays />{scheduledFor}</span> : null}</div></header>
+    <header className="detail-title-block"><h1>{action.title}</h1><div className="action-status-row"><ActionStatusTrigger action={action} disabled={mutation.isBusy(statusKey)} className="action-detail-status-trigger" onClick={() => setStatusOpen(true)} />{scheduledFor ? <span className="action-date"><CalendarDays />{scheduledFor}</span> : null}</div></header>
     <div className="action-detail-layout">
     {parentLabel && context.name ? <NavigationLink className="action-parent-row" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><small>Powiązany {parentLabel}</small><span className="action-parent-icon">{parentIcon}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
     <section className="action-description-block"><span className="detail-kicker">Opis</span><p className={action.detail ? "" : "action-detail-empty"}>{action.detail || "Bez dodatkowego opisu."}</p></section>
@@ -76,5 +86,5 @@ export function ActionDetailPage() {
       {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ działanie</Button> : null}
     </div>
     </div>
-  </div><ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} /></AppShell>;
+  </div><ActionStatusDialog action={action} open={statusOpen} busy={mutation.isBusy(statusKey)} error={mutation.error(statusKey)} onClose={() => setStatusOpen(false)} onChange={changeStatus} /><ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} /></AppShell>;
 }

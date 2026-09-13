@@ -413,6 +413,12 @@ describe("regresje nowego modelu Celów", () => {
     await user.type(within(edit).getByLabelText("Nazwa"), "Zaprojektuj model transakcji");
     await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
     await user.click(await screen.findByRole("link", { name: "Zaprojektuj model transakcji" }));
+    await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Zaprojektuj model transakcji" }));
+    const statusDialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    expect(within(statusDialog).getByText("Wymaga usunięcia przeszkody")).toBeInTheDocument();
+    await user.click(within(statusDialog).getByRole("button", { name: /Zablokowane/ }));
+    expect(within(statusDialog).getByLabelText("Co blokuje to Działanie?")).toBeInTheDocument();
+    await user.click(within(statusDialog).getByRole("button", { name: "Zamknij okno" }));
     const actionKnowledge = await screen.findByRole("region", { name: "Wiedza Działania" });
     expect(within(actionKnowledge).getByText("Materiały")).toBeVisible();
     await user.click(within(actionKnowledge).getByText("Połącz wiedzę", { selector: "summary" }));
