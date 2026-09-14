@@ -15,7 +15,7 @@ import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, readNavigationState, type NavigationBreadcrumb } from "../domain/navigation";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
-import { ActionStatusDialog, ActionStatusTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionOriginMarker, ActionStatusDialog, ActionStatusTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
 
 export function ActionDetailPage() {
   const { actionId } = useParams();
@@ -75,7 +75,7 @@ export function ActionDetailPage() {
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} />
-    <header className="detail-title-block"><h1>{action.title}</h1><div className="action-status-row"><ActionStatusTrigger action={action} disabled={mutation.isBusy(statusKey)} className="action-detail-status-trigger" onClick={() => setStatusOpen(true)} />{scheduledFor ? <span className="action-date"><CalendarDays />{scheduledFor}</span> : null}</div></header>
+    <header className="detail-title-block"><h1>{action.title}</h1><div className="action-status-row"><ActionStatusTrigger action={action} disabled={mutation.isBusy(statusKey)} className="action-detail-status-trigger" onClick={() => setStatusOpen(true)} />{action.recurringTemplateId ? <Link className="action-routine-origin-link" to={`/routines?editSeries=${encodeURIComponent(action.recurringTemplateId)}`}><ActionOriginMarker action={action} verbose /></Link> : null}{scheduledFor ? <span className="action-date"><CalendarDays />{scheduledFor}</span> : null}</div></header>
     <div className="action-detail-layout">
     {parentLabel && context.name ? <NavigationLink className="action-parent-row" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><small>Powiązany {parentLabel}</small><span className="action-parent-icon">{parentIcon}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
     <section className="action-description-block"><span className="detail-kicker">Opis</span><p className={action.detail ? "" : "action-detail-empty"}>{action.detail || "Bez dodatkowego opisu."}</p></section>

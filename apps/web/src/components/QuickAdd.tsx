@@ -241,7 +241,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
 
   return <Modal open={open} title={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving} headingAction={<button ref={typeSummaryRef} type="button" className="quick-add-change-type" disabled={saving} aria-label="Zmień typ wpisu" aria-expanded={typePickerOpen} aria-controls="quick-add-type-choices" onClick={() => setTypePickerOpen((current) => !current)}>Zmień<ChevronDown /></button>} onEscape={() => { if (!typePickerOpen) return false; setTypePickerOpen(false); typeSummaryRef.current?.focus(); return true; }}>
     <form className="quick-add" noValidate onSubmit={(event) => void submit(event)}>
-      <div className="quick-add-body">
+      <div className="quick-add-body" data-modal-scroll-body>
         {typePickerOpen ? <div className="quick-add-type-picker" id="quick-add-type-choices"><div className="quick-add-modes" role="group" aria-label="Co chcesz dodać?">{modes.map(({ id, label, icon: Icon }) => <button type="button" disabled={saving} aria-label={id === "inbox" ? "Do Skrzynki" : label} aria-pressed={draft.value.mode === id} key={id} onClick={() => setMode(id)}><span><Icon /></span><small>{label}</small></button>)}</div></div> : null}
         <div className="quick-add-mode-panel">
           <div className="quick-add-mode-heading"><span>{modeCopy.label}</span><small>{modeCopy.detail}</small></div>
@@ -263,9 +263,10 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
           </FormTransition>
         </div>
         <div className="quick-add-hint" aria-label="Dostępne komendy"><span>Możesz też zacząć od</span>{modes.map(({ id, command }) => <button type="button" disabled={saving} key={command} onClick={() => setMode(id)}><kbd>{command}</kbd></button>)}</div>
+        <div className="quick-add-draft"><DraftStatus compact status={draft.status} restored={draft.restored} context={draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.length}` : contextSummary} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(draft.value.mode === "inbox" ? draft.value.content : [draft.value.title, draft.value.detail, draft.value.sourceUrl].filter(Boolean).join("\n"))} />{draft.dirty ? <Button type="button" variant="ghost" disabled={saving} onClick={draft.discard}>Odrzuć szkic</Button> : null}</div>
         {error ? <p id="quick-add-error" className="auth-message error" role="alert">{error}</p> : null}
       </div>
-      <div className="quick-add-footer"><div className="quick-add-draft"><DraftStatus compact status={draft.status} restored={draft.restored} context={draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.length}` : contextSummary} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(draft.value.mode === "inbox" ? draft.value.content : [draft.value.title, draft.value.detail, draft.value.sourceUrl].filter(Boolean).join("\n"))} />{draft.dirty ? <Button type="button" variant="ghost" disabled={saving} onClick={draft.discard}>Odrzuć szkic</Button> : null}</div><Button type="submit" variant="primary" loading={saving} disabled={draft.value.mode === "inbox" ? !draft.value.content.trim() : !draft.value.title.trim()}><Plus />{modeCopy.submit}</Button></div>
+      <div className="quick-add-footer"><Button type="submit" variant="primary" loading={saving} disabled={draft.value.mode === "inbox" ? !draft.value.content.trim() : !draft.value.title.trim()}><Plus />{modeCopy.submit}</Button></div>
     </form>
   </Modal>;
 }

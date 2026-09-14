@@ -130,3 +130,14 @@
   .focus-detail .goal-detail-toolbar .context-navigation { margin-bottom: 0; }
   .focus-detail .goal-detail-toolbar { margin-bottom: 14px; }
 }
+
+.focus-detail .goal-featured-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-left: 14px;
+}
+.focus-detail .goal-featured-action > .action-copy { grid-column: 1; }
+.focus-detail .goal-featured-action > .action-row-controls { grid-column: 2; grid-row: 1; }
+.focus-detail .goal-featured-action > .featured-action-open { grid-column: 1 / -1; }
+.focus-detail .action-routine-origin-link { display:inline-flex; color:inherit; text-decoration:none; }
+.focus-detail .action-routine-origin-link:hover,
+.focus-detail .action-routine-origin-link:focus-visible { text-decoration:underline; text-underline-offset:3px; }

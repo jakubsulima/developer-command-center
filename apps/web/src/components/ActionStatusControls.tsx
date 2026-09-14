@@ -1,14 +1,14 @@
 import "./ActionStatusControls.css";
 import { useState } from "react";
-import { ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, SkipForward, type LucideIcon } from "lucide-react";
+import { ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, Repeat2, SkipForward, type LucideIcon } from "lucide-react";
 import { actionStatusLabels } from "../domain/labels";
 import type { ActionStatus, GoalAction } from "../domain/types";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
 
-export type ProjectActionStatus = Exclude<ActionStatus, "skipped">;
+export type ProjectActionStatus = ActionStatus;
 
-const statusOptions: ProjectActionStatus[] = ["ready", "in_progress", "blocked", "completed", "cancelled"];
+const standardStatusOptions: ProjectActionStatus[] = ["ready", "in_progress", "blocked", "completed", "cancelled"];
 const statusIcons = {
   ready: Circle,
   in_progress: LoaderCircle,
@@ -22,8 +22,14 @@ const statusHints: Record<ProjectActionStatus, string> = {
   in_progress: "Praca trwa",
   blocked: "Wymaga usunięcia przeszkody",
   completed: "Działanie wykonane",
+  skipped: "Tylko to wystąpienie Rutyny",
   cancelled: "Nie będzie realizowane"
 };
+
+export function ActionOriginMarker({ action, verbose = false }: { action: GoalAction; verbose?: boolean }) {
+  if (!action.recurringTemplateId) return null;
+  return <span className="action-origin-marker" title="To Działanie zostało utworzone przez Rutynę"><Repeat2 aria-hidden="true" />{verbose ? "Wystąpienie Rutyny" : "Z Rutyny"}</span>;
+}
 
 export function ActionStatusTrigger({ action, disabled = false, className = "", onClick }: { action: GoalAction; disabled?: boolean; className?: string; onClick: () => void }) {
   const Icon = statusIcons[action.status];
@@ -58,12 +64,15 @@ function ActionStatusDialogContent({ action, busy, error, compact, onClose, onCh
 }) {
   const [editingBlocker, setEditingBlocker] = useState(false);
   const [blocker, setBlocker] = useState(action.blocker ?? "");
+  const statusOptions = action.recurringTemplateId
+    ? [...standardStatusOptions.slice(0, 4), "skipped" as const, "cancelled" as const]
+    : standardStatusOptions;
   const decide = async (status: ProjectActionStatus, nextBlocker?: string) => {
     if (await onChange(status, nextBlocker)) onClose();
   };
 
-  return <Modal open closeDisabled={busy} className={`action-status-dialog${compact ? " compact" : ""}`} title="Zmień status Działania" onClose={onClose}>
-    <p className="modal-intro"><strong>{action.title}</strong></p>
+  return <Modal open closeDisabled={busy} className={`action-status-dialog${compact ? " compact" : ""}${action.recurringTemplateId ? " has-routine-origin" : ""}`} title="Zmień status Działania" onClose={onClose}>
+    <p className="modal-intro"><strong>{action.title}</strong>{action.recurringTemplateId ? <ActionOriginMarker action={action} verbose /> : null}</p>
     <div className="action-status-options" role="group" aria-label="Nowy status Działania">{statusOptions.map((status) => {
       const Icon = statusIcons[status];
       const current = action.status === status;

@@ -46,6 +46,27 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
 
   useEffect(() => {
     if (!open) return;
+    // Resize can finish after the browser's own focus scrolling (mobile keyboards).
+    // Scroll only the form body, leaving the heading, save action and page in place.
+    const frame = window.requestAnimationFrame(() => {
+      const field = document.activeElement;
+      const body = dialogRef.current?.querySelector<HTMLElement>("[data-modal-scroll-body]");
+      if (!(field instanceof HTMLElement) || !body?.contains(field)) return;
+      const fieldRect = field.getBoundingClientRect();
+      const bodyRect = body.getBoundingClientRect();
+      const top = bodyRect.top + 12;
+      const bottom = bodyRect.bottom - 12;
+      if (fieldRect.top < top || fieldRect.height > bottom - top) {
+        body.scrollTop += fieldRect.top - top;
+      } else if (fieldRect.bottom > bottom) {
+        body.scrollTop += fieldRect.bottom - bottom;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, viewportMetrics.height, viewportMetrics.offsetTop]);
+
+  useEffect(() => {
+    if (!open) return;
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
     const previousPosition = document.body.style.position;
