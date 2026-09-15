@@ -43,23 +43,23 @@ describe("lista wszystkich Działań", () => {
     const user = userEvent.setup();
     renderApp();
     const row = (await screen.findByRole("link", { name: "Spisać stałe koszty" })).closest("section") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Ukończ Działanie: Spisać stałe koszty" }));
-    expect((await screen.findAllByRole("status")).some((status) => status.textContent?.includes("Działanie ukończone."))).toBe(true);
+    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Spisać stałe koszty" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
+    expect((await screen.findAllByRole("status")).some((status) => status.textContent?.includes("Status zmieniono na „Ukończone”."))).toBe(true);
     expect(screen.queryByRole("link", { name: "Spisać stałe koszty" })).not.toBeInTheDocument();
   });
 
-  it("wykonuje przełożenie z menu wiersza i zachowuje przypięcie", async () => {
+  it("zmienia status bezpośrednio z wiersza bez dodatkowego menu", async () => {
     const state = structuredClone(demoState);
     state.actions = [{ ...state.actions[1]!, id: "late-pinned", title: "Zaległy przypięty krok", pinnedToToday: true, scheduledFor: "2026-08-01" }];
     localStorage.setItem("command-center-state-v1", JSON.stringify(state));
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
     const row = (await screen.findByRole("link", { name: "Zaległy przypięty krok" })).closest("section") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Więcej opcji: Zaległy przypięty krok" }));
-    expect(screen.getByRole("button", { name: "Dzisiaj" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Jutro" }));
-    expect(await screen.findByText(/Nadal przypięte na dziś/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Zaległy przypięty krok" })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Więcej opcji: Zaległy przypięty krok" })).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Zaległy przypięty krok" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
+    expect(await screen.findByRole("button", { name: "Zmień status: W toku — Zaległy przypięty krok" })).toBeInTheDocument();
   });
 
   it("anuluje pojedyncze Działanie, zachowuje rekord i pozwala je cofnąć", async () => {
@@ -69,9 +69,9 @@ describe("lista wszystkich Działań", () => {
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
     const row = (await screen.findByRole("link", { name: "Anulowany krok" })).closest("section") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Więcej opcji: Anulowany krok" }));
-    await user.click(screen.getByRole("button", { name: "Anuluj Działanie" }));
-    expect(await screen.findByText("Działanie anulowano. Rekord zachowano.")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Anulowany krok" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Anulowane/ }));
+    expect(await screen.findByText("Status zmieniono na „Anulowane”.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Anulowany krok" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cofnij" }));
     expect(await screen.findByRole("link", { name: "Anulowany krok" })).toBeInTheDocument();

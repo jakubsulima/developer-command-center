@@ -1,11 +1,10 @@
-import { CalendarClock, CircleCheck, Filter, ListTodo, RefreshCw, X } from "lucide-react";
+import { CalendarClock, Filter, ListTodo, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
-import { ActionDecisionMenu } from "../components/ActionDecisionMenu";
+import { ActionOriginMarker, ActionStatusDialog, ActionStatusIconTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { NavigationLink } from "../components/ContextNavigation";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
@@ -23,12 +22,6 @@ function formatScheduledDate(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric", timeZone }).format(new Date(`${value}T12:00:00Z`));
 }
 
-function shiftDate(value: string, amount: number) {
-  const result = new Date(`${value}T12:00:00Z`);
-  result.setUTCDate(result.getUTCDate() + amount);
-  return result.toISOString().slice(0, 10);
-}
-
 function formatCompletedDate(action: GoalAction, timeZone: string) {
   const value = action.completedAt ?? action.updatedAt;
   if (!value) return "Ukończone";
@@ -41,13 +34,13 @@ function filterLabel(value: string, kind: "project" | "goal", state: ReturnType<
 }
 
 export function ActionsPage() {
-  const { state, mode, loading, setActionStatus, updateAction } = useStore();
+  const { state, mode, loading, setActionStatus } = useStore();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
-  const [actionMenuId, setActionMenuId] = useState<string>();
+  const [statusActionId, setStatusActionId] = useState<string>();
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -121,59 +114,13 @@ export function ActionsPage() {
     focusAfterMutation.current = { actionId: action.id, index: Math.max(0, items.findIndex((item) => item.id === action.id)) };
   };
 
-  const complete = async (action: GoalAction) => {
-    if (action.status === "completed") return false;
+  const changeActionStatus = async (action: GoalAction, status: ProjectActionStatus, blocker?: string) => {
     const previous = { status: action.status, blocker: action.blocker };
     rememberFocus(action);
-    return mutation.run(`actions-list:${action.id}`, async () => {
-      await setActionStatus(action.id, "completed", undefined, action.version);
+    return mutation.run(`actions-status:${action.id}`, async () => {
+      await setActionStatus(action.id, status, blocker, action.version);
       await refreshActions();
-      notifyUndo({ message: "Działanie ukończone.", undo: async () => {
-        await setActionStatus(action.id, previous.status, previous.blocker, action.version + 1);
-        await refreshActions();
-        setFocusRequestId(action.id);
-      }});
-    });
-  };
-
-  const reschedule = async (action: GoalAction, scheduledFor: string | null) => {
-    const previousScheduledFor = action.scheduledFor;
-    rememberFocus(action);
-    return mutation.run(`actions-list:${action.id}`, async () => {
-      await updateAction(action.id, { scheduledFor }, action.version);
-      await refreshActions();
-      const message = scheduledFor
-        ? action.pinnedToToday ? `Działanie przełożono. Nadal przypięte na dziś.` : "Działanie przełożono."
-        : action.pinnedToToday ? "Usunięto termin. Nadal przypięte na dziś." : "Usunięto termin Działania.";
-      notifyUndo({ message, undo: async () => {
-        await updateAction(action.id, { scheduledFor: previousScheduledFor ?? null }, action.version + 1);
-        await refreshActions();
-        setFocusRequestId(action.id);
-      }});
-    });
-  };
-
-  const cancel = async (action: GoalAction) => {
-    const previous = { status: action.status, blocker: action.blocker };
-    rememberFocus(action);
-    return mutation.run(`actions-list:${action.id}`, async () => {
-      await setActionStatus(action.id, "cancelled", undefined, action.version);
-      await refreshActions();
-      notifyUndo({ message: "Działanie anulowano. Rekord zachowano.", undo: async () => {
-        await setActionStatus(action.id, previous.status, previous.blocker, action.version + 1);
-        await refreshActions();
-        setFocusRequestId(action.id);
-      }});
-    });
-  };
-
-  const unblock = async (action: GoalAction) => {
-    const previous = { status: action.status, blocker: action.blocker };
-    rememberFocus(action);
-    return mutation.run(`actions-list:${action.id}`, async () => {
-      await setActionStatus(action.id, "ready", undefined, action.version);
-      await refreshActions();
-      notifyUndo({ message: "Działanie odblokowano.", undo: async () => {
+      notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: async () => {
         await setActionStatus(action.id, previous.status, previous.blocker, action.version + 1);
         await refreshActions();
         setFocusRequestId(action.id);
@@ -210,16 +157,15 @@ export function ActionsPage() {
           const context = resolveActionContext(action, state);
           const mutationKey = `actions-list:${action.id}`;
           const date = view === "completed" ? formatCompletedDate(action, state.workspaceTimezone) : action.scheduledFor ? `Termin: ${formatScheduledDate(action.scheduledFor, state.workspaceTimezone)}` : action.pinnedToToday ? "Przypięte na dziś" : "Bez terminu";
-          return <section ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }} className={`panel actions-list-row ${action.status === "completed" ? "completed" : ""} ${highlightId === action.id ? "navigation-card-highlight" : ""}`} key={action.id} data-navigation-card-id={navigationCardId("action", action.id)} data-highlighted={highlightId === action.id || undefined} tabIndex={-1}>
-            {action.status === "completed" ? <button className="action-check actions-list-check" type="button" disabled aria-label={`Ukończone Działanie: ${action.title}`}><CircleCheck /></button> : <ActionPrimaryControls action={action} busy={mutation.isBusy(mutationKey)} ariaLabelPrefix="Ukończ Działanie" onToggleComplete={() => void complete(action)} onMore={() => setActionMenuId(action.id)} />}
-            <span className="actions-list-copy" style={{ gridColumn: 2 }}><NavigationLink className="actions-list-title" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink><small className="actions-list-context"><NavigationLink to={context.to} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}>{context.name ? `${context.label.replace("Działanie w ", "")} · ${context.name}` : context.label}</NavigationLink></small><small className="actions-list-meta"><CalendarClock />{date}{action.status !== "completed" ? <><span aria-hidden="true">·</span>{actionStatusLabels[action.status]}</> : null}</small>{action.detail ? <small className="actions-list-detail">{action.detail}</small> : null}{mutation.error(mutationKey) ? <span className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></span> : null}</span>
-            <Badge tone={action.status === "blocked" ? "danger" : action.status === "completed" ? "success" : "info"}>{actionStatusLabels[action.status]}</Badge>
+          return <section ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }} className={`panel actions-list-row ${action.status} ${highlightId === action.id ? "navigation-card-highlight" : ""}`} key={action.id} data-navigation-card-id={navigationCardId("action", action.id)} data-highlighted={highlightId === action.id || undefined} tabIndex={-1}>
+            <span className="actions-list-copy"><NavigationLink className="actions-list-title" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.recurringTemplateId ? <ActionOriginMarker action={action} /> : null}<small className="actions-list-context"><NavigationLink to={context.to} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}>{context.name ? `${context.label.replace("Działanie w ", "")} · ${context.name}` : context.label}</NavigationLink></small><small className="actions-list-meta"><CalendarClock />{date}</small>{action.detail ? <small className="actions-list-detail">{action.detail}</small> : null}{mutation.error(mutationKey) || mutation.error(`actions-status:${action.id}`) ? <span className="inline-mutation-error" role="alert">{mutation.error(mutationKey) ?? mutation.error(`actions-status:${action.id}`)} <button type="button" onClick={() => void (mutation.retry(mutationKey) ?? mutation.retry(`actions-status:${action.id}`))?.()}>Spróbuj ponownie</button></span> : null}</span>
+            <div className="action-row-controls"><ActionStatusIconTrigger action={action} disabled={mutation.isBusy(`actions-status:${action.id}`)} onClick={() => setStatusActionId(action.id)} /></div>
           </section>;
         })}
       </div> : null}
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
-      <ActionDecisionMenu action={items.find((action) => action.id === actionMenuId)} open={Boolean(actionMenuId)} busy={Boolean(actionMenuId && mutation.isBusy(`actions-list:${actionMenuId}`))} today={today} tomorrow={shiftDate(today, 1)} error={actionMenuId ? mutation.error(`actions-list:${actionMenuId}`) : undefined} onClose={() => setActionMenuId(undefined)} onComplete={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? complete(action) : false; }} onReschedule={(scheduledFor) => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? reschedule(action, scheduledFor) : false; }} onCancel={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? cancel(action) : false; }} onUnblock={() => { const action = items.find((candidate) => candidate.id === actionMenuId); return action ? unblock(action) : false; }} onRetry={() => actionMenuId ? mutation.retry(`actions-list:${actionMenuId}`)?.() ?? false : false} />
+      {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker) => action ? changeActionStatus(action, status, blocker) : false} />; })()}
     </AppShell>
   );
 }

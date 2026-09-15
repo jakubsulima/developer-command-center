@@ -14,9 +14,10 @@ const js = sizes.filter((item) => item.file.endsWith(".js"));
 const css = sizes.filter((item) => item.file.endsWith(".css"));
 const entryJs = js.filter((item) => entryFiles.has(`assets/${item.file}`) || entryFiles.has(item.file));
 const routeJs = js.filter((item) => !entryJs.includes(item));
-// The viewport-aware creation flows intentionally add CSS; keep the check
-// blocking while allowing the current stylesheet a small amount of headroom.
-const cssGzipLimit = 37 * 1024;
+// The viewport-aware creation flows and shared action controls intentionally
+// add CSS; keep the check blocking while allowing the current stylesheet a
+// small amount of headroom.
+const cssGzipLimit = 39 * 1024;
 
 const failures = [
   ...entryJs.filter((item) => item.bytes > 120 * 1024).map((item) => `entry JS ${item.file} is ${item.bytes} B gzip (limit 122880)`),

@@ -45,10 +45,11 @@ describe("goal-centric experience", () => {
     await user.click(within(details).getByText("Działania", { selector: "strong" }));
     expect(screen.queryByText(/Focus Session|Rozpocznij fokus|timer/i)).not.toBeInTheDocument();
     expect(screen.queryByText("decision")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" }));
+    await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Zaprojektuj encje i relacje dla transakcji" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
     await user.click(within(details).getByText("Działania", { selector: "strong" }));
     await user.click(within(details).getByText("Historia Działań"));
-    expect(screen.getByRole("button", { name: "Przywróć: Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zmień status: Ukończone — Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cofnij" })).toBeInTheDocument();
   });
 

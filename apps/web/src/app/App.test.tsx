@@ -123,15 +123,34 @@ describe("goal-centric workspace", () => {
     await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Działanie do Projektu Projekt z historią" }));
     expect(screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    await user.click(within(actions).getByText("Więcej opcji Działań"));
-    await user.click(within(actions).getByRole("button", { name: /Pokaż historię/ }));
+    await user.click(within(actions).getByLabelText(/Filtruj Działania/));
+    expect(within(actions).getByRole("menuitemradio", { name: "Otwarte: 1" })).toHaveAttribute("aria-checked", "true");
+    await user.click(within(actions).getByRole("menuitemradio", { name: "Historia: 1" }));
     expect(within(actions).getByText("Ukończone Działanie")).toBeInTheDocument();
     expect(actions.querySelector('[data-action-id="action-history"]')).toHaveClass("completed");
     expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
-    expect(within(actions).getByText("Historia Działań")).toBeInTheDocument();
+    expect(within(actions).getByText("Filtr: Historia")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Wiedza" }));
     expect(within(mobileNavigation).getByRole("button", { name: "Dodaj Wiedzę do Projektu Projekt z historią" })).toBeInTheDocument();
+  });
+
+  it("udostępnia kompletne menu zarządzania Projektem", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-menu", name: "Projekt menu", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-menu");
+    await screen.findByRole("heading", { name: "Projekt menu" });
+    await user.click(screen.getByLabelText("Opcje Projektu: Projekt menu"));
+
+    expect(screen.getByRole("menuitem", { name: "Edytuj informacje" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Archiwizuj Projekt" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Przenieś do Kosza" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "Przenieś do Kosza" }));
+    expect(screen.getByRole("dialog", { name: "Przenieść Projekt do Kosza?" })).toBeInTheDocument();
   });
 
   it("wraca ze szczegółu Celu do tej samej zakładki Projektu", async () => {
@@ -193,7 +212,7 @@ describe("goal-centric workspace", () => {
     expect(await screen.findByRole("heading", { name: "Plan posiłków i zakupów" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Start" }));
     const recurringAction = await screen.findByText("Plan posiłków i zakupów");
-    expect(recurringAction.parentElement).toHaveTextContent("cykliczne");
+    expect(recurringAction.closest(".today-action")).toHaveTextContent("Z Rutyny");
   });
 
   it("dodaje Działanie ze Startu wyłącznie przez centralny przycisk", async () => {
