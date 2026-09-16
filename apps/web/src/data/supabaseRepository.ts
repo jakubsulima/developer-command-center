@@ -22,7 +22,7 @@ interface GoalSkillRow { learning_goal_id: string; skill_id: string }
 interface ProposalRow { id: string; status: "pending" | "approved" | "rejected"; created_at: string }
 interface ReviewRow { completed_at: string }
 interface GoalRow { id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
-interface AreaRow { id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
+interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalTemplateRow { id: string; name: string; kind: AppState["goalTemplates"][number]["kind"]; outcome_prompt: string; criterion_prompt: string | null; default_actions: Array<{ title: string; detail?: string }>; is_system: boolean; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalCriterionRow { id: string; goal_id: string; title: string; completed: boolean; legacy_source_id: string | null }
 interface ActionRow { id: string; version: number; goal_id: string | null; area_id: string | null; title: string; detail: string; status: ActionStatus; blocker: string | null; position: number; is_next: boolean; pinned_to_today: boolean; scheduled_for: string | null; completed_at: string | null; skipped_at: string | null; cancelled_at: string | null; recurring_template_id: string | null; occurrence_date: string | null; checklist: AppState["actions"][number]["checklist"]; legacy_source_id: string | null; created_at: string; updated_at: string }
@@ -104,7 +104,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     client.from("ai_proposals").select("id,status,created_at").in("status", ["pending", "approved", "rejected"]).order("created_at", { ascending: false }).limit(1),
     client.from("reviews").select("completed_at").order("completed_at", { ascending: false }).limit(1),
     client.from("goals").select("id,version,title,outcome,kind,status,priority,area_id,template_id,target_date,archived_at,trashed_at,legacy_source,created_at,updated_at"),
-    client.from("areas").select("id,name,description,color,archived_at,trashed_at,created_at,updated_at"),
+    client.from("areas").select("id,name,description,parent_project_id,category_ids,color,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_templates").select("id,name,kind,outcome_prompt,criterion_prompt,default_actions,is_system,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_criteria").select("id,goal_id,title,completed,legacy_source_id").order("position"),
     client.from("actions").select("id,version,goal_id,area_id,title,detail,status,blocker,position,is_next,pinned_to_today,scheduled_for,completed_at,skipped_at,cancelled_at,recurring_template_id,occurrence_date,checklist,legacy_source_id,created_at,updated_at").order("position"),
@@ -191,7 +191,8 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     ...emptyState,
     workspaceId,
     workspaceTimezone: workspace.timezone || "Europe/Warsaw",
-    areas: areas.map((area) => ({ id: area.id, name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
+    projectCategories: dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów"),
+    areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
     goalTemplates: templates.map((template) => ({ id: template.id, name: template.name, kind: template.kind, outcomePrompt: template.outcome_prompt, criterionPrompt: template.criterion_prompt ?? undefined, defaultActions: template.default_actions, system: template.is_system, visibility: template.trashed_at ? "trashed" : template.archived_at ? "archived" : "active", createdAt: template.created_at, updatedAt: template.updated_at })),
     goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
     goalCriteria: criteria.map((criterion) => ({ id: criterion.id, goalId: criterion.goal_id, title: criterion.title, completed: criterion.completed, legacySourceId: criterion.legacy_source_id ?? undefined })),
@@ -286,6 +287,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
       workspaceId,
       workspaceTimezone: core.workspaceTimezone,
       areas: core.areas,
+      projectCategories: core.projectCategories ?? [],
       goalTemplates: core.goalTemplates,
       goals: core.goals,
       goalCriteria: core.goalCriteria,
@@ -465,14 +467,16 @@ export async function addProgressRemote(workspaceId: string, id: string, goalId:
   }), "Aktualizacja postępu");
 }
 
-export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string) {
-  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Projektu");
+export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string, parentProjectId?: string, categoryIds?: string[]) {
+  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, category_ids: categoryIds ?? [], parent_project_id: parentProjectId ?? null, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Projektu");
 }
 
-export async function updateAreaRemote(areaId: string, changes: { name?: string; description?: string }) {
+export async function updateAreaRemote(areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[] }) {
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (changes.name !== undefined) payload.name = changes.name.trim();
   if (changes.description !== undefined) payload.description = changes.description.trim();
+  if (changes.categoryIds !== undefined) payload.category_ids = changes.categoryIds;
+  if (changes.parentProjectId !== undefined) payload.parent_project_id = changes.parentProjectId || null;
   dataOrThrow(await getSupabase().from("areas").update(payload).eq("id", areaId).select("id").single(), "Edycja Projektu");
 }
 
@@ -675,4 +679,11 @@ export async function exportWorkspaceRemote(workspaceId: string) {
     workspace,
     tables: Object.fromEntries(results)
   };
+}
+
+export async function saveProjectCategoryRemote(workspaceId: string, id: string, name: string, color: string) {
+  dataOrThrow(await getSupabase().from("project_categories").upsert({ id, workspace_id: workspaceId, name: name.trim(), color }).select("id").single(), "Zapis kategorii");
+}
+export async function deleteProjectCategoryRemote(id: string) {
+  dataOrThrow(await getSupabase().from("project_categories").delete().eq("id", id).select("id").single(), "Usunięcie kategorii");
 }

@@ -212,9 +212,9 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
   );
 }
 
-export function PageHeading({ title, eyebrow, action }: { title: string; eyebrow?: string; action?: ReactNode }) {
+export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
   return (
-    <div className="page-heading">
+    <div className={`page-heading ${className}`.trim()}>
       <div>{eyebrow && <span className="eyebrow"><Sparkles />{eyebrow}</span>}<h1>{title}</h1></div>
       {action}
     </div>

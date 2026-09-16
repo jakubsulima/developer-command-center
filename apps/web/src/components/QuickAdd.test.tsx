@@ -35,7 +35,7 @@ describe("Dodaj — formularze i kontekst", () => {
     await user.click(screen.getByRole("button", { name: submit }));
     expect(store[command]).toHaveBeenCalledTimes(1);
     if (mode === "action" || mode === "goal" || mode === "routine") expect(store[command]).toHaveBeenCalledWith(expect.objectContaining({ title: "Nowy wpis", areaId: "project" }));
-    if (mode === "project") expect(store.createArea).toHaveBeenCalledWith("Nowy wpis", undefined);
+    if (mode === "project") expect(store.createArea).toHaveBeenCalledWith("Nowy wpis", undefined, undefined, []);
     if (mode === "library") expect(store.createKnowledge).toHaveBeenCalledWith(expect.objectContaining({ relations: [expect.objectContaining({ target: { areaId: "project" } })] }));
     if (mode === "inbox") expect(store.capture).toHaveBeenCalledWith("Nowy wpis", "text");
     expect(close).toHaveBeenCalledOnce();

@@ -44,6 +44,7 @@ function toWorkspaceCore(state: AppState): WorkspaceCore {
     workspaceId: state.workspaceId,
     workspaceTimezone: state.workspaceTimezone,
     areas: structuredClone(state.areas),
+    projectCategories: structuredClone(state.projectCategories ?? []),
     goalTemplates: structuredClone(state.goalTemplates),
     goals: structuredClone(state.goals),
     goalCriteria: structuredClone(state.goalCriteria),

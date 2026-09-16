@@ -1,5 +1,13 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Kontekst dla AI — plan z 14 września 2026
+
+[Plan wdrożenia kontekstu dla AI](./2026-09-14-ai-context-implementation.md)
+obejmuje dwa wydania: panel z eksportem Markdown/JSON i wskazówkami projektu,
+a następnie uwierzytelniony odczyt przez MCP. Zawiera kontrakt danych, reguły
+doboru źródeł, cztery etapy, testy i kryteria odbioru.
+Status: zaplanowane, implementacja nierozpoczęta.
+
 ## „Dodaj” na telefonie — plan z 11 września 2026
 
 [Plan wdrożenia „Dodaj” — mobile](./2026-09-11-dodaj-mobile-plan.md)

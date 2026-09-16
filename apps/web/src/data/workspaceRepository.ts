@@ -108,6 +108,7 @@ export interface WorkspaceCore {
   workspaceId?: string;
   workspaceTimezone: string;
   areas: Area[];
+  projectCategories?: AppState["projectCategories"];
   goalTemplates: GoalTemplate[];
   goals: Goal[];
   goalCriteria: GoalCriterion[];

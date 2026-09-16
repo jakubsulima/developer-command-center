@@ -1,3 +1,4 @@
+import { validateProjectParent } from "./projectHierarchy";
 import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 import { validateKnowledgeTarget } from "./knowledge";
@@ -7,7 +8,7 @@ export type InboxTriageIntent =
   | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
   | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string };
 
-export type DomainCommand = {
+export type DomainCommand = { type: "save_project_category"; id: string; name: string; color: string } | { type: "delete_project_category"; id: string } | {
   type: "triage_inbox_intent";
   inboxItemId: string;
   intent: InboxTriageIntent;
@@ -81,6 +82,8 @@ export type DomainCommand = {
   createdAt: string;
 } | {
   type: "create_area";
+  categoryIds?: string[];
+  parentProjectId?: string;
   id: string;
   name: string;
   description?: string;
@@ -88,6 +91,8 @@ export type DomainCommand = {
   createdAt: string;
 } | {
   type: "update_area";
+  categoryIds?: string[];
+  parentProjectId?: string | null;
   areaId: string;
   name?: string;
   description?: string;
@@ -317,6 +322,15 @@ function initials(title: string) {
 }
 
 export function executeDomainCommand(state: AppState, command: DomainCommand): AppState {
+  if (command.type === "save_project_category") {
+    const name = command.name.trim();
+    if (!name || name.length > 100) throw new Error("Nazwa kategorii musi mieć od 1 do 100 znaków.");
+    if (!/^#[0-9a-fA-F]{6}$/.test(command.color)) throw new Error("Wybierz poprawny kolor kategorii.");
+    if ((state.projectCategories ?? []).some((category) => category.id !== command.id && category.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("Kategoria o tej nazwie już istnieje.");
+    return { ...state, projectCategories: [...(state.projectCategories ?? []).filter((category) => category.id !== command.id), { id: command.id, name, color: command.color }] };
+  }
+  if (command.type === "delete_project_category") return { ...state, projectCategories: (state.projectCategories ?? []).filter((category) => category.id !== command.id), areas: state.areas.map((area) => ({ ...area, categoryIds: area.categoryIds?.filter((id) => id !== command.id) })) };
+  if ((command.type === "create_area" || command.type === "update_area") && command.categoryIds?.some((id) => !(state.projectCategories ?? []).some((category) => category.id === id))) throw new Error("Wybrana kategoria jest niedostępna.");
   if (command.type === "update_recurring_template") {
     const template = state.recurringActionTemplates.find((item) => item.id === command.templateId);
     if (!template) throw new Error("recurring_template_not_found");
@@ -357,8 +371,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   if (command.type === "update_area") {
     const area = state.areas.find((item) => item.id === command.areaId);
     if (!area) throw new Error("area_not_found");
+    if (command.parentProjectId !== undefined) validateProjectParent(state.areas, area.id, command.parentProjectId);
     if (command.name !== undefined && !command.name.trim()) throw new Error("area_name_required");
-    return { ...state, areas: state.areas.map((item) => item.id === area.id ? { ...item, name: command.name?.trim() ?? item.name, description: command.description?.trim() ?? item.description, updatedAt: command.changedAt } : item) };
+    return { ...state, areas: state.areas.map((item) => item.id === area.id ? { ...item, categoryIds: command.categoryIds ?? item.categoryIds, parentProjectId: command.parentProjectId === undefined ? item.parentProjectId : command.parentProjectId || undefined, name: command.name?.trim() ?? item.name, description: command.description?.trim() ?? item.description, updatedAt: command.changedAt } : item) };
   }
 
   if (command.type === "update_goal_template") {
@@ -527,11 +542,14 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const name = command.name.trim();
     if (!name) throw new Error("area_name_required");
     if (state.areas.some((area) => area.id === command.id)) return state;
+    validateProjectParent(state.areas, command.id, command.parentProjectId);
     return { ...state, areas: [...state.areas, {
       id: command.id,
       name,
       description: command.description?.trim() || undefined,
       color: command.color,
+      parentProjectId: command.parentProjectId,
+      categoryIds: command.categoryIds ?? [],
       visibility: "active",
       createdAt: command.createdAt,
       updatedAt: command.createdAt

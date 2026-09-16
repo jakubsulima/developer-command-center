@@ -16,7 +16,11 @@ export type ProgressKind = "note" | "decision" | "result" | "evidence" | "blocke
 export type RecurrenceUnit = "day" | "week" | "month";
 export type MissedOccurrencePolicy = "skip_missed" | "carry_one";
 
+export interface ProjectCategory { id: string; name: string; color: string }
+
 export interface Area {
+  categoryIds?: string[];
+  parentProjectId?: string | null;
   id: string;
   name: string;
   description?: string;
@@ -31,6 +35,8 @@ export interface Area {
  * `areas`; the Project module enriches this record with its related objects.
  */
 export interface Project {
+  categoryIds?: string[];
+  parentProjectId?: string | null;
   id: string;
   name: string;
   description?: string;
@@ -371,6 +377,7 @@ export interface AppState {
   workspaceId?: string;
   workspaceTimezone: string;
   areas: Area[];
+  projectCategories?: ProjectCategory[];
   goalTemplates: GoalTemplate[];
   goals: Goal[];
   goalCriteria: GoalCriterion[];

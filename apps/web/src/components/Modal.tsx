@@ -46,27 +46,47 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
 
   useEffect(() => {
     if (!open) return;
-    // Resize can finish after the browser's own focus scrolling (mobile keyboards).
-    // Scroll only the form body, leaving the heading, save action and page in place.
-    const frame = window.requestAnimationFrame(() => {
+    // Safari pans the visual viewport during focus. Follow its geometry, but
+    // only reveal fields after focus/resize settles, never in response to pan.
+    const dialog = dialogRef.current;
+    let timeout = 0;
+    const revealField = () => {
       const field = document.activeElement;
-      const body = dialogRef.current?.querySelector<HTMLElement>("[data-modal-scroll-body]");
+      const body = dialog?.querySelector<HTMLElement>("[data-modal-scroll-body]");
       if (!(field instanceof HTMLElement) || !body?.contains(field)) return;
       const fieldRect = field.getBoundingClientRect();
       const bodyRect = body.getBoundingClientRect();
       const top = bodyRect.top + 12;
       const bottom = bodyRect.bottom - 12;
-      if (fieldRect.top < top || fieldRect.height > bottom - top) {
-        body.scrollTop += fieldRect.top - top;
-      } else if (fieldRect.bottom > bottom) {
-        body.scrollTop += fieldRect.bottom - bottom;
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [open, viewportMetrics.height, viewportMetrics.offsetTop]);
+      if (bottom <= top) return;
+      // Let the browser manage the caret inside a textarea taller than the body.
+      if (fieldRect.height > bottom - top && fieldRect.top < bottom && fieldRect.bottom > top) return;
+      if (fieldRect.top < top) body.scrollTop += fieldRect.top - top;
+      else if (fieldRect.bottom > bottom) body.scrollTop += fieldRect.bottom - bottom;
+    };
+    const scheduleReveal = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(revealField, 160);
+    };
+    // A deliberate swipe takes priority over automatic focus correction.
+    const cancelReveal = () => window.clearTimeout(timeout);
+    scheduleReveal();
+    dialog?.addEventListener("focusin", scheduleReveal);
+    dialog?.addEventListener("touchmove", cancelReveal, { passive: true });
+    return () => {
+      cancelReveal();
+      dialog?.removeEventListener("focusin", scheduleReveal);
+      dialog?.removeEventListener("touchmove", cancelReveal);
+    };
+  }, [open, viewportMetrics.height]);
 
   useEffect(() => {
     if (!open) return;
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousRootOverscroll = root.style.overscrollBehavior;
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
     const previousPosition = document.body.style.position;
@@ -94,6 +114,8 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     viewport?.addEventListener("resize", updateViewport);
     viewport?.addEventListener("scroll", updateViewport);
     return () => {
+      root.style.overflow = previousRootOverflow;
+      root.style.overscrollBehavior = previousRootOverscroll;
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
       document.body.style.position = previousPosition;
@@ -135,7 +157,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
         const openDetails = targetDetails ?? dialogRef.current?.querySelector<HTMLDetailsElement>(".quick-add-type-picker[open]");
         if (openDetails) {
           openDetails.removeAttribute("open");
-          openDetails.querySelector<HTMLElement>(":scope > summary")?.focus();
+          openDetails.querySelector<HTMLElement>(":scope > summary")?.focus({ preventScroll: true });
           return;
         }
         if (closeOnBackdrop && !closeDisabledRef.current) onCloseRef.current();
@@ -146,9 +168,9 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
       if (!focusable.length) return;
       const first = focusable[0]!;
       const last = focusable.at(-1)!;
-      if (document.activeElement === dialogRef.current || !dialogRef.current.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
-      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      if (document.activeElement === dialogRef.current || !dialogRef.current.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus({ preventScroll: true }); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus({ preventScroll: true }); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus({ preventScroll: true }); }
     };
     document.addEventListener("keydown", handler);
     const frame = window.requestAnimationFrame(() => {
@@ -160,21 +182,21 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
       // capabilities to automation or standalone webviews.
       const isTouchViewport = navigator.maxTouchPoints > 0 || window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth <= 767;
       if (isTouchViewport) {
-        dialog.focus();
+        dialog.focus({ preventScroll: true });
         return;
       }
       const preferred = initialFocus === "input" ? dialog.querySelector<HTMLElement>('input:not([disabled])') : null;
       const field = [...dialog.querySelectorAll<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])')].find(isFocusable);
       const fallback = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], summary, [tabindex]:not([tabindex="-1"])')].find(isFocusable);
-      (preferred && isFocusable(preferred) ? preferred : field ?? fallback)?.focus();
-      if (!preferred && !field && !fallback) dialog.focus();
+      (preferred && isFocusable(preferred) ? preferred : field ?? fallback)?.focus({ preventScroll: true });
+      if (!preferred && !field && !fallback) dialog.focus({ preventScroll: true });
     });
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handler);
       const previousFocus = previousFocusRef.current;
       previousFocusRef.current = null;
-      previousFocus?.focus();
+      previousFocus?.focus({ preventScroll: true });
     };
   }, [closeOnBackdrop, initialFocus, open]);
 

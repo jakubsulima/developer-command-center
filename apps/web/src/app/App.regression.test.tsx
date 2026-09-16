@@ -14,6 +14,29 @@ function renderApp(path = "/") {
 }
 
 describe("regresje nowego modelu Celów", () => {
+  it("przypisuje kilka kategorii, filtruje projekty i zachowuje projekt po usunięciu kategorii", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects/fintrack-api");
+    await screen.findByRole("heading", { name: "FinTrack API", level: 1 });
+    await user.click(screen.getByRole("button", { name: "Zmień kategorie" }));
+    const edit = await screen.findByRole("dialog", { name: "Edytuj Projekt" });
+    await user.click(within(edit).getByLabelText("Praca"));
+    await user.click(within(edit).getByLabelText("AI"));
+    await user.click(within(edit).getByRole("button", { name: "Zapisz Projekt" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Projekty" }));
+    await screen.findByRole("heading", { name: "Projekty", level: 1 });
+    await user.selectOptions(screen.getByLabelText("Filtruj po kategorii"), "category-ai");
+    expect(screen.getByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Finanse" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Zarządzaj kategoriami" }));
+    const manager = screen.getByRole("dialog", { name: "Kategorie projektów" });
+    await user.click(within(manager).getByRole("button", { name: "Usuń kategorię AI" }));
+    await waitFor(() => expect(within(manager).queryByRole("button", { name: "Usuń kategorię AI" })).not.toBeInTheDocument());
+    await user.click(within(manager).getByRole("button", { name: "Zamknij" }));
+    expect(screen.getByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
+  });
+
   it.each([
     ["/", "Start"], ["/routines", "Rutyny"], ["/goals", "Cele"], ["/inbox", "Wiedza"], ["/knowledge", "Wiedza"],
     ["/focus", "Start"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
