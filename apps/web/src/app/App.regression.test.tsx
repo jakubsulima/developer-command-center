@@ -29,7 +29,8 @@ describe("regresje nowego modelu Celów", () => {
     await user.selectOptions(screen.getByLabelText("Filtruj po kategorii"), "category-ai");
     expect(screen.getByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Finanse" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Zarządzaj kategoriami" }));
+    await user.click(screen.getByLabelText("Więcej opcji widoku"));
+    await user.click(within(screen.getByRole("menu", { name: "Opcje widoku projektów" })).getByRole("menuitem", { name: "Zarządzaj kategoriami" }));
     const manager = screen.getByRole("dialog", { name: "Kategorie projektów" });
     await user.click(within(manager).getByRole("button", { name: "Usuń kategorię AI" }));
     await waitFor(() => expect(within(manager).queryByRole("button", { name: "Usuń kategorię AI" })).not.toBeInTheDocument());
