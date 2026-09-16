@@ -1,6 +1,7 @@
 import type { AppState } from "../domain/types";
 
 export const demoState: AppState = {
+  projectCategories: [{ id: "category-work", name: "Praca", color: "#60a5fa" }, { id: "category-learning", name: "Nauka", color: "#a78bfa" }, { id: "category-personal", name: "Projekty osobiste", color: "#34d399" }, { id: "category-ai", name: "AI", color: "#fbbf24" }],
   workspaceTimezone: "Europe/Warsaw",
   areas: [{ id: "area-finanse", name: "Finanse", description: "Budżet, rachunki i decyzje finansowe", color: "#60a5fa", visibility: "active", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: "2026-07-01T08:00:00.000Z" }],
   goalTemplates: [],

@@ -70,8 +70,10 @@ export interface AppStore {
   setActionStatus: (actionId: string, status: ActionStatus, blocker?: string, expectedVersion?: number) => Promise<void>;
   setNextAction: (goalId: string, actionId: string) => Promise<void>;
   addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string, idempotencyKey?: string) => Promise<void>;
-  createArea: (name: string, description?: string) => Promise<string>;
-  updateArea: (areaId: string, changes: { name?: string; description?: string }) => Promise<void>;
+  saveProjectCategory: (id: string | undefined, name: string, color: string) => Promise<string>;
+  deleteProjectCategory: (id: string) => Promise<void>;
+  createArea: (name: string, description?: string, parentProjectId?: string, categoryIds?: string[]) => Promise<string>;
+  updateArea: (areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[] }) => Promise<void>;
   createGoalTemplate: (name: string, kind: GoalKind, defaultActions?: Array<{ title: string; detail?: string }>) => Promise<string>;
   updateGoalTemplate: (templateId: string, changes: { name?: string; kind?: GoalKind; defaultActions?: Array<{ title: string; detail?: string }> }) => Promise<void>;
   setGoalStatus: (goalId: string, status: "active" | "paused" | "achieved" | "abandoned", reason?: string) => Promise<void>;

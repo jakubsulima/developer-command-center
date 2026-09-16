@@ -26,7 +26,8 @@ const migrationUrls = [
   new URL("../../../../supabase/migrations/20260908090100_workspace_weekly_summary_timezone.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908090000_persistent_draft_version_checks.sql", import.meta.url),
   new URL("../../../../supabase/migrations/20260908154542_actions_list_pagination.sql", import.meta.url),
-  new URL("../../../../supabase/migrations/20260908170000_action_status_version_checks.sql", import.meta.url)
+  new URL("../../../../supabase/migrations/20260908170000_action_status_version_checks.sql", import.meta.url),
+  new URL("../../../../supabase/migrations/20260915131912_project_hierarchy.sql", import.meta.url)
 ];
 
 const database = new PGlite();
@@ -43,6 +44,10 @@ describe("migracje Supabase", () => {
       const sql = (await readFile(url, "utf8")).replace("create extension if not exists pgcrypto with schema extensions;", "");
       await database.exec(sql);
     }
+    await database.exec("insert into auth.users(id) values ('ca990000-0000-0000-0000-000000000001')");
+    await database.exec("insert into public.areas(id, workspace_id, name) select 'ca990000-0000-0000-0000-000000000010', workspace_id, 'Duży projekt' from public.workspace_members where user_id = 'ca990000-0000-0000-0000-000000000001'");
+    await database.exec("insert into public.areas(id, workspace_id, name, parent_project_id) select 'ca990000-0000-0000-0000-000000000011', workspace_id, 'Mniejszy projekt', 'ca990000-0000-0000-0000-000000000010' from public.workspace_members where user_id = 'ca990000-0000-0000-0000-000000000001'");
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260915172247_project_categories.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -50,11 +55,65 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', '', false)");
   });
 
+  it("migrates hierarchy without deleting projects and supports multiple isolated categories", async () => {
+    const user = "ca990000-0000-0000-0000-000000000001";
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [user]);
+    const child = "ca990000-0000-0000-0000-000000000011";
+    expect(await scalar("select count(*)::int from public.areas where workspace_id = $1", [workspace])).toBe(2);
+    expect(await scalar("select parent_project_id from public.areas where id = $1", [child])).toBeNull();
+    expect(await scalar("select cardinality(category_ids) from public.areas where id = $1", [child])).toBe(1);
+    expect(await scalar("select count(*)::int from public.project_categories where workspace_id = $1", [workspace])).toBe(5);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const work = await scalar<string>("select id from public.project_categories where workspace_id = $1 and name = 'Praca'", [workspace]);
+    const ai = await scalar<string>("select id from public.project_categories where workspace_id = $1 and name = 'AI'", [workspace]);
+    await database.query("update public.areas set category_ids = $1::uuid[] where id = $2", [[work, ai], child]);
+    await expect(database.query("update public.areas set category_ids = ARRAY['ca990000-0000-0000-0000-000000000099']::uuid[] where id = $1", [child])).rejects.toThrow(/niedostępna/);
+    await database.exec("reset role");
+    await database.exec("insert into auth.users(id) values ('ca990000-0000-0000-0000-000000000002')");
+    const foreignWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = 'ca990000-0000-0000-0000-000000000002'");
+    const foreignCategory = await scalar<string>("insert into public.project_categories(workspace_id,name,color) values ($1,'Obca','#60a5fa') returning id", [foreignWorkspace]);
+    await database.exec("set role authenticated");
+    await expect(database.query("update public.areas set category_ids = $1::uuid[] where id = $2", [[foreignCategory], child])).rejects.toThrow(/niedostępna/);
+    expect(await scalar("select count(*)::int from public.project_categories where id = $1", [foreignCategory])).toBe(0);
+    await expect(database.query("update public.project_categories set workspace_id = $1 where id = $2", [foreignWorkspace, work])).rejects.toThrow();
+    const core = await scalar<{ projectCategories: unknown[]; areas: { id: string; categoryIds: string[] }[] }>("select public.get_workspace_core($1)", [user]);
+    expect(core.projectCategories).toHaveLength(5);
+    expect(core.areas.find((area) => area.id === child)?.categoryIds).toEqual([work, ai]);
+    await database.query("delete from public.project_categories where id = $1", [ai]);
+    expect(await scalar("select category_ids from public.areas where id = $1", [child])).toEqual([work]);
+    expect(await scalar("select count(*)::int from public.areas where workspace_id = $1", [workspace])).toBe(2);
+  });
+
+  it("persists project hierarchy, prevents cycles and isolates workspaces", async () => {
+    const user = "b2990000-0000-0000-0000-000000000001";
+    const other = "b2990000-0000-0000-0000-000000000002";
+    await database.query("insert into auth.users (id) values ($1), ($2)", [user, other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [user]);
+    const otherWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [other]);
+    const root = "b2990000-0000-0000-0000-000000000010";
+    const child = "b2990000-0000-0000-0000-000000000011";
+    const leaf = "b2990000-0000-0000-0000-000000000012";
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("insert into public.areas (id, workspace_id, name) values ($1, $2, 'Root')", [root, workspace]);
+    await database.query("insert into public.areas (id, workspace_id, name, parent_project_id) values ($1, $2, 'Child', $3)", [child, workspace, root]);
+    await database.query("insert into public.areas (id, workspace_id, name, parent_project_id) values ($1, $2, 'Leaf', $3)", [leaf, workspace, child]);
+    await expect(database.query("update public.areas set parent_project_id = $1 where id = $2", [leaf, root])).rejects.toThrow(/podprojektu/);
+    await expect(database.query("update public.areas set parent_project_id = id where id = $1", [root])).rejects.toThrow(/podprojektu/);
+    const core = await scalar<{ areas: { id: string; parentProjectId: string }[] }>("select public.get_workspace_core($1)", [user]);
+    expect(core.areas.find((area) => area.id === child)?.parentProjectId).toBe(root);
+    await database.exec("reset role");
+    await expect(database.query("insert into public.areas (workspace_id, name, parent_project_id) values ($1, 'Foreign', $2)", [otherWorkspace, root])).rejects.toThrow(/areas_parent_same_workspace/);
+    await database.query("delete from public.areas where id = $1", [root]);
+    expect(await scalar("select parent_project_id from public.areas where id = $1", [child])).toBeNull();
+  });
+
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
-    expect(tableCount).toBe(33);
-    expect(rlsCount).toBe(33);
+    expect(tableCount).toBe(34);
+    expect(rlsCount).toBe(34);
   });
 
   it("wymusza najwyżej jeden rezultat Wiedzy na Działanie", async () => {

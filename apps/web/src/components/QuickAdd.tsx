@@ -1,3 +1,4 @@
+import { ProjectCategoryPicker } from "./ProjectCategoryPicker";
 import { BookMarked, CalendarClock, ChevronDown, Flag, FolderKanban, Library, ListPlus, Plus, Repeat2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useStore } from "../app/useStore";
@@ -28,7 +29,7 @@ export type QuickAddRequest = {
   draftKey?: string;
 };
 
-type QuickAddDraft = { mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; contexts?: Partial<Record<QuickAddMode, string>> };
+type QuickAddDraft = { projectCategoryIds?: string[]; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; contexts?: Partial<Record<QuickAddMode, string>> };
 const emptyDraft: QuickAddDraft = { mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: true, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [] };
 const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
   if (!value || typeof value !== "object") return false;
@@ -38,6 +39,7 @@ const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
     && (quickAddModes as readonly string[]).includes(draft.mode)
     && ["note", "resource", "decision"].includes(draft.libraryKind)
     && ["day", "week", "month"].includes(draft.routineUnit)
+    && (draft.projectCategoryIds === undefined || (Array.isArray(draft.projectCategoryIds) && draft.projectCategoryIds.every((id) => typeof id === "string")))
     && Array.isArray(draft.goalIds) && draft.goalIds.every((id) => typeof id === "string")
     && Array.isArray(draft.routineWeekdays) && draft.routineWeekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
     && (draft.contexts === undefined || Boolean(draft.contexts && typeof draft.contexts === "object" && Object.entries(draft.contexts).every(([mode, context]) => (quickAddModes as readonly string[]).includes(mode) && typeof context === "string")));
@@ -143,7 +145,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     if (saving) return;
     setError(""); setTypePickerOpen(false);
     draft.setValue((current) => changeMode(current, mode));
-    typeSummaryRef.current?.focus();
+    typeSummaryRef.current?.focus({ preventScroll: true });
   };
 
   useEffect(() => { if (open) finishPerformanceTiming("quick-add", "quick-add-open"); }, [open]);
@@ -174,8 +176,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     setError(message);
     const field = document.getElementById(id);
     field?.closest("details")?.setAttribute("open", "");
-    field?.focus();
-    field?.scrollIntoView?.({ block: "nearest" });
+    field?.focus({ preventScroll: true });
   };
 
   const submit = async (event: FormEvent) => {
@@ -206,7 +207,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     try {
       if (formData.mode === "action") { await createAction({ title: formData.title, detail: formData.detail, goalId: formData.goalId, areaId: formData.areaId, scheduledFor: formData.scheduledFor || undefined, pinnedToToday: formData.pinnedToToday }); notifySuccess(formData.pinnedToToday ? "Działanie dodane do Startu." : "Działanie dodane."); }
       else if (formData.mode === "goal") { await createGoal({ title: formData.title, outcome: formData.detail || formData.title, areaId: formData.areaId }); notifySuccess("Cel utworzony."); }
-      else if (formData.mode === "project") { await createArea(formData.title, formData.detail || undefined); notifySuccess("Projekt utworzony."); }
+      else if (formData.mode === "project") { await createArea(formData.title, formData.detail || undefined, undefined, draft.value.projectCategoryIds ?? []); notifySuccess("Projekt utworzony."); }
       else if (formData.mode === "routine") {
         const interval = Number(draft.value.routineInterval);
         const startsOn = draft.value.routineStartsOn || currentDate;
@@ -239,7 +240,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
 
   const contextOptions = <><option value="">Bez powiązania</option>{activeGoals.length ? <optgroup label="Cele">{activeGoals.map((goal) => <option key={goal.id} value={`goal:${goal.id}`}>{goal.title}{goal.areaId ? " · w Projekcie" : ""}</option>)}</optgroup> : null}{activeAreas.length ? <optgroup label="Projekty">{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</optgroup> : null}</>;
 
-  return <Modal open={open} title={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving} headingAction={<button ref={typeSummaryRef} type="button" className="quick-add-change-type" disabled={saving} aria-label="Zmień typ wpisu" aria-expanded={typePickerOpen} aria-controls="quick-add-type-choices" onClick={() => setTypePickerOpen((current) => !current)}>Zmień<ChevronDown /></button>} onEscape={() => { if (!typePickerOpen) return false; setTypePickerOpen(false); typeSummaryRef.current?.focus(); return true; }}>
+  return <Modal open={open} title={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving} headingAction={<button ref={typeSummaryRef} type="button" className="quick-add-change-type" disabled={saving} aria-label="Zmień typ wpisu" aria-expanded={typePickerOpen} aria-controls="quick-add-type-choices" onClick={() => setTypePickerOpen((current) => !current)}>Zmień<ChevronDown /></button>} onEscape={() => { if (!typePickerOpen) return false; setTypePickerOpen(false); typeSummaryRef.current?.focus({ preventScroll: true }); return true; }}>
     <form className="quick-add" noValidate onSubmit={(event) => void submit(event)}>
       <div className="quick-add-body" data-modal-scroll-body>
         {typePickerOpen ? <div className="quick-add-type-picker" id="quick-add-type-choices"><div className="quick-add-modes" role="group" aria-label="Co chcesz dodać?">{modes.map(({ id, label, icon: Icon }) => <button type="button" disabled={saving} aria-label={id === "inbox" ? "Do Skrzynki" : label} aria-pressed={draft.value.mode === id} key={id} onClick={() => setMode(id)}><span><Icon /></span><small>{label}</small></button>)}</div></div> : null}
@@ -252,6 +253,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
             {draft.value.mode === "library" && draft.value.libraryKind === "resource" ? <label className="quick-add-field" htmlFor="quick-add-library-url"><span className="field-label">Link HTTP/HTTPS <span className="optional-label">opcjonalnie</span></span><input id="quick-add-library-url" type="url" placeholder="https://…" disabled={saving} value={draft.value.sourceUrl} onChange={(event) => draft.setValue((current) => ({ ...current, sourceUrl: event.target.value }))} /></label> : null}
             <label className="quick-add-field" htmlFor="quick-add-detail"><span className="field-label">{draft.value.mode === "goal" ? "Rezultat" : libraryGuidance?.detailLabel ?? "Opis"} {!(draft.value.mode === "library" && draft.value.libraryKind === "decision") ? <span className="optional-label">opcjonalnie</span> : null}</span><textarea id="quick-add-detail" rows={3} required={draft.value.mode === "library" && draft.value.libraryKind === "decision"} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && draft.value.mode === "library" && draft.value.libraryKind === "decision" && !draft.value.detail.trim() || undefined} placeholder={libraryGuidance?.detailPlaceholder ?? modeCopy.placeholder.split("\n")[1] ?? "Dodaj szczegóły, jeśli są potrzebne"} value={draft.value.detail} disabled={saving} onChange={(event) => updateStructuredField("detail", event.target.value)} /></label>
           </div>}
+          {draft.value.mode === "project" ? <ProjectCategoryPicker value={draft.value.projectCategoryIds ?? []} onChange={(projectCategoryIds) => draft.setValue((current) => ({ ...current, projectCategoryIds }))} /> : null}
           <p className={`quick-add-context-summary${normalizedContext.unavailable ? " is-invalid" : ""}`}><strong>Miejsce zapisu:</strong> {draft.value.mode === "inbox" ? "Bez powiązań — uporządkujesz później" : normalizedContext.unavailable ? `${normalizedContext.unavailable.label} — wybierz inne lub odłącz` : draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.map((id) => activeGoals.find((goal) => goal.id === id)?.title).join(", ")}` : contextSummary}</p>
           {normalizedContext.unavailable ? <Button type="button" variant="ghost" disabled={saving} onClick={() => { setError(""); draft.setValue((current) => ({ ...current, context: "", goalIds: [], contexts: { ...current.contexts, [current.mode]: "" } })); }}>Odłącz niedostępne powiązanie</Button> : null}
           {scheduleSummary ? <p className="quick-add-context-summary"><strong>Termin:</strong> {scheduleSummary}</p> : null}

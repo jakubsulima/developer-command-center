@@ -576,14 +576,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).addProgressRemote(stateRef.current.workspaceId!, id, goalId, kind, content, actionId, knowledgeItemId), `progress:${id}`);
       });
     },
-    async createArea(name, description) {
+    async saveProjectCategory(categoryId, name, color) {
+      const current = await ensureWorkspaceState();
+      const id = categoryId ?? crypto.randomUUID();
+      const command = { type: "save_project_category", id, name, color } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `category:${id}`, command, [{ collection: "projectCategories", ids: [id] }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).saveProjectCategoryRemote(current.workspaceId!, id, name, color), `category:${id}`);
+      });
+      return id;
+    },
+    async deleteProjectCategory(id) {
+      const command = { type: "delete_project_category", id } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `category:${id}`, command, [{ collection: "projectCategories", ids: [id] }, { collection: "areas", ids: stateRef.current.areas.filter((area) => area.categoryIds?.includes(id)).map((area) => area.id) }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).deleteProjectCategoryRemote(id), `category:${id}`);
+      });
+    },
+    async createArea(name, description, parentProjectId, categoryIds) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
-      const command = { type: "create_area", id, name, description, createdAt } as const;
+      const command = { type: "create_area", id, name, description, parentProjectId, categoryIds, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${id}`, command, [{ collection: "areas", ids: [id] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description), `area:${id}`);
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description, parentProjectId, categoryIds), `area:${id}`);
       });
       return id;
     },

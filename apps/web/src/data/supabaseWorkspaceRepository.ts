@@ -44,6 +44,7 @@ export function decodeWorkspaceCore(payload: unknown): WorkspaceCore {
     workspaceId: typeof root.workspaceId === "string" ? root.workspaceId : undefined,
     workspaceTimezone: stringPayload(root.workspaceTimezone, "WorkspaceCore.workspaceTimezone"),
     areas: arrayPayload(root.areas, "WorkspaceCore.areas"),
+    projectCategories: arrayPayload(root.projectCategories ?? [], "WorkspaceCore.projectCategories"),
     goalTemplates: arrayPayload(root.goalTemplates, "WorkspaceCore.goalTemplates"),
     goals: arrayPayload(root.goals, "WorkspaceCore.goals"),
     goalCriteria: arrayPayload(root.goalCriteria, "WorkspaceCore.goalCriteria"),
