@@ -48,6 +48,8 @@ describe("migracje Supabase", () => {
     await database.exec("insert into public.areas(id, workspace_id, name) select 'ca990000-0000-0000-0000-000000000010', workspace_id, 'Duży projekt' from public.workspace_members where user_id = 'ca990000-0000-0000-0000-000000000001'");
     await database.exec("insert into public.areas(id, workspace_id, name, parent_project_id) select 'ca990000-0000-0000-0000-000000000011', workspace_id, 'Mniejszy projekt', 'ca990000-0000-0000-0000-000000000010' from public.workspace_members where user_id = 'ca990000-0000-0000-0000-000000000001'");
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260915172247_project_categories.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918060424_add_action_testing_status.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918114425_fix_action_status_activity_audit.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -160,6 +162,21 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
     await database.query("select public.set_action_status_checked($1, 1, 'completed', null, $2)", [action, "d9000000-0000-0000-0000-000000000011"]);
     await expect(database.query("select public.set_action_status_checked($1, 1, 'ready', null, $2)", [action, "d9000000-0000-0000-0000-000000000012"])).rejects.toThrow("action_version_conflict");
+    await database.exec("reset role");
+  });
+
+  it("zapisuje status testowania przez zabezpieczoną granicę audytu", async () => {
+    const user = "d9100000-0000-0000-0000-000000000001";
+    const action = "d9100000-0000-0000-0000-000000000010";
+    const command = "d9100000-0000-0000-0000-000000000011";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Testing status"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.actions (id, workspace_id, title) values ($1, $2, 'Przetestuj zmianę')", [action, workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    expect(await scalar<string>("select (public.set_action_status_checked($1, 'testing', null, $2)).status", [action, command])).toBe("testing");
+    expect(await scalar<number>("select count(*)::int from public.activity_events where workspace_id = $1 and correlation_id = $2", [workspace, command])).toBe(1);
     await database.exec("reset role");
   });
 
