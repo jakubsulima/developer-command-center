@@ -118,6 +118,7 @@ describe("goal-centric workspace", () => {
     await user.click(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Otwarte Działanie" }));
     const statusDialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
     expect(within(statusDialog).queryByText("Pominięte")).not.toBeInTheDocument();
+    expect(within(statusDialog).getByRole("button", { name: /W trakcie testowania/ })).toBeInTheDocument();
     await user.click(within(statusDialog).getByRole("button", { name: /W toku/ }));
     await waitFor(() => expect(actions.querySelector('[data-action-id="action-current"]')).toHaveClass("in_progress"));
     await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Działanie do Projektu Projekt z historią" }));

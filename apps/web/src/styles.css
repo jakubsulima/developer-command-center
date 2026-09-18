@@ -2787,6 +2787,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .project-action-row::before { position:absolute; top:10px; bottom:10px; left:2px; width:4px; border-radius:999px; background:var(--action-status-color); content:""; }
 .project-action-row.ready { --action-status-color:#8b9bb0; }
 .project-action-row.in_progress { --action-status-color:#60a5fa; }
+.project-action-row.testing { --action-status-color:#c084fc; }
 .project-action-row.blocked { --action-status-color:#f87171; }
 .project-action-row.completed { --action-status-color:#4ade80; }
 .project-action-row.cancelled { --action-status-color:#b39ac8; }
@@ -3992,6 +3993,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 .today-action.ready, .goal-action.ready, .goal-featured-action.ready, .actions-list-row.ready { --action-status-color: #8b9bb0; }
 .today-action.in_progress, .goal-action.in_progress, .goal-featured-action.in_progress, .actions-list-row.in_progress { --action-status-color: #60a5fa; }
+.today-action.testing, .goal-action.testing, .goal-featured-action.testing, .actions-list-row.testing { --action-status-color: #c084fc; }
 .today-action.blocked, .goal-action.blocked, .goal-featured-action.blocked, .actions-list-row.blocked { --action-status-color: #f87171; }
 .today-action.completed, .goal-action.completed, .goal-featured-action.completed, .actions-list-row.completed { --action-status-color: #4ade80; }
 .today-action.cancelled, .goal-action.cancelled, .goal-featured-action.cancelled, .actions-list-row.cancelled { --action-status-color: #b39ac8; }

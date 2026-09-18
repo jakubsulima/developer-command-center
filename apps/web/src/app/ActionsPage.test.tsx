@@ -58,8 +58,8 @@ describe("lista wszystkich Działań", () => {
     const row = (await screen.findByRole("link", { name: "Zaległy przypięty krok" })).closest("section") as HTMLElement;
     expect(within(row).queryByRole("button", { name: "Więcej opcji: Zaległy przypięty krok" })).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Zaległy przypięty krok" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
-    expect(await screen.findByRole("button", { name: "Zmień status: W toku — Zaległy przypięty krok" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W trakcie testowania/ }));
+    expect(await screen.findByRole("button", { name: "Zmień status: W trakcie testowania — Zaległy przypięty krok" })).toBeInTheDocument();
   });
 
   it("anuluje pojedyncze Działanie, zachowuje rekord i pozwala je cofnąć", async () => {
