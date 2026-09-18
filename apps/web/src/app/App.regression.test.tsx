@@ -18,7 +18,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/projects/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Zmień kategorie" }));
+    await user.click(within(screen.getByRole("menu", { name: "Zarządzaj Projektem: FinTrack API" })).getByRole("menuitem", { name: "Edytuj informacje" }));
     const edit = await screen.findByRole("dialog", { name: "Edytuj Projekt" });
     await user.click(within(edit).getByLabelText("Praca"));
     await user.click(within(edit).getByLabelText("AI"));
