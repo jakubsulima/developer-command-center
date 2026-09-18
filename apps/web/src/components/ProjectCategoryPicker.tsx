@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Tag } from "lucide-react";
 import { useStore } from "../app/useStore";
 import { Button } from "./ui";
+import "./ProjectCategories.css";
 
 import { categoryColors } from "../domain/projectCategories";
 
