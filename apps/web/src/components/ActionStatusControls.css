@@ -4,6 +4,7 @@
 .action-status-trigger .action-status-trigger-chevron { width:12px; height:12px; opacity:.72; }
 .action-status-trigger.ready, .action-status-option.ready { --action-status-color:#8b9bb0; }
 .action-status-trigger.in_progress, .action-status-option.in_progress { --action-status-color:#60a5fa; }
+.action-status-trigger.testing, .action-status-option.testing { --action-status-color:#c084fc; }
 .action-status-trigger.blocked, .action-status-option.blocked { --action-status-color:#f87171; }
 .action-status-trigger.completed, .action-status-option.completed { --action-status-color:#4ade80; }
 .action-status-trigger.cancelled, .action-status-option.cancelled { --action-status-color:#b39ac8; }
@@ -13,6 +14,7 @@
 .action-status-icon-trigger svg { width:18px; height:18px; }
 .action-status-icon-trigger.ready { --action-status-color:#8b9bb0; }
 .action-status-icon-trigger.in_progress { --action-status-color:#60a5fa; }
+.action-status-icon-trigger.testing { --action-status-color:#c084fc; }
 .action-status-icon-trigger.blocked { --action-status-color:#f87171; }
 .action-status-icon-trigger.completed { --action-status-color:#4ade80; }
 .action-status-icon-trigger.cancelled { --action-status-color:#b39ac8; }
@@ -33,7 +35,6 @@
 .action-status-dialog.compact .action-status-option { grid-template-columns:22px minmax(0,1fr); min-height:44px; padding:6px 8px; }
 .action-status-dialog.compact .action-status-option > svg { width:17px; height:17px; }
 .action-status-dialog.compact .action-status-option small, .action-status-dialog.compact .action-status-option em { display:none; }
-.action-status-dialog.compact:not(.has-routine-origin) .action-status-option.cancelled { grid-column:1 / -1; }
 .action-status-blocker { margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
 .action-status-blocker textarea { width:100%; }
 

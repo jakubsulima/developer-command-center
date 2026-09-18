@@ -45,15 +45,16 @@ describe("lista Działań", () => {
       action("today", { scheduledFor: "2026-09-08" }),
       action("overdue", { scheduledFor: "2026-09-07" }),
       action("unscheduled"),
+      action("testing", { status: "testing" }),
       action("blocked", { status: "blocked" }),
       action("completed", { status: "completed", completedAt: "2026-09-08T12:00:00Z" }),
       action("cancelled", { status: "cancelled" })
     ];
     const ids = (view: "open" | "today" | "overdue" | "unscheduled" | "blocked" | "completed") => state.actions.filter((item) => matchesActionListFilter(state, item, { view, today: "2026-09-08" })).map((item) => item.id);
-    expect(ids("open")).toEqual(["today", "overdue", "unscheduled", "blocked"]);
+    expect(ids("open")).toEqual(["today", "overdue", "unscheduled", "testing", "blocked"]);
     expect(ids("today")).toEqual(["today"]);
     expect(ids("overdue")).toEqual(["overdue"]);
-    expect(ids("unscheduled")).toEqual(["unscheduled", "blocked"]);
+    expect(ids("unscheduled")).toEqual(["unscheduled", "testing", "blocked"]);
     expect(ids("blocked")).toEqual(["blocked"]);
     expect(ids("completed")).toEqual(["completed"]);
   });

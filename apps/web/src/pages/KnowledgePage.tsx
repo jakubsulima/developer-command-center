@@ -197,8 +197,9 @@ export function KnowledgePage() {
         </div>;
       })()}</Modal>
       <Modal open={modalOpen} closeDisabled={createSaving} className="knowledge-create-modal" title="Dodaj do Biblioteki" onClose={() => setModalOpen(false)}>
-        <p className="modal-intro">Wybierz rodzaj na podstawie tego, jak chcesz później użyć tego wpisu.</p>
         <form className="knowledge-create-form" noValidate onSubmit={(event) => void create(event)}>
+        <div className="knowledge-create-body" data-modal-scroll-body>
+        <p className="modal-intro">Wybierz rodzaj na podstawie tego, jak chcesz później użyć tego wpisu.</p>
         <KnowledgeKindPicker
           value={form.kind}
           onChange={(kind) => setForm((current) => ({ ...current, kind }))}
@@ -216,6 +217,7 @@ export function KnowledgePage() {
         <select id="knowledge-project" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
         {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
         </FormTransition>
+        </div>
         <div className="modal-actions"><Button type="button" disabled={createSaving} onClick={() => setModalOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={createSaving} disabled={!form.title.trim() || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())}>{knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
         </form>
       </Modal>

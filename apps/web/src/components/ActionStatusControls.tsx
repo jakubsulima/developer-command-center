@@ -1,6 +1,6 @@
 import "./ActionStatusControls.css";
 import { useState } from "react";
-import { ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, Repeat2, SkipForward, type LucideIcon } from "lucide-react";
+import { Beaker, ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, Repeat2, SkipForward, type LucideIcon } from "lucide-react";
 import { actionStatusLabels } from "../domain/labels";
 import type { ActionStatus, GoalAction } from "../domain/types";
 import { Modal } from "./Modal";
@@ -8,10 +8,11 @@ import { Button } from "./ui";
 
 export type ProjectActionStatus = ActionStatus;
 
-const standardStatusOptions: ProjectActionStatus[] = ["ready", "in_progress", "blocked", "completed", "cancelled"];
+const standardStatusOptions: ProjectActionStatus[] = ["ready", "in_progress", "testing", "blocked", "completed", "cancelled"];
 const statusIcons = {
   ready: Circle,
   in_progress: LoaderCircle,
+  testing: Beaker,
   blocked: OctagonAlert,
   completed: CircleCheck,
   skipped: SkipForward,
@@ -20,6 +21,7 @@ const statusIcons = {
 const statusHints: Record<ProjectActionStatus, string> = {
   ready: "Można rozpocząć",
   in_progress: "Praca trwa",
+  testing: "Rezultat jest sprawdzany",
   blocked: "Wymaga usunięcia przeszkody",
   completed: "Działanie wykonane",
   skipped: "Tylko to wystąpienie Rutyny",
@@ -65,7 +67,7 @@ function ActionStatusDialogContent({ action, busy, error, compact, onClose, onCh
   const [editingBlocker, setEditingBlocker] = useState(false);
   const [blocker, setBlocker] = useState(action.blocker ?? "");
   const statusOptions = action.recurringTemplateId
-    ? [...standardStatusOptions.slice(0, 4), "skipped" as const, "cancelled" as const]
+    ? [...standardStatusOptions.slice(0, 5), "skipped" as const, "cancelled" as const]
     : standardStatusOptions;
   const decide = async (status: ProjectActionStatus, nextBlocker?: string) => {
     if (await onChange(status, nextBlocker)) onClose();

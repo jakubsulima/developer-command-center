@@ -12,7 +12,7 @@ export function knowledgeDefaultRelationMeaning(kind: KnowledgeKind): KnowledgeR
   return "reference";
 }
 export const inboxStatusLabels: Record<InboxStatus, string> = { unprocessed: "Nowe", snoozed: "Odłożone", resolved: "Przetworzone", discarded: "Odrzucone" };
-export const actionStatusLabels: Record<ActionStatus, string> = { ready: "Do zrobienia", in_progress: "W toku", blocked: "Zablokowane", completed: "Ukończone", skipped: "Pominięte", cancelled: "Anulowane" };
+export const actionStatusLabels: Record<ActionStatus, string> = { ready: "Do zrobienia", in_progress: "W toku", testing: "W trakcie testowania", blocked: "Zablokowane", completed: "Ukończone", skipped: "Pominięte", cancelled: "Anulowane" };
 export const progressKindLabels: Record<ProgressKind, string> = { note: "Notatka", decision: "Decyzja", result: "Rezultat", evidence: "Dowód", blocker: "Blokada" };
 export const visibilityLabels = { active: "Aktywne", archived: "Archiwum", trashed: "Kosz" } as const;
 

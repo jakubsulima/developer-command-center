@@ -49,7 +49,7 @@ export function matchesActionListFilter(state: AppState, action: GoalAction, fil
   if (filter.goalId && action.goalId !== filter.goalId) return false;
   if (filter.projectId && !actionBelongsToProject(state, action, filter.projectId)) return false;
   const today = filter.today ?? localDateForTimeZone(new Date(), state.workspaceTimezone);
-  const open = ["ready", "in_progress", "blocked"].includes(action.status);
+  const open = ["ready", "in_progress", "testing", "blocked"].includes(action.status);
   if (filter.view === "completed") return action.status === "completed";
   if (!open) return false;
   if (filter.view === "today") return isActionInTodayProjection(action, today);
