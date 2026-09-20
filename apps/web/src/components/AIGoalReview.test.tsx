@@ -13,6 +13,11 @@ function renderReview() {
   return render(<MemoryRouter initialEntries={["/review"]}><QueryClientProvider client={client}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 }
 
+function renderStart() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<MemoryRouter initialEntries={["/"]}><QueryClientProvider client={client}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+}
+
 describe("AIGoalReview", () => {
   it("zamienia techniczne odwołania AI na nazwy czytelne dla użytkownika", () => {
     const labels: Array<[string, string]> = [["goal-1", "Płynna praca w terminalu"]];
@@ -53,5 +58,36 @@ describe("AIGoalReview", () => {
     expect(within(dialog).getByText(/zapis nastąpi dopiero/i)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Anuluj" }));
     expect(screen.queryByRole("dialog", { name: "Sprawdź propozycję Działania" })).not.toBeInTheDocument();
+  });
+
+  it("uruchamia analizę na Starcie dopiero po zgodzie i pokazuje jeden następny krok", async () => {
+    const user = userEvent.setup();
+    renderStart();
+    await screen.findByRole("heading", { name: "Kierunek od AI" });
+    expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje Cele" }));
+    const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
+    expect(within(consent).getByText(/aktywne Cele, ich kryteria/i)).toBeInTheDocument();
+    await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
+    expect(await screen.findByText("Główna rekomendacja")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/review");
+    expect(screen.getByRole("button", { name: /Sygnały i dalszy plan/ })).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Pomocne" }));
+    expect(screen.getByRole("button", { name: "Pomocne" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Dodaj proponowane Działanie" }));
+    let draft = screen.getByRole("dialog", { name: "Sprawdź propozycję Działania" });
+    await user.click(within(draft).getByRole("button", { name: "Anuluj" }));
+    expect(screen.queryByRole("dialog", { name: "Sprawdź propozycję Działania" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Dodaj proponowane Działanie" }));
+    draft = screen.getByRole("dialog", { name: "Sprawdź propozycję Działania" });
+    const title = within(draft).getByLabelText("Nazwa");
+    await user.clear(title);
+    await user.type(title, "Krok ze Startu");
+    await user.dblClick(within(draft).getByRole("button", { name: "Zatwierdź i dodaj" }));
+    expect(await within(screen.getByRole("region", { name: "Na dziś" })).findByRole("link", { name: "Krok ze Startu" })).toBeInTheDocument();
+    expect(screen.getAllByText("Krok ze Startu")).toHaveLength(1);
+    expect(screen.getByText("Dane Celów zmieniły się od tej analizy.")).toBeInTheDocument();
   });
 });

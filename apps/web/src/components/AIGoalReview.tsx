@@ -1,43 +1,21 @@
 import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, Clock3, ListTodo, Plus, RefreshCw, Sparkles, Target, ThumbsDown, ThumbsUp } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import type { AIGoalReviewRecommendation } from "../domain/aiGoalReview";
+import { aiGoalReviewErrorCopy as errorCopy, aiGoalStatusLabels as statusLabel, aiReviewHorizonLabels as horizonLabel, aiSignalLabel as signalLabel } from "../domain/aiStartGuidance";
 import { humanizeEntityReferences } from "../domain/humanizeAIText";
-import { Modal } from "./Modal";
 import { Badge, Button, Panel } from "./ui";
 import { useActionFeedback } from "./action-feedback-context";
+import { AIGoalReviewConsentModal, AIGoalReviewDraftModal, type AIGoalReviewDraft } from "./AIGoalReviewShared";
 
 const generatedFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
-const horizonLabel = { now: "teraz", this_week: "w tym tygodniu", later: "później" } as const;
-const statusLabel = { on_track: "na dobrej drodze", attention: "wymaga uwagi", stuck: "zablokowany", insufficient_data: "brak danych" } as const;
-
-function signalLabel(key: string) {
-  if (key.includes(":missing-next-action")) return "brak następnego Działania";
-  if (key.includes(":missing-criteria")) return "brak kryteriów sukcesu";
-  if (key.includes(":blocked:")) return `${key.split(":").at(-1)} blokady`;
-  if (key.includes(":overdue-actions:")) return `${key.split(":").at(-1)} zaległe Działania`;
-  if (key.endsWith(":overdue-goal")) return "przekroczony termin Celu";
-  if (key.endsWith(":due-soon")) return "bliski termin";
-  if (key.includes(":inactive:")) return `brak aktywności od ${key.split(":").at(-1)} dni`;
-  if (key.includes(":too-many-open-actions:")) return `${key.split(":").at(-1)} otwartych Działań`;
-  return "sygnał z danych przestrzeni pracy";
-}
-
-function errorCopy(code?: string) {
-  if (code === "AI_NOT_CONFIGURED") return "Przegląd AI nie jest jeszcze skonfigurowany. Podsumowanie systemowe pozostaje dostępne.";
-  if (code === "AI_RATE_LIMITED") return "Limit analiz został osiągnięty. Spróbuj ponownie później.";
-  if (code === "NO_ACTIVE_GOALS") return "Dodaj aktywny Cel, aby uruchomić analizę.";
-  if (code === "CONTEXT_TOO_LARGE") return "Zakres jest zbyt duży do pojedynczej analizy. Żaden Cel nie został pominięty po cichu.";
-  return "Nie udało się odświeżyć analizy. Poprzedni wynik i podsumowanie systemowe nadal są dostępne.";
-}
-
 export function AIGoalReview() {
   const { state, mode, aiGoalReview, aiGoalReviewStatus, aiGoalReviewError, requestGoalReview, submitGoalReviewFeedback, createAction } = useStore();
   const { notifySuccess } = useActionFeedback();
   const [consentOpen, setConsentOpen] = useState(false);
-  const [draft, setDraft] = useState<AIGoalReviewRecommendation["draftAction"]>();
+  const [draft, setDraft] = useState<AIGoalReviewDraft>();
   const [draftSaving, setDraftSaving] = useState(false);
+  const draftSavingRef = useRef(false);
   const [draftError, setDraftError] = useState("");
   const [ratings, setRatings] = useState<Record<string, "helpful" | "not_helpful">>({});
   const [feedbackError, setFeedbackError] = useState("");
@@ -59,21 +37,24 @@ export function AIGoalReview() {
     void requestGoalReview(false);
   };
   const rate = async (recommendationId: string, rating: "helpful" | "not_helpful") => {
+    const previous = ratings[recommendationId];
     setFeedbackError("");
     setRatings((current) => ({ ...current, [recommendationId]: rating }));
     try { await submitGoalReviewFeedback(recommendationId, rating); }
-    catch { setFeedbackError("Nie udało się zapisać oceny."); }
+    catch { setRatings((current) => ({ ...current, [recommendationId]: previous })); setFeedbackError("Nie udało się zapisać oceny."); }
   };
-  const saveDraft = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!draft || draftSaving) return;
+  const saveDraft = async () => {
+    if (!draft || draftSavingRef.current) return;
+    draftSavingRef.current = true;
     setDraftSaving(true); setDraftError("");
     try {
+      const goal = state.goals.find((candidate) => candidate.id === draft.goalId);
+      if (!goal || goal.status !== "active" || goal.visibility !== "active") throw new Error("Cel tej propozycji nie jest już aktywny. Odśwież analizę.");
       await createAction({ goalId: draft.goalId, title: draft.title, detail: draft.detail, pinnedToToday: true });
       notifySuccess("Działanie dodane po Twoim zatwierdzeniu.");
       setDraft(undefined);
     } catch (error) { setDraftError(error instanceof Error ? error.message : "Nie udało się zapisać Działania."); }
-    finally { setDraftSaving(false); }
+    finally { draftSavingRef.current = false; setDraftSaving(false); }
   };
 
   return <>
@@ -84,7 +65,7 @@ export function AIGoalReview() {
       </div>
       {!aiGoalReview && !busy ? <div className="ai-review-empty"><p>Uruchamiasz analizę ręcznie. AI nie zmienia żadnych danych i nie wykonuje Działań.</p><small>Podsumowanie systemowe powyżej działa niezależnie od tej funkcji.</small></div> : null}
       {busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>{aiGoalReviewStatus === "refreshing" ? "Odświeżam analizę…" : "Analizuję aktywne Cele…"}</strong><small>Możesz nadal korzystać z pozostałej części aplikacji.</small></div></div> : null}
-      {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{errorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{aiGoalReviewError.code !== "AI_NOT_CONFIGURED" && aiGoalReviewError.code !== "NO_ACTIVE_GOALS" ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(false)}>Spróbuj ponownie</Button> : null}</div> : null}
+      {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{errorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{aiGoalReviewError.code !== "AI_NOT_CONFIGURED" && aiGoalReviewError.code !== "NO_ACTIVE_GOALS" ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(Boolean(aiGoalReview))}>Spróbuj ponownie</Button> : null}</div> : null}
       {aiGoalReview ? <div className={aiGoalReview.stale ? "ai-review-result is-stale" : "ai-review-result"}>
         {aiGoalReview.stale ? <div className="ai-review-stale"><Clock3 />Dane Celów zmieniły się od tej analizy. Wynik pozostaje widoczny do ręcznego odświeżenia.</div> : null}
         <section className="ai-review-direction"><div className="ai-review-direction-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{statusLabel[aiGoalReview.review.overallStatus]}</Badge><span>{aiGoalReview.analyzedGoalIds.length} przeanalizowanych Celów</span></div><h3>{humanize(aiGoalReview.review.headline)}</h3><p>{humanize(aiGoalReview.review.summary)}</p></section>
@@ -110,7 +91,7 @@ export function AIGoalReview() {
         <footer className="ai-review-scope"><strong>Zakres analizy</strong><span>{aiGoalReview.analyzedGoalIds.length} Celów · {aiGoalReview.periodStart}–{aiGoalReview.periodEnd}</span><span>{generatedFormatter.format(new Date(aiGoalReview.generatedAt))} · {aiGoalReview.model}{aiGoalReview.cached ? " · wynik z cache" : ""}</span>{aiGoalReview.omittedGoalIds.length ? <span className="ai-review-omitted">Pominięto jawnie {aiGoalReview.omittedGoalIds.length} Celów ponad limit 50.</span> : null}</footer>
       </div> : null}
     </Panel>
-    <Modal open={consentOpen} title="Zanim uruchomisz Przegląd AI" onClose={() => setConsentOpen(false)}><div className="ai-consent"><p>Do skonfigurowanego dostawcy AI zostaną wysłane aktywne Cele, ich kryteria, powiązane Działania, blokady i ostatnie aktualizacje postępu z 28 dni.</p><p className="muted-copy">Nie wysyłamy profilu, e-maila, całej Skrzynki, pełnej Wiedzy ani historycznych sesji Focus. AI nie może zapisywać zmian.</p><div className="modal-actions"><Button onClick={() => setConsentOpen(false)}>Anuluj</Button><Button variant="primary" onClick={confirmConsent}><Sparkles />Rozumiem, uruchom analizę</Button></div></div></Modal>
-    <Modal open={Boolean(draft)} title="Sprawdź propozycję Działania" closeDisabled={draftSaving} onClose={() => setDraft(undefined)}>{draft ? <form onSubmit={(event) => void saveDraft(event)}><p className="ai-draft-label"><Bot />Przygotowane przez AI — zapis nastąpi dopiero po Twoim zatwierdzeniu.</p><label className="field-label" htmlFor="ai-draft-title">Nazwa</label><input id="ai-draft-title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required /><label className="field-label" htmlFor="ai-draft-detail">Opis</label><textarea id="ai-draft-detail" rows={4} value={draft.detail} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} />{draftError ? <p className="auth-message error" role="alert">{draftError}</p> : null}<div className="modal-actions"><Button type="button" disabled={draftSaving} onClick={() => setDraft(undefined)}>Anuluj</Button><Button type="submit" variant="primary" loading={draftSaving} disabled={!draft.title.trim()}><Plus />Zatwierdź i dodaj</Button></div></form> : null}</Modal>
+    <AIGoalReviewConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} />
+    <AIGoalReviewDraftModal draft={draft} saving={draftSaving} error={draftError} onChange={setDraft} onClose={() => setDraft(undefined)} onSubmit={saveDraft} />
   </>;
 }
