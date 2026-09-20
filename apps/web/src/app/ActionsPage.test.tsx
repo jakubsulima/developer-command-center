@@ -29,12 +29,13 @@ describe("lista wszystkich Działań", () => {
     renderApp();
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Samodzielny krok" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filtry" }));
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "area-finanse");
     await user.selectOptions(screen.getByLabelText("Filtr Celu"), "");
     expect(await screen.findByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Samodzielny krok" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filtr Celu"), "goal-budget");
-    expect(await screen.findByText("Filtry łączą się przez AND.")).toBeInTheDocument();
+    expect(await screen.findByText("Projekt i cel muszą pasować jednocześnie.")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "");
     expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
   });

@@ -135,9 +135,9 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
     await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
-    const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
-    await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));
-    expect(within(dateChoices).getByRole("button", { name: "Dzisiaj" })).toHaveAttribute("aria-pressed", "true");
+    const dateChoices = within(createCenter).getByRole("radiogroup", { name: "Kiedy?" });
+    await user.click(within(dateChoices).getByRole("radio", { name: "Dzisiaj" }));
+    expect(within(dateChoices).getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
     await user.click(within(createCenter).getByRole("button", { name: "Zamknij okno" }));
 
     await user.click(screen.getByRole("button", { name: "Otwórz menu Więcej" }));

@@ -71,9 +71,20 @@ describe("Dodaj — formularze i kontekst", () => {
     await switchType(user, "Działanie");
     await user.click(screen.getByText("Powiązania i ustawienia"));
     expect(screen.getByLabelText("Cel lub Projekt")).toHaveValue("goal:goal");
-    expect(screen.getByLabelText(/Dokładna data/)).toHaveValue("2026-09-20");
-    await user.click(screen.getByRole("button", { name: "Jutro" }));
+    expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
+    expect(screen.queryByLabelText(/Dokładna data/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Jutro" }));
     expect(screen.getByRole("checkbox", { name: /Pokaż na Starcie/ })).not.toBeChecked();
+  });
+
+  it("zachowuje niestandardowy termin i nie zmienia przypięcia", async () => {
+    const user = userEvent.setup();
+    render(<QuickAdd open request={{ mode: "action", scheduledFor: "2026-10-07", pinnedToToday: true }} onClose={vi.fn()} />);
+    await user.click(screen.getByText("Powiązania i ustawienia"));
+    expect(screen.getByRole("radio", { name: "Inna data" })).toBeChecked();
+    expect(screen.getByLabelText(/Dokładna data/)).toHaveValue("2026-10-07");
+    await user.click(screen.getByRole("radio", { name: "Bez terminu" }));
+    expect(screen.getByRole("checkbox", { name: /Pokaż na Starcie/ })).toBeChecked();
   });
 
   it("nie zapisuje niedostępnego powiązania, zachowuje tekst i umożliwia odłączenie", async () => {

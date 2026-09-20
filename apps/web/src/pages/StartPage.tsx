@@ -3,7 +3,8 @@ import { Archive, CalendarClock, CalendarDays, Check, ChevronRight, Layers3, Lis
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { ActionOriginMarker, ActionStatusDialog, ActionStatusIconTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionSignals } from "../components/ActionSignals";
 import { Modal } from "../components/Modal";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
@@ -20,11 +21,10 @@ import { actionStatusLabels, polishCount } from "../domain/labels";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { DraftStatus } from "../components/DraftStatus";
 import { AIStartGuidance } from "../components/AIStartGuidance";
+import { formatActionDate, resolveRoutineTitle } from "../domain/actionPresentation";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
-const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
-
-function StartActionRow({ action, context, relationSummary, openStatus, busy, error, retry, breadcrumbs, returnTo }: {
+function StartActionRow({ action, context, relationSummary, openStatus, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
   action: GoalAction;
   context: ActionContext;
   relationSummary: string[];
@@ -34,11 +34,13 @@ function StartActionRow({ action, context, relationSummary, openStatus, busy, er
   retry?: () => Promise<boolean>;
   breadcrumbs: Array<{ label: string; to?: string }>;
   returnTo: string;
+  timeZone: string;
+  today: string;
+  routineTitle?: string;
 }) {
   const compactContext = describeCompactActionContext(context);
   return <div className={`today-action ${action.status}`} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div>{action.recurringTemplateId ? <ActionOriginMarker action={action} /> : null}<small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
-    <div className="action-row-controls"><ActionStatusIconTrigger action={action} disabled={busy} onClick={() => openStatus(action.id)} /></div>
+    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={timeZone} today={today} routineTitle={routineTitle} density="compact" disabled={busy} onOpenStatus={() => openStatus(action.id)} /><small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </div>;
 }
@@ -79,7 +81,7 @@ export function StartPage() {
   const contextFor = (action: GoalAction) => resolveActionContext(action, state);
   const startBreadcrumbs = [{ label: "Start", to: "/" }];
   const startAddress = locationAddress(location);
-  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} /></div>; };
+  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} /></div>; };
 
   const submitAction = async (event: FormEvent) => {
     event.preventDefault();
@@ -99,7 +101,7 @@ export function StartPage() {
   };
 
   const actionContext = state.goals.find((goal) => goal.id === actionForm.goalId)?.title ?? state.areas.find((area) => area.id === actionForm.areaId)?.name ?? "Samodzielne Działanie";
-  const actionDateLabel = actionForm.scheduledFor ? formatDate(actionForm.scheduledFor, state.workspaceTimezone) : "Bez terminu";
+  const actionDateLabel = actionForm.scheduledFor ? formatActionDate(actionForm.scheduledFor, state.workspaceTimezone, { today: currentDate }) : "Bez terminu";
   const todayItems = showAll("today") ? summary.todayActions : summary.todayActions.slice(0, 5);
   const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
   const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
