@@ -19,9 +19,8 @@ import { FormTransition } from "../components/FormTransition";
 import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
 import { normalizeHttpUrl } from "../domain/http-url";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
-import { ActionSignals } from "../components/ActionSignals";
 import { isActionInTodayProjection, localDateForTimeZone } from "../domain/activity";
-import { resolveRoutineTitle } from "../domain/actionPresentation";
+import { describeActionSchedule, resolveRoutineTitle } from "../domain/actionPresentation";
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 type ProjectHistoryFilter = "current" | "history";
@@ -41,6 +40,16 @@ const projectActionFilterLabels: Record<ProjectActionFilter, string> = {
   unscheduled: "Bez terminu",
   history: "Historia"
 };
+
+const projectActionStatusIcons = {
+  ready: Circle,
+  in_progress: LoaderCircle,
+  testing: Beaker,
+  blocked: ShieldAlert,
+  completed: CircleCheck,
+  skipped: SkipForward,
+  cancelled: CircleX
+} satisfies Record<ProjectActionStatus, typeof Circle>;
 
 export function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -202,9 +211,17 @@ export function ProjectDetailPage() {
         <Button role="menuitemradio" variant="ghost" className={actionFilter === "history" ? "is-active" : ""} aria-label={`${projectActionFilterLabels.history}: ${historicalActions.length}`} aria-checked={actionFilter === "history"} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter("history"); }}><span className="project-menu-option-icon">{actionFilter === "history" ? <Check /> : <History />}</span>{projectActionFilterLabels.history}<span className="project-menu-count">{historicalActions.length}</span></Button>
       </div></details></div></div>
         {actionFilter !== "open" ? <div className="project-history-banner project-filter-banner"><span><Filter /><span><strong>Filtr: {projectActionFilterLabels[actionFilter]}</strong><small>{displayedActions.length} {displayedActions.length === 1 ? "pasujące Działanie" : "pasujących Działań"}</small></span></span><Button variant="ghost" onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button></div> : null}
-        {displayedActions.length ? <div className="project-action-list">{displayedActions.map((action) => <div className={`project-action-row ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-          <div className="action-copy"><div className="action-title-row"><NavigationLink className="project-action-title" to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={projectBreadcrumbs} returnTo={projectNavigation.returnTo} returnLabel={projectNavigation.returnLabel} sourceCardId={navigationCardId("action", action.id)} aria-label={`Otwórz Działanie: ${action.title}`}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="compact" disabled={mutation.isBusy(`project-action-status:${action.id}`)} onOpenStatus={() => openStatusEditor(action)} /><small>{action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title : "Działanie Projektu"}</small></div>
-        </div>)}</div> : <EmptyState icon={actionFilter === "history" ? <History /> : <ListChecks />} title={actionFilter === "history" ? "Historia Działań jest pusta" : actionFilter === "open" ? "Brak otwartych Działań" : `Brak Działań: ${projectActionFilterLabels[actionFilter]}`} detail={actionFilter === "history" ? "Ukończone, pominięte i anulowane Działania pojawią się tutaj." : actionFilter !== "open" ? "Wybierz inny filtr, aby zobaczyć pozostałe Działania Projektu." : historicalActions.length ? "Zakończone Działania są zachowane w historii." : "Użyj przycisku Dodaj na dole, aby dodać pojedynczy krok."} action={actionFilter !== "open" ? <Button onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button> : historicalActions.length ? <Button onClick={() => setActionFilter("history")}><History />Pokaż historię</Button> : undefined} />}
+        {displayedActions.length ? <div className="project-action-list">{displayedActions.map((action) => {
+          const StatusIcon = projectActionStatusIcons[action.status];
+          const schedule = describeActionSchedule(action, today, state.workspaceTimezone);
+          const routineTitle = resolveRoutineTitle(action, state.recurringActionTemplates);
+          const context = action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title ?? "Cel Projektu" : "Działanie Projektu";
+          return <Panel className={`project-action-row entity-card ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
+            <button type="button" className={`project-action-status-button ${action.status}`} disabled={mutation.isBusy(`project-action-status:${action.id}`)} aria-label={`Zmień status: ${actionStatusLabels[action.status]} — ${action.title}`} onClick={() => openStatusEditor(action)}><StatusIcon aria-hidden="true" /><span className="sr-only">{actionStatusLabels[action.status]}</span></button>
+            <span className="project-action-copy"><span className="project-action-heading"><strong className="line-clamp-2">{action.title}</strong>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</span><small className={`project-action-meta${action.scheduledFor && action.scheduledFor < today ? " overdue" : ""}`}><span className="project-action-status-label">{actionStatusLabels[action.status]}</span><span aria-hidden="true">·</span><span>{schedule}</span>{routineTitle ? <><span aria-hidden="true">·</span><span>{routineTitle}</span></> : null}<span aria-hidden="true">·</span><span>{context}</span></small>{action.status === "blocked" && action.blocker ? <small className="project-action-blocker"><ShieldAlert aria-hidden="true" />{action.blocker}</small> : null}</span>
+            <NavigationLink className="button button-ghost entity-card-open" to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={projectBreadcrumbs} returnTo={projectNavigation.returnTo} returnLabel={projectNavigation.returnLabel} sourceCardId={navigationCardId("action", action.id)} aria-label={`Otwórz Działanie: ${action.title}`}><ArrowRight /></NavigationLink>
+          </Panel>;
+        })}</div> : <EmptyState icon={actionFilter === "history" ? <History /> : <ListChecks />} title={actionFilter === "history" ? "Historia Działań jest pusta" : actionFilter === "open" ? "Brak otwartych Działań" : `Brak Działań: ${projectActionFilterLabels[actionFilter]}`} detail={actionFilter === "history" ? "Ukończone, pominięte i anulowane Działania pojawią się tutaj." : actionFilter !== "open" ? "Wybierz inny filtr, aby zobaczyć pozostałe Działania Projektu." : historicalActions.length ? "Zakończone Działania są zachowane w historii." : "Użyj przycisku Dodaj na dole, aby dodać pojedynczy krok."} action={actionFilter !== "open" ? <Button onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button> : historicalActions.length ? <Button onClick={() => setActionFilter("history")}><History />Pokaż historię</Button> : undefined} />}
       </section> : null}
 
       {visibleSections.includes("knowledge") ? <section aria-labelledby="project-knowledge-title"><div className="section-heading project-section-heading"><div><h2 id="project-knowledge-title">Wiedza</h2><span>Notatki, materiały i decyzje zachowane przy Projekcie</span></div></div>

@@ -19,6 +19,9 @@ Plan: [2026-09-20-actions-experience-remediation.md](./2026-09-20-actions-experi
 - po odbiorze listy uproszczono hierarchię sygnałów: status otrzymał spokojne
   tło, termin wyższy kontrast, a powód blokady własny podpisany pas zamiast
   kolejnego równorzędnego fragmentu tekstu;
+- po porównaniu zakładek Projektu lista Działań została dodatkowo ujednolicona
+  z Celami i Wiedzą: ikona po lewej, tytuł, jedna skrócona linia metadanych i
+  strzałka przejścia po prawej; tylko blokada zajmuje dodatkową linię;
 - Quick Add używa pojedynczego wyboru `Dzisiaj | Jutro | Bez terminu | Inna
   data`; przypięcie do Startu pozostaje niezależne;
 - usunięto nieużywany wariant kontrolki pokazujący samą ikonę statusu;
