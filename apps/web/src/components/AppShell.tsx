@@ -65,7 +65,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
-  const moreActive = ["/goals", "/actions", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const moreActive = ["/goals", "/knowledge", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     beginPerformanceTiming("quick-add");
     setQuickAddRequest(request);
@@ -182,7 +182,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
         <button className={`capture-fab${addIsOpen ? " active" : ""}`} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
-        <NavLink to="/knowledge" className={({ isActive }) => isActive ? "active mobile-inbox-link" : "mobile-inbox-link"}><span className="mobile-nav-icon"><Archive />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>Wiedza</span></NavLink>
+        <NavLink to="/actions"><CheckSquare /><span>Działania</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
@@ -195,7 +195,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
         </div></section>
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
-          <NavLink to="/actions" onClick={() => setProfileCenterOpen(false)}><span><CheckSquare /></span><span><strong>Działania</strong><small>Wszystkie kroki</small></span><ChevronRight /></NavLink>
+          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span><ChevronRight /></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>

@@ -141,3 +141,12 @@
 .focus-detail .action-routine-origin-link { display:inline-flex; color:inherit; text-decoration:none; }
 .focus-detail .action-routine-origin-link:hover,
 .focus-detail .action-routine-origin-link:focus-visible { text-decoration:underline; text-underline-offset:3px; }
+.focus-detail .action-blocker-section { padding:16px; border:1px solid color-mix(in srgb, #f87171 45%, var(--border)); border-radius:12px; background:color-mix(in srgb, #f87171 7%, transparent); }
+.focus-detail .action-blocker-section .detail-kicker { display:flex; align-items:center; gap:7px; color:#fca5a5; }
+.focus-detail .action-blocker-section .detail-kicker svg { width:16px; height:16px; }
+.focus-detail .action-blocker-section p { margin:8px 0 12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.focus-detail .action-detail-empty { margin:0; font-size:13px; }
+.focus-detail .action-detail-empty button { padding:0; border:0; background:transparent; color:var(--ring); font:inherit; cursor:pointer; }
+@media (min-width: 1024px) {
+  .focus-detail .action-blocker-section, .focus-detail .action-detail-empty { grid-column:1; }
+}

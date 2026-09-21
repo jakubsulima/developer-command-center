@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickAdd } from "./QuickAdd";
 import { draftStorageKey } from "../hooks/usePersistentDraft";
+import { localDateForTimeZone } from "../domain/activity";
+import { shiftActionDate } from "../domain/actionPresentation";
 
 const store = vi.hoisted(() => ({
   state: { workspaceId: "test", workspaceTimezone: "Europe/Warsaw", goals: [{ id: "goal", title: "Wynik", areaId: "project", visibility: "active", status: "active" }], areas: [{ id: "project", name: "Projekt testowy", visibility: "active" }], goalTemplates: [] },
@@ -18,6 +20,8 @@ async function switchType(user: ReturnType<typeof userEvent.setup>, name: string
 }
 
 beforeEach(() => vi.clearAllMocks());
+
+const workspaceToday = () => localDateForTimeZone(new Date(), store.state.workspaceTimezone);
 
 describe("Dodaj — formularze i kontekst", () => {
   it.each([
@@ -64,16 +68,28 @@ describe("Dodaj — formularze i kontekst", () => {
 
   it("powrót przez Projekt zachowuje Cel, termin i niezależne przypięcie", async () => {
     const user = userEvent.setup();
-    render(<QuickAdd open request={{ mode: "action", goalId: "goal", scheduledFor: "2026-09-20", pinnedToToday: false }} onClose={vi.fn()} />);
+    render(<QuickAdd open request={{ mode: "action", goalId: "goal", scheduledFor: workspaceToday(), pinnedToToday: false }} onClose={vi.fn()} />);
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Krok");
     await switchType(user, "Projekt");
     expect(screen.getByText("Nowy samodzielny Projekt")).toBeInTheDocument();
     await switchType(user, "Działanie");
     await user.click(screen.getByText("Powiązania i ustawienia"));
     expect(screen.getByLabelText("Cel lub Projekt")).toHaveValue("goal:goal");
-    expect(screen.getByLabelText(/Dokładna data/)).toHaveValue("2026-09-20");
-    await user.click(screen.getByRole("button", { name: "Jutro" }));
+    expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
+    expect(screen.queryByLabelText(/Dokładna data/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Jutro" }));
     expect(screen.getByRole("checkbox", { name: /Pokaż na Starcie/ })).not.toBeChecked();
+  });
+
+  it("zachowuje niestandardowy termin i nie zmienia przypięcia", async () => {
+    const user = userEvent.setup();
+    const customDate = shiftActionDate(workspaceToday(), 16);
+    render(<QuickAdd open request={{ mode: "action", scheduledFor: customDate, pinnedToToday: true }} onClose={vi.fn()} />);
+    await user.click(screen.getByText("Powiązania i ustawienia"));
+    expect(screen.getByRole("radio", { name: "Inna data" })).toBeChecked();
+    expect(screen.getByLabelText(/Dokładna data/)).toHaveValue(customDate);
+    await user.click(screen.getByRole("radio", { name: "Bez terminu" }));
+    expect(screen.getByRole("checkbox", { name: /Pokaż na Starcie/ })).toBeChecked();
   });
 
   it("nie zapisuje niedostępnego powiązania, zachowuje tekst i umożliwia odłączenie", async () => {

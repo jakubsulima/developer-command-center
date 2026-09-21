@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Archive, CalendarClock, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Layers3, ListPlus, Plus, Repeat2, Sparkles, TrendingUp } from "lucide-react";
+import { Archive, CalendarClock, CalendarDays, Check, ChevronRight, Layers3, ListPlus, Plus, Sparkles } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { ActionOriginMarker, ActionStatusDialog, ActionStatusIconTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionSignals } from "../components/ActionSignals";
 import { Modal } from "../components/Modal";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
@@ -11,20 +12,19 @@ import { deriveHomeSummary } from "../domain/homeSummary";
 import type { GoalAction } from "../domain/types";
 import { routeForEntity } from "../domain/routes";
 import { describeActionContext, describeCompactActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
-import { formatWorkspaceDateRange } from "../domain/activity";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
 import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
-import { actionStatusLabels, polishCount, polishPluralForm } from "../domain/labels";
+import { actionStatusLabels, polishCount } from "../domain/labels";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { DraftStatus } from "../components/DraftStatus";
+import { AIStartGuidance } from "../components/AIStartGuidance";
+import { formatActionDate, resolveRoutineTitle } from "../domain/actionPresentation";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
-const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
-
-function StartActionRow({ action, context, relationSummary, openStatus, busy, error, retry, breadcrumbs, returnTo }: {
+function StartActionRow({ action, context, relationSummary, openStatus, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
   action: GoalAction;
   context: ActionContext;
   relationSummary: string[];
@@ -34,11 +34,13 @@ function StartActionRow({ action, context, relationSummary, openStatus, busy, er
   retry?: () => Promise<boolean>;
   breadcrumbs: Array<{ label: string; to?: string }>;
   returnTo: string;
+  timeZone: string;
+  today: string;
+  routineTitle?: string;
 }) {
   const compactContext = describeCompactActionContext(context);
   return <div className={`today-action ${action.status}`} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div>{action.recurringTemplateId ? <ActionOriginMarker action={action} /> : null}<small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
-    <div className="action-row-controls"><ActionStatusIconTrigger action={action} disabled={busy} onClick={() => openStatus(action.id)} /></div>
+    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={timeZone} today={today} routineTitle={routineTitle} density="compact" disabled={busy} onOpenStatus={() => openStatus(action.id)} /><small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </div>;
 }
@@ -55,7 +57,6 @@ export function StartPage() {
   const [actionError, setActionError] = useState("");
   const [statusActionId, setStatusActionId] = useState<string>();
   const [resultActionId, setResultActionId] = useState<string>();
-  const [overviewOpen, setOverviewOpen] = useState(false);
   const actionDraft = usePersistentDraft("start-action", { title: "", detail: "", goalId: "", areaId: "", scheduledFor: "", pinnedToToday: true }, 450, { targetId: "new" });
   const actionForm = actionDraft.value;
   const setActionForm = actionDraft.setValue;
@@ -67,8 +68,6 @@ export function StartPage() {
   const showAll = (key: string) => searchParams.get("show") === key;
 
   useEffect(() => { void materializeOnMount.current(currentDate); }, [currentDate]);
-  const requestedOverview = ["upcoming", "attention"].includes(searchParams.get("show") ?? "");
-  useEffect(() => { if (requestedOverview) setOverviewOpen(true); }, [requestedOverview]);
   useEffect(() => {
     if (summary.isPristineWorkspace) recordFirstFlowStage("empty-workspace");
     if (hasCompletedAction && firstFlow.stage !== "unknown") recordFirstFlowStage("first-action-completed");
@@ -82,7 +81,7 @@ export function StartPage() {
   const contextFor = (action: GoalAction) => resolveActionContext(action, state);
   const startBreadcrumbs = [{ label: "Start", to: "/" }];
   const startAddress = locationAddress(location);
-  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} /></div>; };
+  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} /></div>; };
 
   const submitAction = async (event: FormEvent) => {
     event.preventDefault();
@@ -102,10 +101,8 @@ export function StartPage() {
   };
 
   const actionContext = state.goals.find((goal) => goal.id === actionForm.goalId)?.title ?? state.areas.find((area) => area.id === actionForm.areaId)?.name ?? "Samodzielne Działanie";
-  const actionDateLabel = actionForm.scheduledFor ? formatDate(actionForm.scheduledFor, state.workspaceTimezone) : "Bez terminu";
+  const actionDateLabel = actionForm.scheduledFor ? formatActionDate(actionForm.scheduledFor, state.workspaceTimezone, { today: currentDate }) : "Bez terminu";
   const todayItems = showAll("today") ? summary.todayActions : summary.todayActions.slice(0, 5);
-  const upcomingItems = showAll("upcoming") ? summary.upcomingActions : summary.upcomingActions.slice(0, 5);
-  const attentionItems = showAll("attention") ? summary.attentionSignals : summary.attentionSignals.slice(0, 2);
   const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
   const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
   const firstOpenAction = state.actions.find((action) => !["completed", "cancelled", "skipped"].includes(action.status));
@@ -128,17 +125,7 @@ export function StartPage() {
       </div>
     </div>
 
-    <section className="start-overview" aria-label="Dalszy plan">
-      <button className="start-overview-toggle" type="button" aria-expanded={overviewOpen} aria-controls="start-overview-content" onClick={() => setOverviewOpen((current) => !current)}>
-        <span><strong>Dalszy plan</strong><small>{polishCount(summary.upcomingActions.length, "nadchodzące Działanie", "nadchodzące Działania", "nadchodzących Działań")} · {polishCount(summary.attentionCount, "sprawa wymaga uwagi", "sprawy wymagają uwagi", "spraw wymaga uwagi")} · {polishCount(summary.activity.completedActions, "ukończone Działanie w tygodniu", "ukończone Działania w tygodniu", "ukończonych Działań w tygodniu")}</small></span>
-        <ChevronDown aria-hidden="true" />
-      </button>
-      <div className="start-overview-content" id="start-overview-content" hidden={!overviewOpen}>
-        <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h2 id="start-upcoming-title">Nadchodzące</h2></div><span className="count-chip" aria-label={polishCount(summary.upcomingActions.length, "nadchodzące Działanie", "nadchodzące Działania", "nadchodzących Działań")}>{summary.upcomingActions.length}</span></div>{upcomingItems.length ? upcomingItems.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><NavigationLink data-navigation-card-id={navigationCardId("action", action.id)} to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={startBreadcrumbs} returnTo={startAddress} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{action.title}{action.recurringTemplateId ? <small><Repeat2 />cykliczne</small> : null}</NavigationLink></div>) : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{summary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-        <Panel aria-labelledby="start-activity-title"><div className="start-section-heading"><div><span className="eyebrow"><TrendingUp />Rytm pracy</span><h2 id="start-activity-title">Bieżący tydzień</h2></div></div><p className="activity-period">{formatWorkspaceDateRange(summary.activity.periodStart, summary.activity.periodEnd)}</p><div className="activity-grid"><div><strong>{summary.activity.completedActions}</strong><span>{polishPluralForm(summary.activity.completedActions, "ukończone Działanie", "ukończone Działania", "ukończonych Działań")}</span></div><div><strong>{summary.activity.progressUpdates}</strong><span>{polishPluralForm(summary.activity.progressUpdates, "aktualizacja postępu", "aktualizacje postępu", "aktualizacji postępu")}</span></div><div><strong>{summary.activity.knowledgeAdded}</strong><span>{polishPluralForm(summary.activity.knowledgeAdded, "dodany element Wiedzy", "dodane elementy Wiedzy", "dodanych elementów Wiedzy")}</span></div></div></Panel>
-        <Panel className="start-attention" aria-labelledby="start-attention-title"><div className="start-section-heading"><div><span className="eyebrow"><CircleAlert />Do sprawdzenia</span><h2 id="start-attention-title">Wymaga uwagi</h2></div><span className="count-chip" aria-label={polishCount(summary.attentionCount, "sprawa wymaga uwagi", "sprawy wymagają uwagi", "spraw wymaga uwagi")}>{summary.attentionCount}</span></div>{attentionItems.length ? <div className="attention-list" id="start-attention-list">{attentionItems.map((signal) => <Link key={signal.id} to={signal.to}><span className={`attention-marker attention-${signal.kind}`} aria-hidden="true" /><span><strong>{signal.title}</strong><small>{signal.detail}</small></span><ChevronRight /></Link>)}</div> : <p className="muted-copy">Brak blokad, zaległości i decyzji czekających na Ciebie.</p>}{summary.attentionCount > 2 ? <Link className="section-link" to={showAll("attention") ? "/" : "/?show=attention"} aria-expanded={showAll("attention")} aria-controls="start-attention-list">{showAll("attention") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-      </div>
-    </section>
+    <AIStartGuidance homeSummary={summary} />
 
     <Modal open={actionOpen} closeDisabled={actionSaving} title="Dodaj Działanie" onClose={() => setActionOpen(false)}><form className="guided-form" onSubmit={submitAction}><p className="modal-intro">Nazwij konkretny krok, potem wybierz kiedy i gdzie ma się pojawić.</p><section className="guided-section"><div className="guided-section-title"><span>1</span><div><strong>Co chcesz zrobić?</strong><small>Krótko i konkretnie — najlepiej zacznij od czasownika.</small></div></div><label className="field-label" htmlFor="start-action-title">Nazwa Działania</label><input id="start-action-title" placeholder="Np. Spisać trzy pytania do rozmowy" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /></section><section className="guided-section"><div className="guided-section-title"><span>2</span><div><strong>Kiedy ma się pojawić?</strong><small>Wybierz termin albo zostaw je bez daty.</small></div></div><div className="quick-choice-row" role="group" aria-label="Szybki termin"><button type="button" aria-pressed={actionForm.scheduledFor === currentDate} onClick={() => setActionForm((current) => ({ ...current, scheduledFor: currentDate, pinnedToToday: true }))}>Dzisiaj</button><button type="button" aria-pressed={actionForm.scheduledFor === shiftDate(currentDate, 1)} onClick={() => setActionForm((current) => ({ ...current, scheduledFor: shiftDate(currentDate, 1), pinnedToToday: false }))}>Jutro</button><button type="button" aria-pressed={!actionForm.scheduledFor} onClick={() => setActionForm((current) => ({ ...current, scheduledFor: "", pinnedToToday: false }))}>Bez terminu</button></div><label className="field-label" htmlFor="start-action-date">Dokładna data</label><input id="start-action-date" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /><label className="switch-card"><input type="checkbox" checked={actionForm.pinnedToToday} onChange={(event) => setActionForm((current) => ({ ...current, pinnedToToday: event.target.checked }))} /><span><strong>Pokaż także na Starcie</strong><small>Działanie będzie widoczne od razu, niezależnie od terminu.</small></span></label></section><section className="guided-section"><div className="guided-section-title"><span>3</span><div><strong>Gdzie to należy?</strong><small>Powiązanie z Celem ułatwi późniejsze odnalezienie postępu.</small></div></div><label className="field-label" htmlFor="start-action-context">Cel lub Projekt</label><select id="start-action-context" value={actionForm.goalId || (actionForm.areaId ? `area:${actionForm.areaId}` : "")} onChange={(event) => { const value = event.target.value; setActionForm((current) => ({ ...current, goalId: value.startsWith("area:") ? "" : value, areaId: value.startsWith("area:") ? value.slice(5) : "" })); }}><option value="">Samodzielne Działanie</option><optgroup label="Cele">{state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</optgroup><optgroup label="Projekty">{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</optgroup></select></section><details className="advanced-fields"><summary>Dodaj opis</summary><div><label className="field-label" htmlFor="start-action-detail">Opis <span className="optional-label">opcjonalnie</span></label><textarea id="start-action-detail" rows={3} placeholder="Dodaj kontekst, link lub definicję ukończenia" value={actionForm.detail} onChange={(event) => setActionForm((current) => ({ ...current, detail: event.target.value }))} /></div></details><div className="creation-summary" aria-live="polite"><span className="creation-summary-icon"><Check /></span><div><small>Tak zapiszesz Działanie</small><strong>{actionForm.title.trim() || "Nowe Działanie"}</strong><p><CalendarClock />{actionDateLabel}{actionForm.pinnedToToday ? " · na Starcie" : ""}</p><p><Layers3 />{actionContext}</p></div></div>{actionError ? <p className="auth-message error" role="alert">{actionError}</p> : null}<div className="modal-actions"><div className="draft-footer"><DraftStatus status={actionDraft.status} errorMessage={actionDraft.errorMessage} onRetry={() => void actionDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(JSON.stringify(actionDraft.value))} />{actionDraft.dirty ? <Button type="button" variant="ghost" onClick={actionDraft.discard}>Odrzuć szkic</Button> : null}</div><Button type="button" onClick={() => setActionOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={actionSaving} disabled={!actionForm.title.trim()}>Dodaj Działanie</Button></div></form></Modal>
 

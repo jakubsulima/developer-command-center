@@ -90,11 +90,11 @@ describe("regresje nowego modelu Celów", () => {
     const mobileNavigation = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
     expect(within(mobileNavigation).getByRole("link", { name: /Start/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("link", { name: /Projekty/ })).toBeInTheDocument();
-    expect(within(mobileNavigation).getByRole("link", { name: /Wiedza/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: /Działania/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Cele", "Działania", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Cele", "Wiedza", "Rutyny", "Skrzynka", "Podsumowanie"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     await user.click(within(more).getByRole("button", { name: /Wyszukaj/ }));
     expect(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
@@ -135,9 +135,9 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
     await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
-    const dateChoices = within(createCenter).getByRole("group", { name: "Termin Działania" });
-    await user.click(within(dateChoices).getByRole("button", { name: "Dzisiaj" }));
-    expect(within(dateChoices).getByRole("button", { name: "Dzisiaj" })).toHaveAttribute("aria-pressed", "true");
+    const dateChoices = within(createCenter).getByRole("radiogroup", { name: "Kiedy?" });
+    await user.click(within(dateChoices).getByRole("radio", { name: "Dzisiaj" }));
+    expect(within(dateChoices).getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
     await user.click(within(createCenter).getByRole("button", { name: "Zamknij okno" }));
 
     await user.click(screen.getByRole("button", { name: "Otwórz menu Więcej" }));
@@ -148,7 +148,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(profileCenter).queryByText("Działanie cykliczne")).not.toBeInTheDocument();
   });
 
-  it("pokazuje Na dziś przed zwiniętymi wyjątkami i rozwija pełną listę", async () => {
+  it("pokazuje Na dziś przed Kierunkiem od AI i rozwija pełną listę sygnałów", async () => {
     const user = userEvent.setup();
     const state = structuredClone(demoState);
     state.goals = [
@@ -165,12 +165,14 @@ describe("regresje nowego modelu Celów", () => {
 
     const priority = await screen.findByRole("region", { name: "Najważniejsze teraz" });
     const today = screen.getByRole("region", { name: "Na dziś" });
-    const overviewToggle = screen.getByRole("button", { name: /Dalszy plan/ });
+    const guidance = screen.getByRole("region", { name: "Kierunek od AI" });
+    const overviewToggle = screen.getByRole("button", { name: /Sygnały i dalszy plan/ });
     expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
     await user.click(overviewToggle);
     const attention = screen.getByRole("region", { name: "Wymaga uwagi" });
     expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
     expect(Boolean(priority.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(today.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(today.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(attention.querySelectorAll(".attention-list > a")).toHaveLength(2);
     const attentionCount = Number(within(attention).getByLabelText(/spraw wymaga uwagi$/).getAttribute("aria-label")?.match(/\d+/)?.[0]);

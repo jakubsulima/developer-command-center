@@ -1,5 +1,22 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Czytelne Działania — plan z 20 września 2026
+
+[Plan wdrożenia spójnych i czytelnych Działań](./2026-09-20-actions-experience-remediation.md)
+zamyka dziewięć problemów wykrytych na liście, szczególe, Starcie, w Projekcie,
+Celu i Quick Add. Obejmuje wspólną prezentację statusu, daty, blokady i Rutyny,
+edycję ze szczegółu, kolejność wdrożenia, testy oraz kryteria odbioru.
+Status: zaplanowane, implementacja nierozpoczęta.
+
+## Kierunek od AI na ekranie Start — plan z 19 września 2026
+
+[Plan wdrożenia podsumowania AI na ekranie Start](./2026-09-19-ai-start-guidance-implementation.md)
+zastępuje `Dalszy plan` kompaktowym kierunkiem opartym na istniejącym
+`AIGoalReview`. Zachowuje liczby jako zwijane sygnały, ponownie wykorzystuje
+zgodę, cache i bezpieczne zatwierdzanie szkicu Działania oraz nie wymaga nowego
+endpointu ani migracji w MVP.
+Status: wdrożone lokalnie, gotowe do odbioru.
+
 ## Kontekst dla AI — plan z 14 września 2026
 
 [Plan wdrożenia kontekstu dla AI](./2026-09-14-ai-context-implementation.md)

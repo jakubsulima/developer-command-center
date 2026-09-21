@@ -59,6 +59,7 @@ export function GoalsPage() {
     if (kind && !Object.prototype.hasOwnProperty.call(kindLabels, kind)) { next.delete("kind"); changed = true; }
     if (changed) setParams(next, { replace: true });
   }, [kind, params, setParams, status]);
+  useEffect(() => { if (params.get("create") === "true") setNewOpen(true); }, [params]);
   const selectedSystemTemplate = systemTemplates.find((item) => item.id === form.templateId);
   const selectedTemplate = selectedSystemTemplate ?? state.goalTemplates.find((item) => item.visibility === "active" && item.id === form.templateId);
   const criteriaCount = form.criteria.split("\n").filter((item) => item.trim()).length;

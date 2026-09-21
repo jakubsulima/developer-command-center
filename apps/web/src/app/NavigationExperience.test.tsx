@@ -57,6 +57,29 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Cel Nawigacji");
   });
 
+  it("edytuje Działanie i otwiera powód blokady bezpośrednio ze szczegółu", async () => {
+    seedNavigationState();
+    const seeded = JSON.parse(localStorage.getItem("command-center-state-v1")!);
+    seeded.actions[0] = { ...seeded.actions[0], status: "blocked", blocker: "Czekam na decyzję", scheduledFor: "2026-09-18" };
+    localStorage.setItem("command-center-state-v1", JSON.stringify(seeded));
+    const user = userEvent.setup();
+    renderApp("/actions/nav-action");
+
+    expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Blokada/ }).parentElement).toHaveTextContent("Czekam na decyzję");
+    await user.click(screen.getByRole("button", { name: "Edytuj" }));
+    const edit = screen.getByRole("dialog", { name: "Edytuj Działanie" });
+    await user.clear(within(edit).getByLabelText("Nazwa"));
+    await user.type(within(edit).getByLabelText("Nazwa"), "Zmieniony krok");
+    await user.type(within(edit).getByLabelText("Opis"), "Nowy opis");
+    await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
+    expect(await screen.findByRole("heading", { name: "Zmieniony krok" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edytuj blokadę" }));
+    const blocker = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    expect(within(blocker).getByLabelText("Co blokuje to Działanie?")).toHaveValue("Czekam na decyzję");
+  });
+
   it("odtwarza fokus i podświetlenie źródłowej karty po powrocie", async () => {
     seedNavigationState();
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);

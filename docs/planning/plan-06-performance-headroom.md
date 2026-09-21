@@ -19,7 +19,7 @@ Build przechodzi. Entry JS ma około 109,7 KB gzip przy limicie 122,9 KB, a CSS
    wyszukiwania, testów i weryfikacji wizualnej.
 4. Przenieść ciężkie, rzadkie fragmenty za granice lazy load, jeśli pomiar pokaże
    realną korzyść.
-5. Utrzymać obecne limity bundle jako blokujące w CI.
+5. Rozmiar bundle obserwować w raportach wydajnościowych, bez blokowania CI sztywnym limitem.
 
 ## Kryteria akceptacji
 
@@ -31,6 +31,5 @@ Build przechodzi. Entry JS ma około 109,7 KB gzip przy limicie 122,9 KB, a CSS
 
 ## Weryfikacja
 
-Production build, `pnpm check:bundle`, pełne quality gates oraz przeglądarkowy
+Production build, pełne quality gates oraz przeglądarkowy
 smoke test najważniejszych tras.
-

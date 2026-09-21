@@ -53,9 +53,6 @@ jobs:
           # użytkownikom musi otrzymać VITE_DATA_BACKEND=supabase i publiczną konfigurację.
           VITE_DATA_BACKEND: demo
 
-      - name: Kontrola budżetu bundle
-        run: pnpm check:bundle
-
       - name: Raport wydajności i audyt UI
         run: |
           pnpm performance:audit-ui

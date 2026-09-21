@@ -9,16 +9,6 @@
 .action-status-trigger.completed, .action-status-option.completed { --action-status-color:#4ade80; }
 .action-status-trigger.cancelled, .action-status-option.cancelled { --action-status-color:#b39ac8; }
 .action-status-trigger.skipped { --action-status-color:#94a3b8; }
-.action-status-icon-trigger { --action-status-color:#8b9bb0; display:grid; place-items:center; width:44px; min-width:44px; height:44px; padding:0; border:0; border-radius:10px; color:var(--action-status-color); background:color-mix(in srgb, var(--action-status-color) 9%, transparent); cursor:pointer; }
-.action-status-icon-trigger:hover, .action-status-icon-trigger:focus-visible { background:color-mix(in srgb, var(--action-status-color) 18%, transparent); }
-.action-status-icon-trigger svg { width:18px; height:18px; }
-.action-status-icon-trigger.ready { --action-status-color:#8b9bb0; }
-.action-status-icon-trigger.in_progress { --action-status-color:#60a5fa; }
-.action-status-icon-trigger.testing { --action-status-color:#c084fc; }
-.action-status-icon-trigger.blocked { --action-status-color:#f87171; }
-.action-status-icon-trigger.completed { --action-status-color:#4ade80; }
-.action-status-icon-trigger.cancelled { --action-status-color:#b39ac8; }
-.action-status-icon-trigger.skipped { --action-status-color:#94a3b8; }
 .action-origin-marker { display:inline-flex; align-items:center; gap:4px; width:max-content; max-width:100%; color:#c4b5fd; font-size:10px; font-weight:650; line-height:16px; white-space:nowrap; }
 .action-origin-marker svg { width:12px; height:12px; flex:none; }
 .action-status-dialog .modal-intro { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; }
@@ -37,7 +27,19 @@
 .action-status-dialog.compact .action-status-option small, .action-status-dialog.compact .action-status-option em { display:none; }
 .action-status-blocker { margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
 .action-status-blocker textarea { width:100%; }
+.action-signals { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:5px 12px; min-width:0; margin-top:5px; }
+.action-signals .action-status-trigger { margin:0; min-height:32px; padding-inline:7px; background:color-mix(in srgb, var(--action-status-color) 10%, transparent); }
+.action-signals-detail .action-status-trigger { min-height:40px; font-size:12px; }
+.action-signal { display:inline-flex; align-items:center; gap:5px; min-width:0; color:#9eacc0; font-size:12px; line-height:1.35; }
+.action-signal svg { width:14px; height:14px; flex:none; }
+.action-schedule.overdue { color:#fca5a5; }
+.action-blocker-signal { grid-column:1 / -1; display:flex; align-items:flex-start; gap:7px; min-width:0; margin-top:2px; padding:7px 9px; border-left:2px solid #ef4444; border-radius:0 7px 7px 0; color:#fecaca; background:rgba(127, 29, 29, .14); font-size:12px; line-height:1.4; }
+.action-blocker-signal > svg { width:14px; height:14px; flex:none; margin-top:1px; }
+.action-blocker-signal > span { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.action-blocker-signal strong { margin-right:6px; color:#fca5a5; font-size:10px; letter-spacing:.04em; text-transform:uppercase; }
+.action-routine-signal { grid-column:2; color:#c4b5fd; }
 
 @media (max-width: 767px) {
-  .action-row-controls .action-status-icon-trigger { width:40px; min-width:40px; height:40px; }
+  .action-signals { grid-template-columns:auto minmax(0,1fr); gap:4px 10px; }
+  .action-signals .action-status-trigger { min-height:36px; }
 }

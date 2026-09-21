@@ -1,6 +1,6 @@
 import { ProjectCategoryPicker } from "../components/ProjectCategoryPicker";
 import { useMemo, useState, type FormEvent } from "react";
-import { Archive, ArrowRight, BookOpen, CalendarDays, Check, ChevronDown, Clock3, FileText, Filter, Flag, FolderKanban, History, Lightbulb, ListChecks, MoreHorizontal, Pencil, RotateCcw, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, Beaker, BookOpen, CalendarDays, Check, ChevronDown, Circle, CircleCheck, CircleX, Clock3, FileText, Filter, Flag, FolderKanban, History, Lightbulb, ListChecks, LoaderCircle, MoreHorizontal, Pencil, RotateCcw, ShieldAlert, SkipForward, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell } from "../components/AppShell";
@@ -18,21 +18,38 @@ import { projectProjection } from "../domain/projectModule";
 import { FormTransition } from "../components/FormTransition";
 import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
 import { normalizeHttpUrl } from "../domain/http-url";
-import { ActionOriginMarker, ActionStatusDialog, ActionStatusIconTrigger, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { isActionInTodayProjection, localDateForTimeZone } from "../domain/activity";
+import { describeActionSchedule, resolveRoutineTitle } from "../domain/actionPresentation";
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 type ProjectHistoryFilter = "current" | "history";
-type ProjectActionFilter = "open" | "today" | "overdue" | "unscheduled" | "blocked" | "history";
+type ProjectActionFilter = "open" | ProjectActionStatus | "today" | "overdue" | "unscheduled" | "history";
 
 const projectActionFilterLabels: Record<ProjectActionFilter, string> = {
   open: "Otwarte",
+  ready: actionStatusLabels.ready,
+  in_progress: actionStatusLabels.in_progress,
+  testing: actionStatusLabels.testing,
+  blocked: actionStatusLabels.blocked,
+  completed: actionStatusLabels.completed,
+  skipped: actionStatusLabels.skipped,
+  cancelled: actionStatusLabels.cancelled,
   today: "Na dziś",
   overdue: "Zaległe",
   unscheduled: "Bez terminu",
-  blocked: "Zablokowane",
   history: "Historia"
 };
+
+const projectActionStatusIcons = {
+  ready: Circle,
+  in_progress: LoaderCircle,
+  testing: Beaker,
+  blocked: ShieldAlert,
+  completed: CircleCheck,
+  skipped: SkipForward,
+  cancelled: CircleX
+} satisfies Record<ProjectActionStatus, typeof Circle>;
 
 export function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -75,23 +92,30 @@ export function ProjectDetailPage() {
   const openActions = actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status));
   const historicalActions = actions.filter((action) => ["completed", "cancelled", "skipped"].includes(action.status));
   const today = localDateForTimeZone(new Date(), state.workspaceTimezone);
-  const actionFilterOptions = [
+  const statusActionFilterOptions = [
     { value: "open" as const, label: projectActionFilterLabels.open, count: openActions.length, icon: <ListChecks /> },
+    { value: "ready" as const, label: projectActionFilterLabels.ready, count: actions.filter((action) => action.status === "ready").length, icon: <Circle /> },
+    { value: "in_progress" as const, label: projectActionFilterLabels.in_progress, count: actions.filter((action) => action.status === "in_progress").length, icon: <LoaderCircle /> },
+    { value: "testing" as const, label: projectActionFilterLabels.testing, count: actions.filter((action) => action.status === "testing").length, icon: <Beaker /> },
+    { value: "blocked" as const, label: projectActionFilterLabels.blocked, count: actions.filter((action) => action.status === "blocked").length, icon: <ShieldAlert /> },
+    { value: "completed" as const, label: projectActionFilterLabels.completed, count: actions.filter((action) => action.status === "completed").length, icon: <CircleCheck /> },
+    { value: "skipped" as const, label: projectActionFilterLabels.skipped, count: actions.filter((action) => action.status === "skipped").length, icon: <SkipForward /> },
+    { value: "cancelled" as const, label: projectActionFilterLabels.cancelled, count: actions.filter((action) => action.status === "cancelled").length, icon: <CircleX /> }
+  ];
+  const scheduleActionFilterOptions = [
     { value: "today" as const, label: projectActionFilterLabels.today, count: openActions.filter((action) => isActionInTodayProjection(action, today)).length, icon: <CalendarDays /> },
     { value: "overdue" as const, label: projectActionFilterLabels.overdue, count: openActions.filter((action) => Boolean(action.scheduledFor && action.scheduledFor < today)).length, icon: <Clock3 /> },
-    { value: "unscheduled" as const, label: projectActionFilterLabels.unscheduled, count: openActions.filter((action) => !action.scheduledFor).length, icon: <CalendarDays /> },
-    { value: "blocked" as const, label: projectActionFilterLabels.blocked, count: openActions.filter((action) => action.status === "blocked").length, icon: <ShieldAlert /> },
-    { value: "history" as const, label: projectActionFilterLabels.history, count: historicalActions.length, icon: <History /> }
+    { value: "unscheduled" as const, label: projectActionFilterLabels.unscheduled, count: openActions.filter((action) => !action.scheduledFor).length, icon: <CalendarDays /> }
   ];
   const currentGoals = goals.filter((goal) => !["achieved", "abandoned"].includes(goal.status));
   const historicalGoals = goals.filter((goal) => ["achieved", "abandoned"].includes(goal.status));
   const displayedGoals = goalFilter === "current" ? currentGoals : historicalGoals;
-  const displayedActions = actionFilter === "history" ? historicalActions : openActions.filter((action) => {
+  const displayedActions = actionFilter === "history" ? historicalActions : actions.filter((action) => {
+    if (["ready", "in_progress", "testing", "blocked", "completed", "skipped", "cancelled"].includes(actionFilter)) return action.status === actionFilter;
     if (actionFilter === "today") return isActionInTodayProjection(action, today);
-    if (actionFilter === "overdue") return Boolean(action.scheduledFor && action.scheduledFor < today);
-    if (actionFilter === "unscheduled") return !action.scheduledFor;
-    if (actionFilter === "blocked") return action.status === "blocked";
-    return true;
+    if (actionFilter === "overdue") return openActions.includes(action) && Boolean(action.scheduledFor && action.scheduledFor < today);
+    if (actionFilter === "unscheduled") return openActions.includes(action) && !action.scheduledFor;
+    return openActions.includes(action);
   });
   const activeGoals = goals.filter((goal) => goal.status === "active");
   const nextAction = openActions.find((action) => action.isNext) ?? openActions[0];
@@ -177,12 +201,27 @@ export function ProjectDetailPage() {
         {displayedGoals.length ? <div className="project-entity-list">{displayedGoals.map((goal) => <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1}><Flag /><span><strong className="line-clamp-2">{goal.title}</strong><small className="line-clamp-2">{goal.outcome}</small></span><Badge>{goalStatusLabels[goal.status]}</Badge><NavigationLink className="button button-ghost entity-card-open" to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={projectBreadcrumbs} returnTo={projectNavigation.returnTo} returnLabel={projectNavigation.returnLabel} sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}><ArrowRight /></NavigationLink></Panel>)}</div> : <EmptyState icon={goalFilter === "history" ? <History /> : <Flag />} title={goalFilter === "history" ? "Historia Celów jest pusta" : "Brak bieżących Celów"} detail={goalFilter === "history" ? "Osiągnięte i porzucone Cele pojawią się tutaj." : historicalGoals.length ? "Zakończone Cele są zachowane w historii." : "Użyj przycisku Dodaj na dole, aby dodać pierwszy rezultat w tym Projekcie."} action={goalFilter === "current" && historicalGoals.length ? <Button onClick={() => setGoalFilter("history")}><History />Pokaż historię</Button> : undefined} />}
       </section> : null}
 
-      {visibleSections.includes("actions") ? <section aria-labelledby="project-actions-title"><div className="section-heading project-section-heading"><div><h2 id="project-actions-title">Działania</h2><span>{actionFilter === "history" ? "Ukończone, pominięte i anulowane Działania" : "Otwarte kroki — z Celu albo bezpośrednio z Projektu"}</span></div><div className="project-section-actions project-section-actions-single"><details className={`project-more-menu project-section-more-menu project-filter-menu${actionFilter !== "open" ? " is-filtered" : ""}`}><summary aria-label={`Filtruj Działania. Wybrano: ${projectActionFilterLabels[actionFilter]}`} aria-haspopup="menu" title="Filtruj Działania"><Filter /><span className="sr-only">Filtruj Działania</span></summary><div role="menu" aria-label="Filtry Działań"><span className="project-menu-label">Pokaż Działania</span>{actionFilterOptions.map((option) => <Button key={option.value} role="menuitemradio" variant="ghost" className={actionFilter === option.value ? "is-active" : ""} aria-label={`${option.label}: ${option.count}`} aria-checked={actionFilter === option.value} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter(option.value); }}><span className="project-menu-option-icon">{actionFilter === option.value ? <Check /> : option.icon}</span>{option.label}<span className="project-menu-count">{option.count}</span></Button>)}</div></details></div></div>
+      {visibleSections.includes("actions") ? <section aria-labelledby="project-actions-title"><div className="section-heading project-section-heading"><div><h2 id="project-actions-title">Działania</h2><span>{actionFilter === "open" ? "Otwarte kroki — z Celu albo bezpośrednio z Projektu" : `Wybrano: ${projectActionFilterLabels[actionFilter]}`}</span></div><div className="project-section-actions project-section-actions-single"><details className={`project-more-menu project-section-more-menu project-filter-menu${actionFilter !== "open" ? " is-filtered" : ""}`}><summary aria-label={`Filtruj Działania. Wybrano: ${projectActionFilterLabels[actionFilter]}`} aria-haspopup="menu" title="Filtruj Działania"><Filter /><span className="sr-only">Filtruj Działania</span></summary><div role="menu" aria-label="Filtry Działań">
+        <span className="project-menu-label">Status</span>
+        {statusActionFilterOptions.map((option) => <Button key={option.value} role="menuitemradio" variant="ghost" className={actionFilter === option.value ? "is-active" : ""} aria-label={`${option.label}: ${option.count}`} aria-checked={actionFilter === option.value} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter(option.value); }}><span className="project-menu-option-icon">{actionFilter === option.value ? <Check /> : option.icon}</span>{option.label}<span className="project-menu-count">{option.count}</span></Button>)}
+        <div className="project-menu-separator" />
+        <span className="project-menu-label">Termin</span>
+        {scheduleActionFilterOptions.map((option) => <Button key={option.value} role="menuitemradio" variant="ghost" className={actionFilter === option.value ? "is-active" : ""} aria-label={`${option.label}: ${option.count}`} aria-checked={actionFilter === option.value} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter(option.value); }}><span className="project-menu-option-icon">{actionFilter === option.value ? <Check /> : option.icon}</span>{option.label}<span className="project-menu-count">{option.count}</span></Button>)}
+        <div className="project-menu-separator" />
+        <Button role="menuitemradio" variant="ghost" className={actionFilter === "history" ? "is-active" : ""} aria-label={`${projectActionFilterLabels.history}: ${historicalActions.length}`} aria-checked={actionFilter === "history"} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter("history"); }}><span className="project-menu-option-icon">{actionFilter === "history" ? <Check /> : <History />}</span>{projectActionFilterLabels.history}<span className="project-menu-count">{historicalActions.length}</span></Button>
+      </div></details></div></div>
         {actionFilter !== "open" ? <div className="project-history-banner project-filter-banner"><span><Filter /><span><strong>Filtr: {projectActionFilterLabels[actionFilter]}</strong><small>{displayedActions.length} {displayedActions.length === 1 ? "pasujące Działanie" : "pasujących Działań"}</small></span></span><Button variant="ghost" onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button></div> : null}
-        {displayedActions.length ? <div className="project-action-list">{displayedActions.map((action) => <div className={`project-action-row ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-          <div className="action-copy"><div className="action-title-row"><NavigationLink className="project-action-title" to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={projectBreadcrumbs} returnTo={projectNavigation.returnTo} returnLabel={projectNavigation.returnLabel} sourceCardId={navigationCardId("action", action.id)} aria-label={`Otwórz Działanie: ${action.title}`}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><small>{action.recurringTemplateId ? <><ActionOriginMarker action={action} /><span aria-hidden="true"> · </span></> : null}{action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title : "Działanie Projektu"}{action.scheduledFor ? ` · ${action.scheduledFor}` : ""}</small></div>
-          <ActionStatusIconTrigger action={action} disabled={mutation.isBusy(`project-action-status:${action.id}`)} onClick={() => openStatusEditor(action)} />
-        </div>)}</div> : <EmptyState icon={actionFilter === "history" ? <History /> : <ListChecks />} title={actionFilter === "history" ? "Historia Działań jest pusta" : actionFilter === "open" ? "Brak otwartych Działań" : `Brak Działań: ${projectActionFilterLabels[actionFilter]}`} detail={actionFilter === "history" ? "Ukończone, pominięte i anulowane Działania pojawią się tutaj." : actionFilter !== "open" ? "Wybierz inny filtr, aby zobaczyć pozostałe Działania Projektu." : historicalActions.length ? "Zakończone Działania są zachowane w historii." : "Użyj przycisku Dodaj na dole, aby dodać pojedynczy krok."} action={actionFilter !== "open" ? <Button onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button> : historicalActions.length ? <Button onClick={() => setActionFilter("history")}><History />Pokaż historię</Button> : undefined} />}
+        {displayedActions.length ? <div className="project-action-list">{displayedActions.map((action) => {
+          const StatusIcon = projectActionStatusIcons[action.status];
+          const schedule = describeActionSchedule(action, today, state.workspaceTimezone);
+          const routineTitle = resolveRoutineTitle(action, state.recurringActionTemplates);
+          const context = action.goalId ? goals.find((goal) => goal.id === action.goalId)?.title ?? "Cel Projektu" : "Działanie Projektu";
+          return <Panel className={`project-action-row entity-card ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
+            <button type="button" className={`project-action-status-button ${action.status}`} disabled={mutation.isBusy(`project-action-status:${action.id}`)} aria-label={`Zmień status: ${actionStatusLabels[action.status]} — ${action.title}`} onClick={() => openStatusEditor(action)}><StatusIcon aria-hidden="true" /><span className="sr-only">{actionStatusLabels[action.status]}</span></button>
+            <span className="project-action-copy"><span className="project-action-heading"><strong className="line-clamp-2">{action.title}</strong>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</span><small className={`project-action-meta${action.scheduledFor && action.scheduledFor < today ? " overdue" : ""}`}><span className="project-action-status-label">{actionStatusLabels[action.status]}</span><span aria-hidden="true">·</span><span>{schedule}</span>{routineTitle ? <><span aria-hidden="true">·</span><span>{routineTitle}</span></> : null}<span aria-hidden="true">·</span><span>{context}</span></small>{action.status === "blocked" && action.blocker ? <small className="project-action-blocker"><ShieldAlert aria-hidden="true" />{action.blocker}</small> : null}</span>
+            <NavigationLink className="button button-ghost entity-card-open" to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={projectBreadcrumbs} returnTo={projectNavigation.returnTo} returnLabel={projectNavigation.returnLabel} sourceCardId={navigationCardId("action", action.id)} aria-label={`Otwórz Działanie: ${action.title}`}><ArrowRight /></NavigationLink>
+          </Panel>;
+        })}</div> : <EmptyState icon={actionFilter === "history" ? <History /> : <ListChecks />} title={actionFilter === "history" ? "Historia Działań jest pusta" : actionFilter === "open" ? "Brak otwartych Działań" : `Brak Działań: ${projectActionFilterLabels[actionFilter]}`} detail={actionFilter === "history" ? "Ukończone, pominięte i anulowane Działania pojawią się tutaj." : actionFilter !== "open" ? "Wybierz inny filtr, aby zobaczyć pozostałe Działania Projektu." : historicalActions.length ? "Zakończone Działania są zachowane w historii." : "Użyj przycisku Dodaj na dole, aby dodać pojedynczy krok."} action={actionFilter !== "open" ? <Button onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button> : historicalActions.length ? <Button onClick={() => setActionFilter("history")}><History />Pokaż historię</Button> : undefined} />}
       </section> : null}
 
       {visibleSections.includes("knowledge") ? <section aria-labelledby="project-knowledge-title"><div className="section-heading project-section-heading"><div><h2 id="project-knowledge-title">Wiedza</h2><span>Notatki, materiały i decyzje zachowane przy Projekcie</span></div></div>

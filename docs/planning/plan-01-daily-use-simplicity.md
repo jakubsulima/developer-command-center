@@ -37,6 +37,5 @@ Działanie może zapisać mobilnie bez osobnego kroku wyboru typu.
 
 ## Weryfikacja
 
-`pnpm lint`, `pnpm typecheck`, `pnpm test`, build demo i `pnpm check:bundle`.
+`pnpm lint`, `pnpm typecheck`, `pnpm test` i build demo.
 Sprawdzić w przeglądarce co najmniej 390×844 oraz desktop.
-

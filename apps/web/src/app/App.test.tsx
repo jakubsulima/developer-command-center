@@ -111,7 +111,7 @@ describe("goal-centric workspace", () => {
     await user.click(screen.getByRole("tab", { name: "Działania" }));
     const actions = screen.getByRole("region", { name: "Działania" });
     expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
-    expect(within(actions).queryByText("Do zrobienia")).not.toBeInTheDocument();
+    expect(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Otwarte Działanie" })).toHaveTextContent("Do zrobienia");
     expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
     expect(within(actions).queryByRole("button", { name: "Więcej opcji: Otwarte Działanie" })).not.toBeInTheDocument();
     expect(within(actions).queryByRole("button", { name: "Ukończ: Otwarte Działanie" })).not.toBeInTheDocument();
@@ -213,7 +213,7 @@ describe("goal-centric workspace", () => {
     expect(await screen.findByRole("heading", { name: "Plan posiłków i zakupów" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Start" }));
     const recurringAction = await screen.findByText("Plan posiłków i zakupów");
-    expect(recurringAction.closest(".today-action")).toHaveTextContent("Z Rutyny");
+    expect(recurringAction.closest(".today-action")).toHaveTextContent("Rutyna: Plan posiłków i zakupów");
   });
 
   it("dodaje Działanie ze Startu wyłącznie przez centralny przycisk", async () => {

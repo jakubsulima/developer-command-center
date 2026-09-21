@@ -28,43 +28,40 @@ const statusHints: Record<ProjectActionStatus, string> = {
   cancelled: "Nie będzie realizowane"
 };
 
-export function ActionOriginMarker({ action, verbose = false }: { action: GoalAction; verbose?: boolean }) {
+export function ActionOriginMarker({ action, verbose = false, routineTitle }: { action: GoalAction; verbose?: boolean; routineTitle?: string }) {
   if (!action.recurringTemplateId) return null;
-  return <span className="action-origin-marker" title="To Działanie zostało utworzone przez Rutynę"><Repeat2 aria-hidden="true" />{verbose ? "Wystąpienie Rutyny" : "Z Rutyny"}</span>;
+  return <span className="action-origin-marker" title="To Działanie zostało utworzone przez Rutynę"><Repeat2 aria-hidden="true" />{routineTitle ?? (verbose ? "Wystąpienie Rutyny" : "Z Rutyny")}</span>;
 }
 
-export function ActionStatusTrigger({ action, disabled = false, className = "", onClick }: { action: GoalAction; disabled?: boolean; className?: string; onClick: () => void }) {
+export function ActionStatusTrigger({ action, disabled = false, className = "", density = "list", onClick }: { action: GoalAction; disabled?: boolean; className?: string; density?: "compact" | "list" | "detail"; onClick: () => void }) {
   const Icon = statusIcons[action.status];
-  return <button type="button" className={`action-status-trigger ${action.status}${className ? ` ${className}` : ""}`} disabled={disabled} aria-label={`Zmień status: ${actionStatusLabels[action.status]} — ${action.title}`} onClick={onClick}><Icon aria-hidden="true" /><span>{actionStatusLabels[action.status]}</span><ChevronDown className="action-status-trigger-chevron" aria-hidden="true" /></button>;
+  return <button type="button" className={`action-status-trigger action-status-${density} ${action.status}${className ? ` ${className}` : ""}`} disabled={disabled} aria-label={`Zmień status: ${actionStatusLabels[action.status]} — ${action.title}`} onClick={onClick}><Icon aria-hidden="true" /><span>{actionStatusLabels[action.status]}</span><ChevronDown className="action-status-trigger-chevron" aria-hidden="true" /></button>;
 }
 
-export function ActionStatusIconTrigger({ action, disabled = false, onClick }: { action: GoalAction; disabled?: boolean; onClick: () => void }) {
-  const Icon = statusIcons[action.status];
-  return <button type="button" className={`action-status-icon-trigger ${action.status}`} disabled={disabled} aria-label={`Zmień status: ${actionStatusLabels[action.status]} — ${action.title}`} title={`Status: ${actionStatusLabels[action.status]}`} onClick={onClick}><Icon aria-hidden="true" /></button>;
-}
-
-export function ActionStatusDialog({ action, open, busy, error, compact = false, onClose, onChange }: {
+export function ActionStatusDialog({ action, open, busy, error, compact = false, initialView = "statuses", onClose, onChange }: {
   action?: GoalAction;
   open: boolean;
   busy: boolean;
   error?: string;
   compact?: boolean;
+  initialView?: "statuses" | "blocker";
   onClose: () => void;
   onChange: (status: ProjectActionStatus, blocker?: string) => Promise<boolean> | boolean;
 }) {
   if (!action || !open) return null;
-  return <ActionStatusDialogContent action={action} busy={busy} error={error} compact={compact} onClose={onClose} onChange={onChange} />;
+  return <ActionStatusDialogContent key={`${action.id}:${initialView}`} action={action} busy={busy} error={error} compact={compact} initialView={initialView} onClose={onClose} onChange={onChange} />;
 }
 
-function ActionStatusDialogContent({ action, busy, error, compact, onClose, onChange }: {
+function ActionStatusDialogContent({ action, busy, error, compact, initialView, onClose, onChange }: {
   action: GoalAction;
   busy: boolean;
   error?: string;
   compact: boolean;
+  initialView: "statuses" | "blocker";
   onClose: () => void;
   onChange: (status: ProjectActionStatus, blocker?: string) => Promise<boolean> | boolean;
 }) {
-  const [editingBlocker, setEditingBlocker] = useState(false);
+  const [editingBlocker, setEditingBlocker] = useState(initialView === "blocker");
   const [blocker, setBlocker] = useState(action.blocker ?? "");
   const statusOptions = action.recurringTemplateId
     ? [...standardStatusOptions.slice(0, 5), "skipped" as const, "cancelled" as const]
