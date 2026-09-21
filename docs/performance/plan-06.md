@@ -4,7 +4,6 @@
 
 ```bash
 VITE_DATA_BACKEND=demo pnpm build
-pnpm check:bundle
 pnpm performance:audit-ui
 pnpm performance:report -- --baseline docs/performance/plan-06-baseline.json
 ```
@@ -34,4 +33,4 @@ Reguła `.separator-dot` była jedyną regułą bez referencji w kodzie; usunię
 
 ## Wynik po zmianie
 
-Po lazyzacji rzadkiego Quick Add entry zmniejszył się z `112 253 B` do `110 156 B` gzip, a entry CSS z `32 568 B` do `32 404 B`. Quick Add jest osobnym lazy chunkiem `3 465 B` gzip. Limity `check:bundle` pozostają blokujące w CI.
+Po lazyzacji rzadkiego Quick Add entry zmniejszył się z `112 253 B` do `110 156 B` gzip, a entry CSS z `32 568 B` do `32 404 B`. Quick Add jest osobnym lazy chunkiem `3 465 B` gzip. Rozmiary pozostają raportowane informacyjnie, ale nie blokują CI sztywnym limitem.

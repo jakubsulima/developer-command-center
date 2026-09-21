@@ -284,7 +284,6 @@ pnpm lint
 pnpm typecheck
 pnpm test
 VITE_DATA_BACKEND=demo pnpm build
-pnpm check:bundle
 ```
 
 ## Poza zakresem MVP

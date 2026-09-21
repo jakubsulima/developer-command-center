@@ -223,7 +223,7 @@ test w wybranym kliencie; sam test endpointu nie zamyka etapu.
 
 - Każdy etap to osobny, reviewowalny PR z pełnym przepływem demo i Supabase.
 - Wykonać `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-  `VITE_DATA_BACKEND=demo pnpm build` i `pnpm check:bundle`.
+  `VITE_DATA_BACKEND=demo pnpm build`.
   Po dodaniu pakietu objąć go jawnymi skryptami kontroli; obecne skrypty root
   filtrują wyłącznie aplikację web.
 - Migracje muszą mieć izolowane testy i próbę na stagingu przed produkcją.

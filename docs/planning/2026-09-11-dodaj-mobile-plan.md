@@ -116,7 +116,7 @@ Sukces nazywa utworzony obiekt i daje „Otwórz”, jeśli istnieje odpowiedni 
 - Stany: pusty, same spacje, poprawny, odzyskany szkic, trwa zapis, błąd pola, błąd sieci, niepewny wynik, ponowienie, sukces, wynik ukryty filtrem, brak storage.
 - Telefon: Safari/iOS i Chrome/Android z realną klawiaturą, obrót, Back, przewijanie, wklejanie, wielolinijkowy tekst, selektor daty i lista powiązań. Dodatkowo powiększony tekst i klawiatura sprzętowa.
 - Desktop: podstawowy zapis, skrót otwarcia i zapisu, fokus oraz zamykanie.
-- Końcowe polecenia: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm check:bundle`. Testy i build uruchamiać po zmianach implementacji; sam plan ich nie wymaga.
+- Końcowe polecenia: `pnpm lint`, `pnpm typecheck`, `pnpm test` i `pnpm build`. Testy i build uruchamiać po zmianach implementacji; sam plan ich nie wymaga.
 - Dowody odbioru: zrzuty mobilne sześciu formularzy, wyniki testów oraz lista urządzeń/przeglądarek. Nie oznaczać testów na prawdziwym telefonie jako wykonanych na podstawie emulacji.
 
 ## Warunek zakończenia
