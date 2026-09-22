@@ -15,7 +15,7 @@ export function ActionSignals({ action, timeZone, today, routineTitle, density =
   return <div className={`action-signals action-signals-${density}`}>
     <ActionStatusTrigger action={action} density={density} disabled={disabled || !onOpenStatus} onClick={onOpenStatus ?? (() => undefined)} />
     <span className={`action-signal action-schedule${action.scheduledFor && action.scheduledFor < today ? " overdue" : ""}`}><CalendarClock aria-hidden="true" />{describeActionSchedule(action, today, timeZone, density === "detail" ? "detail" : "compact")}</span>
-    {action.status === "blocked" && action.blocker ? <span className="action-blocker-signal" title={action.blocker}><LockKeyhole aria-hidden="true" /><span><strong>Blokada</strong>{action.blocker}</span></span> : null}
+    {density !== "detail" && action.status === "blocked" && action.blocker ? <span className="action-blocker-signal" title={action.blocker}><LockKeyhole aria-hidden="true" /><span><strong>Blokada</strong>{action.blocker}</span></span> : null}
     {routineTitle ? <span className="action-signal action-routine-signal"><Repeat2 aria-hidden="true" />{routineTitle}</span> : null}
   </div>;
 }
