@@ -66,7 +66,7 @@ describe("spójna nawigacja kontekstowa", () => {
     renderApp("/actions/nav-action");
 
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Powód blokady" }).parentElement).toHaveTextContent("Czekam na decyzję");
+    expect(screen.getByRole("heading", { name: "Co zatrzymuje to Działanie?" }).closest("section")).toHaveTextContent("Czekam na decyzję");
     expect(screen.getAllByText("Czekam na decyzję")).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Edytuj" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj Działanie" });
