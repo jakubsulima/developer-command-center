@@ -36,6 +36,8 @@ describe("lista Działań", () => {
     expect(actionListSortValue(action("none"), "open")).toBe("9999-12-31");
     expect(actionListSortDirection("open")).toBe("asc");
     expect(actionListSortDirection("completed")).toBe("desc");
+    expect(actionListSortDirection("cancelled")).toBe("desc");
+    expect(actionListSortDirection("skipped")).toBe("desc");
     expect(actionListSortValue(action("done", { completedAt: "2026-09-08T12:00:00Z" }), "completed")).toContain("2026-09-08");
   });
 
@@ -44,19 +46,28 @@ describe("lista Działań", () => {
     state.actions = [
       action("today", { scheduledFor: "2026-09-08" }),
       action("overdue", { scheduledFor: "2026-09-07" }),
+      action("pinned", { pinnedToToday: true }),
       action("unscheduled"),
+      action("ready", { status: "ready" }),
+      action("in-progress", { status: "in_progress" }),
       action("testing", { status: "testing" }),
       action("blocked", { status: "blocked" }),
       action("completed", { status: "completed", completedAt: "2026-09-08T12:00:00Z" }),
-      action("cancelled", { status: "cancelled" })
+      action("cancelled", { status: "cancelled" }),
+      action("skipped", { status: "skipped" })
     ];
-    const ids = (view: "open" | "today" | "overdue" | "unscheduled" | "blocked" | "completed") => state.actions.filter((item) => matchesActionListFilter(state, item, { view, today: "2026-09-08" })).map((item) => item.id);
-    expect(ids("open")).toEqual(["today", "overdue", "unscheduled", "testing", "blocked"]);
-    expect(ids("today")).toEqual(["today"]);
+    const ids = (view: Parameters<typeof matchesActionListFilter>[2]["view"]) => state.actions.filter((item) => matchesActionListFilter(state, item, { view, today: "2026-09-08" })).map((item) => item.id);
+    expect(ids("open")).toEqual(["today", "overdue", "pinned", "unscheduled", "ready", "in-progress", "testing", "blocked"]);
+    expect(ids("today")).toEqual(["today", "pinned"]);
     expect(ids("overdue")).toEqual(["overdue"]);
-    expect(ids("unscheduled")).toEqual(["unscheduled", "testing", "blocked"]);
+    expect(ids("unscheduled")).toEqual(["unscheduled", "ready", "in-progress", "testing", "blocked"]);
     expect(ids("blocked")).toEqual(["blocked"]);
     expect(ids("completed")).toEqual(["completed"]);
+    expect(ids("ready")).toEqual(["today", "overdue", "pinned", "unscheduled", "ready"]);
+    expect(ids("in_progress")).toEqual(["in-progress"]);
+    expect(ids("testing")).toEqual(["testing"]);
+    expect(ids("cancelled")).toEqual(["cancelled"]);
+    expect(ids("skipped")).toEqual(["skipped"]);
   });
 
   it("odrzuca cofnięcie statusu na nieaktualnej wersji", () => {

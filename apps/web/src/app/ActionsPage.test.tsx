@@ -40,6 +40,44 @@ describe("lista wszystkich Działań", () => {
     expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
   });
 
+  it("oddziela status od filtra terminu", async () => {
+    const state = structuredClone(demoState);
+    state.actions = [
+      { ...state.actions[1]!, id: "today", title: "Krok na dziś", scheduledFor: undefined, pinnedToToday: true },
+      { ...state.actions[1]!, id: "none", title: "Krok bez terminu", scheduledFor: undefined },
+      { ...state.actions[1]!, id: "blocked", title: "Krok zablokowany", status: "blocked", scheduledFor: undefined },
+      { ...state.actions[1]!, id: "done", title: "Krok ukończony", status: "completed", completedAt: "2026-09-22T08:00:00.000Z" },
+      { ...state.actions[1]!, id: "cancelled", title: "Krok anulowany", status: "cancelled", scheduledFor: undefined },
+      { ...state.actions[1]!, id: "skipped", title: "Krok pominięty", status: "skipped", scheduledFor: undefined },
+    ];
+    state.workspaceTimezone = "Europe/Warsaw";
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp();
+
+    const statusTabs = screen.getByRole("tablist", { name: "Status Działań" });
+    expect(within(statusTabs).getByRole("tab", { name: "Otwarte" })).toHaveAttribute("aria-selected", "true");
+    expect(within(statusTabs).queryByRole("tab", { name: "Na dziś" })).not.toBeInTheDocument();
+    for (const label of ["Do zrobienia", "W toku", "Testowanie", "Zablokowane", "Ukończone", "Anulowane", "Pominięte"]) {
+      expect(within(statusTabs).getByRole("tab", { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Filtry" }));
+    await user.click(screen.getByRole("button", { name: "Bez terminu" }));
+    expect(screen.getByTestId("location-address")).toHaveTextContent("view=unscheduled");
+    expect(await screen.findByRole("link", { name: "Krok bez terminu" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Krok na dziś" })).not.toBeInTheDocument();
+
+    await user.click(within(statusTabs).getByRole("tab", { name: "Zablokowane" }));
+    expect(screen.getByTestId("location-address")).toHaveTextContent("view=blocked");
+    expect(await screen.findByRole("link", { name: "Krok zablokowany" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Termin Działań" })).not.toBeInTheDocument();
+
+    await user.click(within(statusTabs).getByRole("tab", { name: "Anulowane" }));
+    expect(screen.getByTestId("location-address")).toHaveTextContent("view=cancelled");
+    expect(await screen.findByRole("link", { name: "Krok anulowany" })).toBeInTheDocument();
+  });
+
   it("ukończenie korzysta z istniejącej komendy i usuwa wiersz z Otwarte", async () => {
     const user = userEvent.setup();
     renderApp();

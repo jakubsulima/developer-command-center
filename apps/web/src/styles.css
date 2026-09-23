@@ -2826,6 +2826,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .actions-filter-toggle > svg:last-child { width:14px; height:14px; transition:transform .16s ease; }
 .actions-filter-toggle > svg:last-child.expanded { transform:rotate(180deg); }
 .actions-filter-panel { padding:14px; border:1px solid var(--border); border-radius:12px; background:rgba(7,17,31,.38); animation:knowledge-filters-in .18s ease-out; }
+.actions-filter-section { display:grid; gap:7px; margin-bottom:14px; }
+.actions-filter-label { color:var(--secondary-foreground); font-size:12px; font-weight:600; }
+.actions-date-filters { display:flex; flex-wrap:wrap; gap:6px; }
+.actions-date-filters button { min-height:38px; padding:0 12px; border:1px solid var(--border); border-radius:8px; color:var(--muted-foreground); background:var(--secondary); font-size:12px; }
+.actions-date-filters button:hover, .actions-date-filters button[aria-pressed="true"] { border-color:#315b97; color:#dbeafe; background:#0d284d; }
 .actions-active-filters { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
 .actions-active-filters > svg { width:14px; height:14px; color:var(--muted-foreground); }
 .actions-active-filters .button { min-height:34px; margin-left:auto; padding-inline:8px; font-size:11px; }
@@ -2860,6 +2865,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .actions-filter-toggle > span, .actions-filter-toggle > svg:last-child { display:none; }
   .actions-filter-toggle small { position:absolute; top:2px; right:2px; min-width:16px; padding:1px 4px; }
   .actions-filter-panel { padding:12px; }
+  .actions-date-filters { display:grid; grid-template-columns:1fr 1fr; }
+  .actions-date-filters button { padding-inline:8px; }
   .actions-view-tabs button { flex:0 0 auto; min-width:0; padding:0 11px; font-size:12px; white-space:nowrap; }
   .actions-groups { gap:18px; }
   .actions-list-row { padding:12px 12px 12px 20px; }

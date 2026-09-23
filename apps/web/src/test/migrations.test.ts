@@ -50,6 +50,7 @@ describe("migracje Supabase", () => {
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260915172247_project_categories.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918060424_add_action_testing_status.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918114425_fix_action_status_activity_audit.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260922135433_expand_action_status_filters.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -149,6 +150,30 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [userB]);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'open'))->'items')", [workspaceB])).toBe(1);
     expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'today'))->'items')", [workspaceA])).toBe(0);
+    await database.exec("reset role");
+  });
+
+  it("filters the Actions collection by every supported status", async () => {
+    const user = "e2000000-0000-0000-0000-000000000001";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"All action statuses"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query(`insert into public.actions (workspace_id, title, status, blocker, position) values
+      ($1, 'Do zrobienia', 'ready', null, 1),
+      ($1, 'W toku', 'in_progress', null, 2),
+      ($1, 'Testowanie', 'testing', null, 3),
+      ($1, 'Zablokowane', 'blocked', 'Czeka na decyzję', 4),
+      ($1, 'Ukończone', 'completed', null, 5),
+      ($1, 'Anulowane', 'cancelled', null, 6),
+      ($1, 'Pominięte', 'skipped', null, 7)`, [workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    for (const status of ["ready", "in_progress", "testing", "blocked", "completed", "cancelled", "skipped"]) {
+      const result = await scalar<{ items: { status: string }[] }>("select public.get_actions_page($1, $2)", [workspace, status]);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]?.status).toBe(status);
+    }
+    expect(await scalar<number>("select jsonb_array_length((public.get_actions_page($1, 'open'))->'items')", [workspace])).toBe(4);
     await database.exec("reset role");
   });
 
