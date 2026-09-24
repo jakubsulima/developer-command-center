@@ -1,7 +1,8 @@
 import type { AppState, GoalAction } from "./types";
 import { isActionInTodayProjection, localDateForTimeZone } from "./activity";
+import { isWaitingAction } from "./blockerReview";
 
-export const actionListViews = ["open", "today", "overdue", "unscheduled", "blocked", "completed"] as const;
+export const actionListViews = ["open", "ready", "in_progress", "testing", "blocked", "waiting", "completed", "cancelled", "skipped", "today", "overdue", "unscheduled"] as const;
 export type ActionListView = typeof actionListViews[number];
 
 export interface ActionListFilter {
@@ -13,11 +14,17 @@ export interface ActionListFilter {
 
 export const actionListViewLabels: Record<ActionListView, string> = {
   open: "Otwarte",
+  ready: "Do zrobienia",
+  in_progress: "W toku",
+  testing: "Testowanie",
   today: "Na dziś",
   overdue: "Zaległe",
   unscheduled: "Bez terminu",
   blocked: "Zablokowane",
-  completed: "Ukończone"
+  waiting: "Oczekujące",
+  completed: "Ukończone",
+  cancelled: "Anulowane",
+  skipped: "Pominięte",
 };
 
 export const actionListViewValues = actionListViews;
@@ -51,19 +58,25 @@ export function matchesActionListFilter(state: AppState, action: GoalAction, fil
   const today = filter.today ?? localDateForTimeZone(new Date(), state.workspaceTimezone);
   const open = ["ready", "in_progress", "testing", "blocked"].includes(action.status);
   if (filter.view === "completed") return action.status === "completed";
+  if (filter.view === "cancelled") return action.status === "cancelled";
+  if (filter.view === "skipped") return action.status === "skipped";
+  if (filter.view === "ready" || filter.view === "in_progress" || filter.view === "testing" || filter.view === "blocked") return action.status === filter.view;
+  if (filter.view === "waiting") return isWaitingAction(action, today);
   if (!open) return false;
   if (filter.view === "today") return isActionInTodayProjection(action, today);
   if (filter.view === "overdue") return Boolean(action.scheduledFor && action.scheduledFor < today);
-  if (filter.view === "unscheduled") return !action.scheduledFor;
-  if (filter.view === "blocked") return action.status === "blocked";
+  if (filter.view === "unscheduled") return !action.scheduledFor && !action.pinnedToToday;
   return true;
 }
 
 export function actionListSortValue(action: GoalAction, view: ActionListView) {
   if (view === "completed") return action.completedAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
+  if (view === "cancelled") return action.cancelledAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
+  if (view === "skipped") return action.skippedAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
+  if (view === "waiting") return action.reviewOn ?? "9999-12-31";
   return action.scheduledFor ?? "9999-12-31";
 }
 
 export function actionListSortDirection(view: ActionListView): "asc" | "desc" {
-  return view === "completed" ? "desc" : "asc";
+  return ["completed", "cancelled", "skipped"].includes(view) ? "desc" : "asc";
 }

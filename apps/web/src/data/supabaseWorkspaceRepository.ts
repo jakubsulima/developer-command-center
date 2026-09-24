@@ -23,6 +23,18 @@ function optionalStringPayload(value: unknown) {
   return typeof value === "string" ? value : undefined;
 }
 
+async function withActionReviewDates(actions: GoalAction[]): Promise<GoalAction[]> {
+  const ids = actions.filter((action) => action.status === "blocked").map((action) => action.id);
+  if (!ids.length) return actions;
+  const { data, error } = await getSupabase().from("actions").select("id,review_on").in("id", ids);
+  if (error) {
+    if (error.code === "42703") return actions;
+    throw new Error(`ActionReviewDates: ${error.message}`);
+  }
+  const dates = new Map((data ?? []).map((row) => [row.id, row.review_on]));
+  return actions.map((action) => ({ ...action, reviewOn: dates.get(action.id) ?? action.reviewOn ?? undefined }));
+}
+
 function decodeWeeklySummary(value: unknown, label = "WorkspaceCore.weeklySummary") {
   const weeklySummary = objectPayload(value, label);
   return {
@@ -100,6 +112,7 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`WorkspaceCore: ${error.message}`);
       const core = decodeWorkspaceCore(data);
       if (!core.workspaceId) return core;
+      core.actions = await withActionReviewDates(core.actions);
       try {
         const weekly = await getSupabase().rpc("get_workspace_weekly_summary", { target_workspace_id: core.workspaceId });
         if (!weekly.error && weekly.data && typeof weekly.data === "object" && !Array.isArray(weekly.data) && Object.hasOwn(weekly.data, "completedActions")) {
@@ -114,7 +127,7 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (query.collection === "actions" && (!isUuid(query.actionFilter?.projectId) || !isUuid(query.actionFilter?.goalId))) {
         return { items: [], nextCursor: undefined } as Page<WorkspacePageItem>;
       }
-      const { data, error } = await getSupabase().rpc(pageRpc[query.collection], {
+      const { data, error } = await getSupabase().rpc(query.collection === "actions" && query.actionFilter?.view === "waiting" ? "get_waiting_actions_page" : pageRpc[query.collection], {
         target_workspace_id: query.workspaceId,
         ...(query.collection === "goal-progress" ? { target_goal_id: query.goalId ?? null } : {}),
         ...(query.collection === "actions" ? {
@@ -127,7 +140,9 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
         ...cursorParams(query.cursor)
       });
       if (error) throw new Error(`WorkspacePage: ${error.message}`);
-      return decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
+      const page = decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
+      if (query.collection === "actions") return { ...page, items: await withActionReviewDates(page.items as GoalAction[]) };
+      return page;
     },
     async loadKnowledgeItem(id): Promise<KnowledgeItem | undefined> {
       const { data, error } = await getSupabase().rpc("get_knowledge_item", { target_item_id: id });
@@ -137,7 +152,8 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
     async loadAction(id): Promise<GoalAction | undefined> {
       const { data, error } = await getSupabase().rpc("get_action_item", { target_action_id: id });
       if (error) throw new Error(`ActionItem: ${error.message}`);
-      return (data ?? undefined) as GoalAction | undefined;
+      if (!data) return undefined;
+      return (await withActionReviewDates([data as GoalAction]))[0];
     },
     async loadLegacyFocusSession(id): Promise<FocusSessionRecord | undefined> {
       const { data, error } = await getSupabase().rpc("get_legacy_focus_session", { target_session_id: id });

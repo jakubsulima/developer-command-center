@@ -28,6 +28,18 @@ describe("NavigationState", () => {
     expect(page.map((item) => item.label)).toEqual(["Projekty", "Finanse", "Cel", "Działanie"]);
   });
 
+  it("cuts a circular trail when a knowledge relation returns to an earlier entity", () => {
+    const project = { label: "Projekt", to: "/projects/p1" };
+    const knowledge = { label: "Wiedza: Notatka", to: "/knowledge/k1" };
+    const returned = breadcrumbsForPage(
+      { breadcrumbs: [project, knowledge], returnTo: "/knowledge/k1", returnLabel: knowledge.label },
+      [{ label: "Projekty", to: "/projects" }],
+      { ...project, to: "/projects/p1?view=knowledge" }
+    );
+    expect(returned).toEqual([{ label: "Projekt", to: "/projects/p1?view=knowledge" }]);
+    expect(breadcrumbsForPage({ breadcrumbs: [...returned, knowledge] }, [], project)).toEqual([project]);
+  });
+
   it("generates stable entity card ids", () => {
     expect(navigationCardId("goal", "g/1")).toBe("goal-g/1");
     expect(navigationCardId("action", "a1")).toBe("action-a1");

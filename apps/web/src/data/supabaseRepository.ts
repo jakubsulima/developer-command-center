@@ -371,10 +371,20 @@ export async function decideAIProposalRemote(proposalId: string, status: AppStat
   dataOrThrow(await getSupabase().rpc("reject_ai_proposal", { target_proposal_id: proposalId, command_idempotency_key: crypto.randomUUID() }), "Odrzucenie AI Proposal");
 }
 
-export async function completeReviewRemote(workspaceId: string, summary: string) {
-  dataOrThrow(await getSupabase().rpc("complete_weekly_review", {
+export async function completeReviewRemote(workspaceId: string, summary: string, answers: Record<string, string | string[]> = {}, templateVersion = 1) {
+  if (templateVersion === 1) {
+    dataOrThrow(await getSupabase().rpc("complete_weekly_review", {
+      target_workspace_id: workspaceId,
+      review_summary: summary,
+      command_idempotency_key: crypto.randomUUID()
+    }), "Zapis Review");
+    return;
+  }
+  dataOrThrow(await getSupabase().rpc("complete_weekly_review_v2", {
     target_workspace_id: workspaceId,
     review_summary: summary,
+    review_answers: answers,
+    selected_goal_ids: Array.isArray(answers.selectedGoalIds) ? answers.selectedGoalIds : [],
     command_idempotency_key: crypto.randomUUID()
   }), "Zapis Review");
 }
@@ -436,7 +446,18 @@ export async function updateActionRemote(actionId: string, expectedVersion: numb
   }), "Edycja Działania");
 }
 
-export async function setActionStatusRemote(actionId: string, expectedVersion: number, status: ActionStatus, blocker?: string) {
+export async function setActionStatusRemote(actionId: string, expectedVersion: number, status: ActionStatus, blocker?: string, reviewOn?: string | null) {
+  if (reviewOn !== undefined) {
+    dataOrThrow(await getSupabase().rpc("set_action_status_review_checked", {
+      target_action_id: actionId,
+      expected_version: expectedVersion,
+      target_status: status,
+      target_blocker: blocker?.trim() ?? null,
+      target_review_on: reviewOn,
+      command_idempotency_key: crypto.randomUUID()
+    }), "Zmiana stanu Działania");
+    return;
+  }
   dataOrThrow(await getSupabase().rpc("set_action_status_checked", {
     target_action_id: actionId,
     expected_version: expectedVersion,

@@ -1,7 +1,18 @@
 export function humanizeEntityReferences(text: string, labels: Array<[string, string]>) {
   const withEntityNames = labels.reduce((result, [id, label]) => result.includes(id) ? result.replaceAll(id, `„${label}”`) : result, text);
+  const shortReferences = new Map<string, string | null>();
+  for (const [id, label] of labels) {
+    if (!/^[0-9a-f]{8}-/i.test(id)) continue;
+    const prefix = id.slice(0, 8).toLowerCase();
+    if (!shortReferences.has(prefix)) shortReferences.set(prefix, label);
+    else if (shortReferences.get(prefix) !== label) shortReferences.set(prefix, null);
+  }
+  const withShortNames = withEntityNames.replace(/\b[0-9a-f]{8}\b/gi, (reference) => {
+    const label = shortReferences.get(reference.toLowerCase());
+    return label ? `„${label}”` : reference;
+  });
 
-  return withEntityNames
+  return withShortNames
     .replace(/\bgoalIds\b/gi, "Cele")
     .replace(/\bgoalId\b/gi, "Cel")
     .replace(/\bactionIds\b/gi, "Działania")

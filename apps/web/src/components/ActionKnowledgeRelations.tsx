@@ -62,7 +62,7 @@ export function ActionKnowledgeRelations({ action, navigation, variant = "compac
     </div>;
   };
   if (variant === "detail") return <section className="action-relations-detail" aria-labelledby={`action-relations-${action.id}`}>
-    <h2 className="sr-only" id={`action-relations-${action.id}`}>Wiedza Działania</h2>
+    <div className="action-relations-detail-heading"><h2 id={`action-relations-${action.id}`} aria-label="Wiedza Działania">Wiedza</h2><span>{links.length ? `${links.length} ${links.length === 1 ? "powiązanie" : "powiązania"}` : "Materiały i rezultaty"}</span></div>
     <div className="action-relations-detail-groups">{groups.filter((group) => group.meaning === "material" || group.meaning === "result" || links.some((link) => link.meaning === group.meaning)).map(renderGroup)}</div>
     {mutation.error(`action-relations:${action.id}`) ? <p className="inline-mutation-error" role="alert">{mutation.error(`action-relations:${action.id}`)} <button type="button" onClick={() => void mutation.retry(`action-relations:${action.id}`)?.()}>Spróbuj ponownie</button></p> : null}
     <details className="detail-connect-disclosure"><summary><Plus />Połącz wiedzę</summary>

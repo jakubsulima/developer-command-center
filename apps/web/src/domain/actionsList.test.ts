@@ -36,6 +36,8 @@ describe("lista Działań", () => {
     expect(actionListSortValue(action("none"), "open")).toBe("9999-12-31");
     expect(actionListSortDirection("open")).toBe("asc");
     expect(actionListSortDirection("completed")).toBe("desc");
+    expect(actionListSortDirection("cancelled")).toBe("desc");
+    expect(actionListSortDirection("skipped")).toBe("desc");
     expect(actionListSortValue(action("done", { completedAt: "2026-09-08T12:00:00Z" }), "completed")).toContain("2026-09-08");
   });
 
@@ -44,24 +46,55 @@ describe("lista Działań", () => {
     state.actions = [
       action("today", { scheduledFor: "2026-09-08" }),
       action("overdue", { scheduledFor: "2026-09-07" }),
+      action("pinned", { pinnedToToday: true }),
       action("unscheduled"),
+      action("ready", { status: "ready" }),
+      action("in-progress", { status: "in_progress" }),
       action("testing", { status: "testing" }),
       action("blocked", { status: "blocked" }),
       action("completed", { status: "completed", completedAt: "2026-09-08T12:00:00Z" }),
-      action("cancelled", { status: "cancelled" })
+      action("cancelled", { status: "cancelled" }),
+      action("skipped", { status: "skipped" })
     ];
-    const ids = (view: "open" | "today" | "overdue" | "unscheduled" | "blocked" | "completed") => state.actions.filter((item) => matchesActionListFilter(state, item, { view, today: "2026-09-08" })).map((item) => item.id);
-    expect(ids("open")).toEqual(["today", "overdue", "unscheduled", "testing", "blocked"]);
-    expect(ids("today")).toEqual(["today"]);
+    const ids = (view: Parameters<typeof matchesActionListFilter>[2]["view"]) => state.actions.filter((item) => matchesActionListFilter(state, item, { view, today: "2026-09-08" })).map((item) => item.id);
+    expect(ids("open")).toEqual(["today", "overdue", "pinned", "unscheduled", "ready", "in-progress", "testing", "blocked"]);
+    expect(ids("today")).toEqual(["today", "pinned"]);
     expect(ids("overdue")).toEqual(["overdue"]);
-    expect(ids("unscheduled")).toEqual(["unscheduled", "testing", "blocked"]);
+    expect(ids("unscheduled")).toEqual(["unscheduled", "ready", "in-progress", "testing", "blocked"]);
     expect(ids("blocked")).toEqual(["blocked"]);
     expect(ids("completed")).toEqual(["completed"]);
+    expect(ids("ready")).toEqual(["today", "overdue", "pinned", "unscheduled", "ready"]);
+    expect(ids("in_progress")).toEqual(["in-progress"]);
+    expect(ids("testing")).toEqual(["testing"]);
+    expect(ids("cancelled")).toEqual(["cancelled"]);
+    expect(ids("skipped")).toEqual(["skipped"]);
   });
 
   it("odrzuca cofnięcie statusu na nieaktualnej wersji", () => {
     const state = structuredClone(emptyState);
     state.actions = [action("versioned")];
     expect(() => executeDomainCommand(state, { type: "set_action_status", actionId: "versioned", status: "completed", expectedVersion: 2, changedAt: "2026-09-08T10:00:00.000Z" })).toThrow("action_version_conflict");
+  });
+
+  it("pokazuje blokadę w Oczekujących dopiero w dniu sprawdzenia i czyści datę po odblokowaniu", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("waiting", { status: "blocked", blocker: "Czekam na odpowiedź", reviewOn: "2026-09-09", scheduledFor: "2026-09-01" })];
+    const blocked = state.actions[0]!;
+    expect(matchesActionListFilter(state, blocked, { view: "waiting", today: "2026-09-08" })).toBe(false);
+    expect(matchesActionListFilter(state, blocked, { view: "waiting", today: "2026-09-09" })).toBe(true);
+    expect(actionListSortValue(blocked, "waiting")).toBe("2026-09-09");
+    const unblocked = executeDomainCommand(state, { type: "set_action_status", actionId: blocked.id, status: "ready", expectedVersion: 1, changedAt: "2026-09-09T10:00:00.000Z" });
+    expect(unblocked.actions[0]).toMatchObject({ status: "ready", scheduledFor: "2026-09-01", version: 2 });
+    expect(unblocked.actions[0]?.reviewOn).toBeUndefined();
+    expect(matchesActionListFilter(unblocked, unblocked.actions[0]!, { view: "waiting", today: "2026-09-10" })).toBe(false);
+  });
+
+  it("pozwala przesunąć datę sprawdzenia bez wpisu o nowej blokadzie", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("blocked", { status: "blocked", blocker: "Czekam", reviewOn: "2026-09-09" })];
+    const updated = executeDomainCommand(state, { type: "set_action_status", actionId: "blocked", status: "blocked", blocker: "Czekam", reviewOn: "2026-09-12", expectedVersion: 1, changedAt: "2026-09-09T10:00:00.000Z" });
+    expect(updated.actions[0]).toMatchObject({ reviewOn: "2026-09-12", version: 2 });
+    expect(updated.progressEntries).toEqual([]);
+    expect(() => executeDomainCommand(state, { type: "set_action_status", actionId: "blocked", status: "blocked", blocker: "Czekam", reviewOn: "2026-02-30", changedAt: "2026-09-09T10:00:00.000Z" })).toThrow("invalid_action_review_date");
   });
 });

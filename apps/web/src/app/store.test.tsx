@@ -109,7 +109,7 @@ describe("StoreProvider", () => {
       expect(repository.createProjectRemote).toHaveBeenCalled();
       expect(repository.createLearningGoalRemote).toHaveBeenCalled();
       expect(repository.decideAIProposalRemote).toHaveBeenCalledWith("proposal-1", "approved");
-      expect(repository.completeReviewRemote).toHaveBeenCalledWith("workspace-1", "Decision");
+      expect(repository.completeReviewRemote).toHaveBeenCalledWith("workspace-1", "Decision", {}, 1);
       expect(repository.exportWorkspaceRemote).toHaveBeenCalledWith("workspace-1");
     });
   });

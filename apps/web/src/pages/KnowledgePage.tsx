@@ -12,7 +12,7 @@ import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
-import { knowledgeDefaultRelationMeaning } from "../domain/labels";
+import { knowledgeDefaultRelationMeaning, polishCount } from "../domain/labels";
 import { entityCardVariants } from "../components/ui-variants";
 import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { NavigationLink } from "../components/ContextNavigation";
@@ -159,7 +159,7 @@ export function KnowledgePage() {
         </div> : null}
       </div>
       <div className="knowledge-view-row">
-        <p className="results-summary" aria-live="polite">{results.length} {results.length === 1 ? "element" : "elementów"}{view !== "active" ? ` · ${view === "archived" ? "Archiwum" : "Kosz"}` : ""}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
+        <p className="results-summary" aria-live="polite">{polishCount(results.length, "element", "elementy", "elementów")}{view !== "active" ? ` · ${view === "archived" ? "Archiwum" : "Kosz"}` : ""}{kind !== "all" || goalFilter || areaFilter || normalized ? " · aktywne filtry" : ""}</p>
       </div>
       {loading || knowledgePage.isPending ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {results.length ? (

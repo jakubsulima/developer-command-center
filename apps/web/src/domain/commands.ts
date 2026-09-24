@@ -2,6 +2,7 @@ import { validateProjectParent } from "./projectHierarchy";
 import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 import { validateKnowledgeTarget } from "./knowledge";
+import { validateReviewOn } from "./blockerReview";
 
 export type InboxTriageIntent =
   | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
@@ -52,6 +53,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   actionId: string;
   status: ActionStatus;
   blocker?: string;
+  reviewOn?: string | null;
   expectedVersion?: number;
   changedAt: string;
 } | {
@@ -227,7 +229,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   reviewId: string;
   reviewType: "daily" | "weekly";
   templateVersion: number;
-  answers: Record<string, string>;
+  answers: Record<string, string | string[]>;
   summary: string;
   completedAt: string;
 } | {
@@ -604,13 +606,15 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (command.expectedVersion !== undefined && action.version !== command.expectedVersion) throw new Error("action_version_conflict");
     const blocker = command.blocker?.trim();
     if (command.status === "blocked" && !blocker) throw new Error("action_blocker_required");
-    if (action.status === command.status && (command.status !== "blocked" || action.blocker === blocker)) return state;
+    const reviewOn = command.status === "blocked" ? validateReviewOn(command.reviewOn === undefined ? action.reviewOn : command.reviewOn) : undefined;
+    if (action.status === command.status && (command.status !== "blocked" || (action.blocker === blocker && action.reviewOn === reviewOn))) return state;
     return {
       ...state,
       actions: state.actions.map((item) => item.id === command.actionId ? {
         ...item,
         status: command.status,
         blocker: command.status === "blocked" ? blocker : undefined,
+        reviewOn,
         completedAt: command.status === "completed" ? command.changedAt : undefined,
         skippedAt: command.status === "skipped" ? command.changedAt : undefined,
         cancelledAt: command.status === "cancelled" ? command.changedAt : undefined,
@@ -618,7 +622,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         version: item.version + 1,
         updatedAt: command.changedAt
       } : item),
-      progressEntries: action.goalId && (command.status === "blocked" || action.status === "blocked") ? [{
+      progressEntries: action.goalId && (command.status !== action.status || (command.status === "blocked" && blocker !== action.blocker)) && (command.status === "blocked" || action.status === "blocked") ? [{
         id: `${command.actionId}-${command.changedAt}`,
         goalId: action.goalId,
         actionId: action.id,

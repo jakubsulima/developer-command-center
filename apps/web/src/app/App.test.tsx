@@ -2,18 +2,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLocation } from "react-router-dom";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { emptyState } from "../data/empty";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
+beforeEach(() => vi.stubGlobal("indexedDB", undefined));
+afterEach(() => vi.unstubAllGlobals());
+
 function renderApp(path = "/") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function LocationProbe() {
+    const location = useLocation();
+    return <output data-testid="location-state">{JSON.stringify({ pathname: location.pathname, search: location.search, state: location.state })}</output>;
+  }
   return render(
     <MemoryRouter initialEntries={[path]}>
       <QueryClientProvider client={queryClient}>
-        <DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider>
+        <DemoAuthProvider><StoreProvider><App /><LocationProbe /></StoreProvider></DemoAuthProvider>
       </QueryClientProvider>
     </MemoryRouter>
   );
@@ -36,13 +44,13 @@ describe("goal-centric workspace", () => {
     renderApp("/goals");
     await screen.findByRole("heading", { name: "Cele" });
     await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Cel" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowy cel" });
+    const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
     expect(within(dialog).getByText("Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Nazwa Celu"));
     await user.paste("Uruchomić nowy produkt");
     await user.click(within(dialog).getByLabelText(/Jaki jest pierwszy krok/));
     await user.paste("Zbudować formularz startowy");
-    await user.click(within(dialog).getByRole("button", { name: "Utwórz cel" }));
+    await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
     expect(await screen.findByRole("heading", { name: "Uruchomić nowy produkt", level: 1 })).toBeInTheDocument();
     expect(screen.getAllByText("Zbudować formularz startowy").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/timer|rozpocznij fokus/i)).not.toBeInTheDocument();
@@ -69,6 +77,37 @@ describe("goal-centric workspace", () => {
     await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, Działania i wiedza o zdrowiu");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Projekt" }));
     expect(await screen.findByRole("heading", { name: "Zdrowie" })).toBeInTheDocument();
+  });
+
+  it("grupuje listę Projektów domyślnie i pomija puste kategorie", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.projectCategories = [
+      { id: "category-work", name: "Praca", color: "#60a5fa" },
+      { id: "category-empty", name: "Pusta", color: "#a78bfa" }
+    ];
+    state.areas = [
+      { id: "project-work", name: "Projekt pracy", description: "", categoryIds: ["category-work"], visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+      { id: "project-other", name: "Projekt bez kategorii", description: "", categoryIds: [], visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects");
+    await screen.findByRole("heading", { name: "Projekty", level: 1 });
+    expect(within(screen.getByRole("heading", { name: /Praca/, level: 2 })).getByText("1")).toBeInTheDocument();
+    expect(within(screen.getByRole("heading", { name: /Bez kategorii/, level: 2 })).getByText("1")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Pusta/ })).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".project-index-row")).toHaveLength(2);
+
+    await user.click(screen.getByLabelText("Więcej opcji widoku"));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Grupuj kategoriami" }));
+    expect(document.querySelectorAll(".project-category-heading")).toHaveLength(0);
+    expect(document.querySelectorAll(".project-index-row")).toHaveLength(2);
+    expect(within(screen.getByRole("heading", { name: "Projekt pracy" }).closest(".project-card")!).getByText("Praca")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Więcej opcji widoku"));
+    await user.selectOptions(screen.getByLabelText("Filtruj po kategorii"), "category-empty");
+    expect(screen.getByText("Brak projektów pasujących do tego widoku.")).toBeInTheDocument();
   });
 
   it("oddziela bieżące Cele i Działania od historii Projektu", async () => {
@@ -134,6 +173,129 @@ describe("goal-centric workspace", () => {
 
     await user.click(screen.getByRole("tab", { name: "Wiedza" }));
     expect(within(mobileNavigation).getByRole("button", { name: "Dodaj Wiedzę do Projektu Projekt z historią" })).toBeInTheDocument();
+  });
+
+  it("otwiera od razu formularz Działania z Przeglądu i zapisuje Projekt oraz wybrany Cel", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-create-action", name: "Projekt tworzenia", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    state.goals = [{ id: "goal-create-action", title: "Cel formularza", outcome: "Wybór Celu działa", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project-create-action" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    const app = renderApp("/projects/project-create-action");
+    await screen.findByRole("heading", { name: "Projekt tworzenia" });
+    await user.click(screen.getByRole("button", { name: /^Dodaj Działanie$/ }));
+    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" });
+    expect(within(dialog).getByText("Projekt tworzenia")).toBeInTheDocument();
+    await user.click(within(dialog).getByText("Szczegóły i przypisanie"));
+    await user.selectOptions(within(dialog).getByLabelText("Cel opcjonalnie"), "goal-create-action");
+    await user.type(within(dialog).getByLabelText("Co trzeba zrobić?"), "Przygotować pierwszy krok");
+    await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
+
+    expect(await screen.findByRole("link", { name: "Otwórz Działanie: Przygotować pierwszy krok" })).toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "Przygotować pierwszy krok", areaId: "project-create-action", goalId: "goal-create-action" })
+    ])));
+
+    app.unmount();
+    renderApp("/projects/project-create-action");
+    expect(await screen.findByRole("link", { name: "Otwórz Działanie: Przygotować pierwszy krok" })).toBeInTheDocument();
+  });
+
+  it("anulowanie formularza z Przeglądu nie zapisuje Działania", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-cancel-action", name: "Projekt bez zapisu", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    state.goals = [{ id: "goal-cancel-action", title: "Bieżący Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project-cancel-action" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-cancel-action");
+    await screen.findByRole("heading", { name: "Projekt bez zapisu" });
+    await user.click(screen.getByRole("button", { name: /^Dodaj Działanie$/ }));
+    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" });
+    await user.type(within(dialog).getByLabelText("Co trzeba zrobić?"), "Tylko szkic");
+    await user.click(within(dialog).getByRole("button", { name: "Anuluj" }));
+
+    expect(screen.queryByRole("dialog", { name: "Nowe Działanie w Projekcie" })).not.toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state.actions).toHaveLength(0));
+    expect(screen.getByRole("button", { name: /^Dodaj Działanie$/ })).toBeInTheDocument();
+  });
+
+  it("bez bieżącego Celu prowadzi do karty Celów zamiast tworzyć Cel automatycznie", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-first-goal", name: "Projekt bez Celu", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-first-goal");
+    await screen.findByRole("heading", { name: "Projekt bez Celu" });
+    expect(screen.getByRole("heading", { name: "Ustal pierwszy Cel" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Przejdź do Celów" }));
+
+    expect(screen.getByRole("tab", { name: "Cele" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Cele" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Nowy Cel w Projekcie" })).not.toBeInTheDocument();
+  });
+
+  it("otwiera wskazane Działanie z Przeglądu i wraca do tego Projektu", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project-open-action", name: "Projekt powrotu", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+    state.actions = [{ id: "action-open-action", version: 1, title: "Wskazany krok", detail: "", areaId: "project-open-action", status: "ready", position: 0, isNext: true, pinnedToToday: false, checklist: [] }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-open-action");
+    await screen.findByRole("heading", { name: "Projekt powrotu" });
+    await user.click(screen.getByRole("link", { name: "Otwórz Działanie: Wskazany krok" }));
+    expect(await screen.findByRole("heading", { name: "Wskazany krok", level: 1 })).toBeInTheDocument();
+    const routeState = JSON.parse(screen.getByTestId("location-state").textContent ?? "{}");
+    expect(routeState).toMatchObject({ pathname: "/actions/action-open-action", state: { returnTo: "/projects/project-open-action" } });
+    expect(routeState.state.breadcrumbs).toContainEqual({ label: "Projekt powrotu", to: "/projects/project-open-action" });
+    await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Projekt powrotu" }));
+
+    expect(await screen.findByRole("heading", { name: "Projekt powrotu" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Przegląd" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("odświeża sygnał po zmianie statusu i nie tworzy go dla Archiwum ani Kosza", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.areas = [
+      { id: "project-signals", name: "Projekt sygnałów", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+      { id: "project-archived-signal", name: "Projekt archiwalny", description: "", visibility: "archived", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" },
+      { id: "project-trashed-signal", name: "Projekt w koszu", description: "", visibility: "trashed", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }
+    ];
+    state.actions = [
+      { id: "action-signals", version: 1, title: "Odblokować raport", detail: "", areaId: "project-signals", status: "blocked", blocker: "Czekam na dane", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
+      { id: "action-archived-signal", version: 1, title: "Ukryta blokada", detail: "", areaId: "project-archived-signal", status: "blocked", blocker: "Archiwum", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
+      { id: "action-trashed-signal", version: 1, title: "Usunięta blokada", detail: "", areaId: "project-trashed-signal", status: "blocked", blocker: "Kosz", position: 0, isNext: false, pinnedToToday: false, checklist: [] }
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+
+    renderApp("/projects/project-signals");
+    await screen.findByRole("heading", { name: "Projekt sygnałów" });
+    expect(screen.getByText("Czekam na dane")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Działania" }));
+    const row = document.querySelector('[data-action-id="action-signals"]') as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Zmień status: Zablokowane — Odblokować raport" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
+    await user.click(screen.getByRole("tab", { name: "Przegląd" }));
+    expect(await screen.findByText("W toku · bez wyznaczonego terminu.")).toBeInTheDocument();
+    expect(screen.queryByText("Czekam na dane")).not.toBeInTheDocument();
+
+    await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Projekty" }));
+    await screen.findByRole("heading", { name: "Projekty", level: 1 });
+    const activeCard = (await screen.findByRole("heading", { name: "Projekt sygnałów" })).closest(".project-card") as HTMLElement;
+    expect(within(activeCard).getByLabelText("Najbliższy ruch: Możesz zrobić teraz — Odblokować raport")).toBeInTheDocument();
+    expect(within(activeCard).getByText("Działania")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Więcej opcji widoku"));
+    await user.click(screen.getByRole("menuitemradio", { name: "Archiwum" }));
+    const archivedCard = (await screen.findByRole("heading", { name: "Projekt archiwalny" })).closest(".project-card") as HTMLElement;
+    expect(within(archivedCard).queryByLabelText(/Najbliższy ruch/)).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("Więcej opcji widoku"));
+    await user.click(screen.getByRole("menuitemradio", { name: "Kosz" }));
+    const trashedCard = (await screen.findByRole("heading", { name: "Projekt w koszu" })).closest(".project-card") as HTMLElement;
+    expect(within(trashedCard).queryByLabelText(/Najbliższy ruch/)).not.toBeInTheDocument();
   });
 
   it("udostępnia kompletne menu zarządzania Projektem", async () => {

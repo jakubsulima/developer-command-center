@@ -50,6 +50,24 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(await screen.findByRole("heading", { name: "Cel Nawigacji" })).toBeInTheDocument();
   });
 
+  it("nie zapętla ścieżki przy przejściu Projekt → Wiedza → Projekt → Wiedza", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/projects/nav-project?view=knowledge");
+
+    await user.click(await screen.findByRole("link", { name: "Otwórz Wiedzę: Wiedza Nawigacji" }));
+    expect(await screen.findByRole("heading", { name: "Wiedza Nawigacji" })).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: /Projekt Nawigacji.*przez Działanie/ }));
+    expect(await screen.findByRole("heading", { name: "Projekt Nawigacji" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).not.toHaveTextContent("Wiedza Nawigacji");
+
+    await user.click(screen.getByRole("tab", { name: "Wiedza" }));
+    await user.click(screen.getByRole("link", { name: "Otwórz Wiedzę: Wiedza Nawigacji" }));
+    const trail = screen.getByRole("navigation", { name: "Ścieżka kontekstu" });
+    expect(within(trail).getAllByRole("link", { name: "Projekt Nawigacji" })).toHaveLength(1);
+    expect(trail).not.toHaveTextContent("Wiedza Nawigacji");
+  });
+
   it("przekierowuje stary adres Działania przez replace do nowej trasy", async () => {
     seedNavigationState();
     renderApp("/goals/nav-goal?action=nav-action");
@@ -66,7 +84,8 @@ describe("spójna nawigacja kontekstowa", () => {
     renderApp("/actions/nav-action");
 
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Blokada/ }).parentElement).toHaveTextContent("Czekam na decyzję");
+    expect(screen.getByRole("heading", { name: "Co zatrzymuje to Działanie?" }).closest("section")).toHaveTextContent("Czekam na decyzję");
+    expect(screen.getAllByText("Czekam na decyzję")).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Edytuj" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj Działanie" });
     await user.clear(within(edit).getByLabelText("Nazwa"));
