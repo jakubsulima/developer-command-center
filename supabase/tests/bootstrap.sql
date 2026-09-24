@@ -1,5 +1,18 @@
 create schema if not exists auth;
 create schema if not exists extensions;
+-- Minimal Storage surface for migrations fetched from the linked project.
+create schema if not exists storage;
+create table storage.buckets (
+  id text primary key, name text not null, public boolean not null default false,
+  file_size_limit bigint, allowed_mime_types text[]
+);
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(), bucket_id text not null, name text not null
+);
+alter table storage.objects enable row level security;
+create function storage.foldername(path text) returns text[] language sql immutable as $$
+  select string_to_array(path, '/');
+$$;
 
 do $$
 begin

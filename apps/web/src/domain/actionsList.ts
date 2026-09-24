@@ -1,7 +1,8 @@
 import type { AppState, GoalAction } from "./types";
 import { isActionInTodayProjection, localDateForTimeZone } from "./activity";
+import { isWaitingAction } from "./blockerReview";
 
-export const actionListViews = ["open", "ready", "in_progress", "testing", "blocked", "completed", "cancelled", "skipped", "today", "overdue", "unscheduled"] as const;
+export const actionListViews = ["open", "ready", "in_progress", "testing", "blocked", "waiting", "completed", "cancelled", "skipped", "today", "overdue", "unscheduled"] as const;
 export type ActionListView = typeof actionListViews[number];
 
 export interface ActionListFilter {
@@ -20,6 +21,7 @@ export const actionListViewLabels: Record<ActionListView, string> = {
   overdue: "Zaległe",
   unscheduled: "Bez terminu",
   blocked: "Zablokowane",
+  waiting: "Oczekujące",
   completed: "Ukończone",
   cancelled: "Anulowane",
   skipped: "Pominięte",
@@ -59,6 +61,7 @@ export function matchesActionListFilter(state: AppState, action: GoalAction, fil
   if (filter.view === "cancelled") return action.status === "cancelled";
   if (filter.view === "skipped") return action.status === "skipped";
   if (filter.view === "ready" || filter.view === "in_progress" || filter.view === "testing" || filter.view === "blocked") return action.status === filter.view;
+  if (filter.view === "waiting") return isWaitingAction(action, today);
   if (!open) return false;
   if (filter.view === "today") return isActionInTodayProjection(action, today);
   if (filter.view === "overdue") return Boolean(action.scheduledFor && action.scheduledFor < today);
@@ -70,6 +73,7 @@ export function actionListSortValue(action: GoalAction, view: ActionListView) {
   if (view === "completed") return action.completedAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
   if (view === "cancelled") return action.cancelledAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
   if (view === "skipped") return action.skippedAt ?? action.updatedAt ?? "0000-01-01T00:00:00.000Z";
+  if (view === "waiting") return action.reviewOn ?? "9999-12-31";
   return action.scheduledFor ?? "9999-12-31";
 }
 

@@ -20,7 +20,7 @@ import type { GoalAction } from "../domain/types";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 import { resolveRoutineTitle } from "../domain/actionPresentation";
 
-const actionStatusViews = ["open", "ready", "in_progress", "testing", "blocked", "completed", "cancelled", "skipped"] as const satisfies readonly ActionListView[];
+const actionStatusViews = ["open", "ready", "in_progress", "testing", "waiting", "blocked", "completed", "cancelled", "skipped"] as const satisfies readonly ActionListView[];
 const actionScheduleViews = ["open", "today", "overdue", "unscheduled"] as const satisfies readonly ActionListView[];
 type ActionStatusView = typeof actionStatusViews[number];
 type ActionScheduleView = typeof actionScheduleViews[number];
@@ -57,6 +57,7 @@ function resultCountLabel(count: number, view: ActionListView) {
   if (view === "overdue") return polishCount(count, "zaległe działanie", "zaległe działania", "zaległych działań");
   if (view === "unscheduled") return polishCount(count, "działanie bez terminu", "działania bez terminu", "działań bez terminu");
   if (view === "blocked") return polishCount(count, "zablokowane działanie", "zablokowane działania", "zablokowanych działań");
+  if (view === "waiting") return polishCount(count, "blokada do sprawdzenia", "blokady do sprawdzenia", "blokad do sprawdzenia");
   if (view === "completed") return polishCount(count, "ukończone działanie", "ukończone działania", "ukończonych działań");
   if (view === "cancelled") return polishCount(count, "anulowane działanie", "anulowane działania", "anulowanych działań");
   return polishCount(count, "pominięte działanie", "pominięte działania", "pominiętych działań");
@@ -183,14 +184,14 @@ export function ActionsPage() {
     focusAfterMutation.current = { actionId: action.id, index: Math.max(0, items.findIndex((item) => item.id === action.id)) };
   };
 
-  const changeActionStatus = async (action: GoalAction, status: ProjectActionStatus, blocker?: string) => {
-    const previous = { status: action.status, blocker: action.blocker };
+  const changeActionStatus = async (action: GoalAction, status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => {
+    const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     rememberFocus(action);
     return mutation.run(`actions-status:${action.id}`, async () => {
-      await setActionStatus(action.id, status, blocker, action.version);
+      await setActionStatus(action.id, status, blocker, action.version, reviewOn);
       await refreshActions();
       notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: async () => {
-        await setActionStatus(action.id, previous.status, previous.blocker, action.version + 1);
+        await setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null);
         await refreshActions();
         setFocusRequestId(action.id);
       }});
@@ -211,7 +212,7 @@ export function ActionsPage() {
               </button>
             ))}
           </div>
-          <Button className="actions-filter-toggle" variant="ghost" aria-expanded={filtersOpen} aria-controls="actions-context-filters" onClick={() => setFiltersOpen((open) => !open)}><Filter /><span>Filtry</span>{filterCount ? <small aria-label={`${filterCount} aktywne filtry`}>{filterCount}</small> : null}<ChevronDown className={filtersOpen ? "expanded" : ""} aria-hidden="true" /></Button>
+          <Button className="actions-filter-toggle" variant="ghost" aria-label={filterCount ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} aria-expanded={filtersOpen} aria-controls="actions-context-filters" onClick={() => setFiltersOpen((open) => !open)}><Filter /><span>Filtry</span>{filterCount ? <small aria-hidden="true">{filterCount}</small> : null}<ChevronDown className={filtersOpen ? "expanded" : ""} aria-hidden="true" /></Button>
         </div>
         {filtersOpen ? <div className="actions-filter-panel" id="actions-context-filters">
           {statusView === "open" ? <div className="actions-filter-section"><span className="actions-filter-label">Termin</span><div className="actions-date-filters" role="group" aria-label="Termin Działań">
@@ -227,7 +228,7 @@ export function ActionsPage() {
       <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i cel muszą pasować jednocześnie.</small> : null}</div>
       {loading || actionsPage.isPending ? <ListSkeleton rows={5} label="Ładowanie Działań" /> : null}
       {actionsPage.isError ? <Panel className="actions-error" role="alert"><RefreshCw /><div><strong>Nie udało się pobrać Działań.</strong><p>Spróbuj ponownie; bieżące filtry pozostaną zachowane.</p></div><Button onClick={retry}>Spróbuj ponownie</Button></Panel> : null}
-      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={hasFilters ? "Zmień termin, Projekt lub Cel albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
+      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, Projekt lub Cel albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
       {items.length ? <div className="actions-groups" aria-label={`Lista: ${actionListViewLabels[view]}`}>
         {groupedItems.map((group) => <section className="actions-group" key={group.key} aria-label={group.label}>{group.label ? <h2><span>{group.label}</span><small>{group.items.length}</small></h2> : null}<div className="actions-list" role="list">
         {group.items.map((action) => {
@@ -240,7 +241,7 @@ export function ActionsPage() {
       </div></section>)}</div> : null}
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
-      {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker) => action ? changeActionStatus(action, status, blocker) : false} />; })()}
+      {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
     </AppShell>
   );
 }

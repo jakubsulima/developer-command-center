@@ -75,4 +75,26 @@ describe("lista Działań", () => {
     state.actions = [action("versioned")];
     expect(() => executeDomainCommand(state, { type: "set_action_status", actionId: "versioned", status: "completed", expectedVersion: 2, changedAt: "2026-09-08T10:00:00.000Z" })).toThrow("action_version_conflict");
   });
+
+  it("pokazuje blokadę w Oczekujących dopiero w dniu sprawdzenia i czyści datę po odblokowaniu", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("waiting", { status: "blocked", blocker: "Czekam na odpowiedź", reviewOn: "2026-09-09", scheduledFor: "2026-09-01" })];
+    const blocked = state.actions[0]!;
+    expect(matchesActionListFilter(state, blocked, { view: "waiting", today: "2026-09-08" })).toBe(false);
+    expect(matchesActionListFilter(state, blocked, { view: "waiting", today: "2026-09-09" })).toBe(true);
+    expect(actionListSortValue(blocked, "waiting")).toBe("2026-09-09");
+    const unblocked = executeDomainCommand(state, { type: "set_action_status", actionId: blocked.id, status: "ready", expectedVersion: 1, changedAt: "2026-09-09T10:00:00.000Z" });
+    expect(unblocked.actions[0]).toMatchObject({ status: "ready", scheduledFor: "2026-09-01", version: 2 });
+    expect(unblocked.actions[0]?.reviewOn).toBeUndefined();
+    expect(matchesActionListFilter(unblocked, unblocked.actions[0]!, { view: "waiting", today: "2026-09-10" })).toBe(false);
+  });
+
+  it("pozwala przesunąć datę sprawdzenia bez wpisu o nowej blokadzie", () => {
+    const state = structuredClone(emptyState);
+    state.actions = [action("blocked", { status: "blocked", blocker: "Czekam", reviewOn: "2026-09-09" })];
+    const updated = executeDomainCommand(state, { type: "set_action_status", actionId: "blocked", status: "blocked", blocker: "Czekam", reviewOn: "2026-09-12", expectedVersion: 1, changedAt: "2026-09-09T10:00:00.000Z" });
+    expect(updated.actions[0]).toMatchObject({ reviewOn: "2026-09-12", version: 2 });
+    expect(updated.progressEntries).toEqual([]);
+    expect(() => executeDomainCommand(state, { type: "set_action_status", actionId: "blocked", status: "blocked", blocker: "Czekam", reviewOn: "2026-02-30", changedAt: "2026-09-09T10:00:00.000Z" })).toThrow("invalid_action_review_date");
+  });
 });

@@ -31,6 +31,8 @@ describe("AIGoalReview", () => {
     expect(humanizeEntityReferences("Brak missing_next_action mimo 1 completed7Days.", labels))
       .toBe("Brak następnego Działania mimo jednego Działania ukończonego w ostatnich 7 dniach.");
     expect(humanizeEntityReferences("Sygnały stallują postęp.", labels)).toBe("Sygnały wstrzymują postęp.");
+    expect(humanizeEntityReferences("Dodaj kryteria dla celu 7876975f.", [["7876975f-a47d-4049-a295-b4f2196d732b", "Płynna praca w terminalu"]]))
+      .toBe("Dodaj kryteria dla celu „Płynna praca w terminalu”.");
   });
 
   it("wymaga świadomej zgody i pokazuje deterministyczną symulację", async () => {
@@ -88,6 +90,7 @@ describe("AIGoalReview", () => {
     await user.dblClick(within(draft).getByRole("button", { name: "Zatwierdź i dodaj" }));
     expect(await within(screen.getByRole("region", { name: "Na dziś" })).findByRole("link", { name: "Krok ze Startu" })).toBeInTheDocument();
     expect(screen.getAllByText("Krok ze Startu")).toHaveLength(1);
-    expect(screen.getByText("Dane Celów zmieniły się od tej analizy.")).toBeInTheDocument();
+    expect(screen.getByText("Analiza wymaga odświeżenia")).toBeInTheDocument();
+    expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
   });
 });

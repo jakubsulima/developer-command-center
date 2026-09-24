@@ -1,5 +1,13 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Nowe funkcje — plan z 23 września 2026
+
+[Plan rozwoju funkcjonalnego: od decyzji do działania](./2026-09-23-functional-improvements-plan.md)
+opisuje plan tygodnia, powrót do blokady, podpowiedzi istniejącej Wiedzy,
+ulubione widoki oraz warunkowe powtórki nauki. Zawiera kolejność, pierwsze
+wersje, zależności, kryteria odbioru i ryzyka.
+Status: propozycja, implementacja nierozpoczęta.
+
 ## Czytelne Działania — plan z 20 września 2026
 
 [Plan wdrożenia spójnych i czytelnych Działań](./2026-09-20-actions-experience-remediation.md)

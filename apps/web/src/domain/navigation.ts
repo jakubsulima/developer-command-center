@@ -57,9 +57,16 @@ function readBreadcrumbs(value: unknown): NavigationBreadcrumb[] {
 export function breadcrumbsForPage(state: unknown, fallback: NavigationBreadcrumb[], current: NavigationBreadcrumb) {
   const incoming = readNavigationBreadcrumbs(state);
   const base = incoming?.length ? incoming : fallback;
-  const last = base.at(-1);
-  const isCurrent = last?.label === current.label || (last?.to && current.to && last.to === current.to);
-  return isCurrent ? base : [...base, current];
+  const trail: NavigationBreadcrumb[] = [];
+  for (const breadcrumb of [...base, current]) {
+    // A relation can lead back to an entity already in the trail. Treat that
+    // visit as returning to the ancestor instead of growing a circular path.
+    const route = breadcrumb.to?.split(/[?#]/, 1)[0];
+    const previous = route ? trail.findIndex((item) => item.to?.split(/[?#]/, 1)[0] === route) : -1;
+    if (previous >= 0) trail.splice(previous);
+    trail.push(breadcrumb);
+  }
+  return trail;
 }
 
 const restoreKey = (address: string) => `command-navigation-restore-v1:${address}`;

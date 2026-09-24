@@ -11,7 +11,7 @@ export const aiGoalStatusLabels: Record<AIGoalStatus, string> = {
   on_track: "na dobrej drodze",
   attention: "wymaga uwagi",
   stuck: "zablokowany",
-  insufficient_data: "brak danych"
+  insufficient_data: "ocena niepewna"
 };
 
 export function aiGoalReviewErrorCopy(code?: string) {

@@ -45,4 +45,14 @@ describe("adapter listy Działań Supabase", () => {
     expect(page).toEqual({ items: [], nextCursor: undefined });
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it("pobiera kolejkę oczekujących z datami sprawdzenia", async () => {
+    const rpc = vi.fn(async () => ({ data: { items: [{ id: "action-1", title: "Czekam", status: "blocked", reviewOn: "2026-09-09" }], nextCursor: null }, error: null }));
+    const inQuery = vi.fn(async () => ({ data: [{ id: "action-1", review_on: "2026-09-09" }], error: null }));
+    getClient.mockReturnValue({ rpc, from: vi.fn(() => ({ select: () => ({ in: inQuery }) })) });
+    const page = await createSupabaseWorkspaceRepository().loadPage({ workspaceId: "workspace-1", collection: "actions", pageSize: 30, actionFilter: { view: "waiting", today: "2026-09-09" } });
+    expect(rpc).toHaveBeenCalledWith("get_waiting_actions_page", expect.objectContaining({ target_view: "waiting", target_today: "2026-09-09" }));
+    expect(inQuery).toHaveBeenCalledWith("id", ["action-1"]);
+    expect(page.items[0]).toMatchObject({ id: "action-1", reviewOn: "2026-09-09" });
+  });
 });

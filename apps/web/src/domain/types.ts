@@ -103,6 +103,7 @@ export interface GoalAction {
   areaId?: string;
   status: ActionStatus;
   blocker?: string;
+  reviewOn?: string;
   position: number;
   isNext: boolean;
   pinnedToToday: boolean;
@@ -337,7 +338,7 @@ export interface ReviewRecord {
   id: string;
   type: "daily" | "weekly";
   templateVersion: number;
-  answers: Record<string, string>;
+  answers: Record<string, string | string[]>;
   summary: string;
   completedAt: string;
 }

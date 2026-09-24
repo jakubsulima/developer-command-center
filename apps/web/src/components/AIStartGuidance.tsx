@@ -105,8 +105,8 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
       {aiGoalReview && busy ? <div className="ai-start-refreshing" role="status"><RefreshCw className="spin" />Odświeżam analizę…</div> : null}
       {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{aiGoalReviewErrorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{!terminalErrors.has(aiGoalReviewError.code) ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(Boolean(aiGoalReview))}>Spróbuj ponownie</Button> : null}</div> : null}
 
-      {aiGoalReview ? <div className="ai-start-result">
-        {aiGoalReview.stale ? <div className="ai-review-stale"><CalendarClock />Dane Celów zmieniły się od tej analizy.</div> : null}
+      {aiGoalReview?.stale ? <div className="ai-start-stale-summary" role="status"><CalendarClock /><div><strong>Analiza wymaga odświeżenia</strong><span>Dane Celów zmieniły się od {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}.</span><Link to="/review">Zobacz poprzedni wynik</Link></div></div> : null}
+      {aiGoalReview && !aiGoalReview.stale ? <div className="ai-start-result">
         <div className="ai-start-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{aiGoalStatusLabels[aiGoalReview.review.overallStatus]}</Badge><span>{polishCount(aiGoalReview.analyzedGoalIds.length, "przeanalizowany Cel", "przeanalizowane Cele", "przeanalizowanych Celów")}</span></div>
         <div className="ai-start-direction"><h3>{humanize(aiGoalReview.review.headline)}</h3>{summary ? <p aria-label={summary.truncated ? summary.full : undefined}>{summary.visible}</p> : null}</div>
         {selection?.recommendation ? <article className="ai-start-recommendation">

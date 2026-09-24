@@ -29,7 +29,7 @@ describe("lista wszystkich Działań", () => {
     renderApp();
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Samodzielny krok" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Filtry" }));
+    await user.click(screen.getByRole("button", { name: "Filtry Działań" }));
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "area-finanse");
     await user.selectOptions(screen.getByLabelText("Filtr Celu"), "");
     expect(await screen.findByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe("lista wszystkich Działań", () => {
       expect(within(statusTabs).getByRole("tab", { name: label })).toBeInTheDocument();
     }
 
-    await user.click(screen.getByRole("button", { name: "Filtry" }));
+    await user.click(screen.getByRole("button", { name: "Filtry Działań" }));
     await user.click(screen.getByRole("button", { name: "Bez terminu" }));
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=unscheduled");
     expect(await screen.findByRole("link", { name: "Krok bez terminu" })).toBeInTheDocument();

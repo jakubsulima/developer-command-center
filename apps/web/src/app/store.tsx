@@ -520,8 +520,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    async setActionStatus(actionId, status, blocker, requestedVersion) {
+    async setActionStatus(actionId, status, blocker, requestedVersion, reviewOn) {
       let expectedVersion = requestedVersion ?? 1;
+      let persistedReviewOn = reviewOn;
       let failed = false;
       await mutationCoordinator.run({
         key: `action:${actionId}`,
@@ -529,7 +530,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const previous = stateRef.current;
           const previousAction = previous.actions.find((action) => action.id === actionId);
           expectedVersion = requestedVersion ?? previousAction?.version ?? 1;
-          const command = { type: "set_action_status", actionId, status, blocker, expectedVersion, changedAt: new Date().toISOString() } as const;
+          if (status !== "blocked" && previousAction?.reviewOn && reviewOn === undefined) persistedReviewOn = null;
+          const command = { type: "set_action_status", actionId, status, blocker, reviewOn, expectedVersion, changedAt: new Date().toISOString() } as const;
           const nextState = executeDomainCommand(previous, command);
           const previousProgressIds = new Set(previous.progressEntries.map((entry) => entry.id));
           const optimisticProgressIds = nextState.progressEntries.filter((entry) => !previousProgressIds.has(entry.id)).map((entry) => entry.id);
@@ -546,7 +548,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist: async () => {
           if (mode === "demo") return;
           try {
-            await runRemote(async () => (await loadRepository()).setActionStatusRemote(actionId, expectedVersion, status, blocker), `action:${actionId}`);
+            await runRemote(async () => persistedReviewOn === undefined
+              ? (await loadRepository()).setActionStatusRemote(actionId, expectedVersion, status, blocker)
+              : (await loadRepository()).setActionStatusRemote(actionId, expectedVersion, status, blocker, persistedReviewOn), `action:${actionId}`);
           } catch (error) {
             failed = true;
             throw error;
@@ -1052,10 +1056,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // The coordinator keeps the keyed error visible without leaking a rejected click promise.
       }
     },
-    async completeReview(summary = "", type = "weekly", answers = {}) {
+    async completeReview(summary = "", type = "weekly", answers = {}, templateVersion = 1) {
       const completedAt = new Date().toISOString();
       const reviewId = crypto.randomUUID();
-      const command = { type: "complete_review", reviewId, reviewType: type, templateVersion: 1, answers, summary, completedAt } as const;
+      const command = { type: "complete_review", reviewId, reviewType: type, templateVersion, answers, summary, completedAt } as const;
       const current = await ensureWorkspaceState();
       try {
         await mutationCoordinator.run({
@@ -1072,7 +1076,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
           },
           persist: async () => {
-            if (mode !== "demo" && current.workspaceId && user) await runRemote(async () => await (await loadRepository()).completeReviewRemote(stateRef.current.workspaceId!, summary), `review:${reviewId}`);
+            if (mode !== "demo" && current.workspaceId && user) await runRemote(async () => await (await loadRepository()).completeReviewRemote(stateRef.current.workspaceId!, summary, answers, templateVersion), `review:${reviewId}`);
           }
         });
         return true;

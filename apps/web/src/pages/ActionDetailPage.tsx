@@ -46,19 +46,19 @@ export function ActionDetailPage() {
     });
   };
   const complete = async () => {
-    const previous = { status: action.status, blocker: action.blocker };
+    const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     await mutation.run(`action-detail:${action.id}`, async () => {
       await setActionStatus(action.id, "completed");
-      if (!state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result")) notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(action.id, previous.status, previous.blocker), action: { label: "Dodaj rezultat", onClick: () => setResultOpen(true) } });
+      if (!state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result")) notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: { label: "Dodaj rezultat", onClick: () => setResultOpen(true) } });
     });
   };
   const key = `action-detail:${action.id}`;
   const statusKey = `action-detail-status:${action.id}`;
-  const changeStatus = async (status: ProjectActionStatus, blocker?: string) => {
-    const previous = { status: action.status, blocker: action.blocker };
+  const changeStatus = async (status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => {
+    const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     return mutation.run(statusKey, async () => {
-      await setActionStatus(action.id, status, blocker);
-      notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker) });
+      await setActionStatus(action.id, status, blocker, action.version, reviewOn);
+      notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null) });
     });
   };
   const editKey = `action-detail-edit:${action.id}`;
@@ -90,7 +90,8 @@ export function ActionDetailPage() {
         <section className="action-description-block" aria-labelledby="action-description-title"><h2 className="detail-kicker" id="action-description-title">Opis</h2>{action.detail ? <p>{action.detail}</p> : <p className="muted-copy">Brak opisu. Szczegóły możesz dodać podczas edycji Działania.</p>}</section>
         {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
         <div className="action-detail-actions">
-          {action.status !== "completed" ? <Button variant="primary" loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ działanie</Button> : null}
+          {action.status === "blocked" ? <Button variant="primary" onClick={() => setStatusView("statuses")}>Zdecyduj co dalej</Button> : null}
+          {action.status !== "completed" ? <Button variant={action.status === "blocked" ? "secondary" : "primary"} loading={mutation.isBusy(key)} onClick={() => void complete()}><Check />Ukończ działanie</Button> : null}
           {state.actions.some((candidate) => candidate.id === action.id) ? <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button> : null}
         </div>
       </main>
