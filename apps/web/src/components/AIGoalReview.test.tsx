@@ -38,6 +38,7 @@ describe("AIGoalReview", () => {
   it("wymaga świadomej zgody i pokazuje deterministyczną symulację", async () => {
     const user = userEvent.setup();
     renderReview();
+    await user.click(await screen.findByRole("tab", { name: "AI" }));
     await screen.findByRole("heading", { name: "Przegląd Celów z AI" });
     await user.click(screen.getByRole("button", { name: "Przeanalizuj moje Cele" }));
     const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
@@ -52,6 +53,7 @@ describe("AIGoalReview", () => {
   it("draft AI nie zapisuje się przed zatwierdzeniem", async () => {
     const user = userEvent.setup();
     renderReview();
+    await user.click(await screen.findByRole("tab", { name: "AI" }));
     await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje Cele" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
     const add = await screen.findAllByRole("button", { name: "Dodaj Działanie" });

@@ -422,6 +422,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/review");
     expect(await screen.findByRole("heading", { name: "Podsumowanie tygodnia" })).toBeInTheDocument();
     expect(screen.getByText("Podsumowanie systemowe")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("tab", { name: "Sugestie" }));
     expect(screen.getByRole("heading", { name: "Co warto zrobić dalej" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Zamknij tydzień" })).toBeEnabled();
   });
@@ -435,8 +436,9 @@ describe("regresje nowego modelu Celów", () => {
     expect(action).toBeDefined();
     localStorage.setItem("command-center-state-v1", JSON.stringify(state));
     renderApp("/review");
+    await user.click(await screen.findByRole("tab", { name: "Plan" }));
     await screen.findByRole("heading", { name: "Rozłóż kroki na kolejny tydzień" });
-    await user.click(screen.getByText("Wybierz Cele"));
+    await user.click(screen.getByText("Wybierz zakres planu"));
     await user.click(screen.getByRole("checkbox", { name: goal!.title }));
     const day = screen.getByRole("combobox", { name: `Dzień dla Działania: ${action!.title}` });
     const nextDate = within(day).getAllByRole("option").find((option) => option.getAttribute("value")?.startsWith("20"))?.getAttribute("value");
@@ -445,6 +447,7 @@ describe("regresje nowego modelu Celów", () => {
     await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Zapisz terminy" })).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Zamknij tydzień" }));
+    await user.click(screen.getByRole("tab", { name: "Historia" }));
     expect(await screen.findByText(`Kierunek: ${goal!.title}`)).toBeInTheDocument();
   });
 
