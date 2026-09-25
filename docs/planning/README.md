@@ -1,5 +1,19 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Podsumowanie tygodnia i Przegląd AI — plan z 25 września 2026
+
+[Plan wykonawczy poprawy Podsumowania](./2026-09-25-weekly-review-improvements-handoff.md)
+opisuje ustawienia zakresu analizy i czasu cache, nawigację do zakładki AI, aktualność wyniku,
+uproszczenie sugestii i zapisu tygodnia oraz kryteria jakości analizy.
+Status: do wdrożenia, bez zmian funkcjonalnych w ramach samego planu.
+
+## Płatne OpenAI API — plan z 24 września 2026
+
+[Plan podłączenia OpenAI API](./2026-09-24-openai-api-integration.md) opisuje
+adapter dla obecnych funkcji AI, zgodny z nimi kontrakt, kontrolę kosztu,
+staging, odbiór i możliwość wycofania. Status: implementacja lokalna ukończona;
+konfiguracja klucza i próby na stagingu pozostają do wykonania.
+
 ## Nowe funkcje — plan z 23 września 2026
 
 [Plan rozwoju funkcjonalnego: od decyzji do działania](./2026-09-23-functional-improvements-plan.md)

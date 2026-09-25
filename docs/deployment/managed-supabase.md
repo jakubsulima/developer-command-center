@@ -119,17 +119,26 @@ Następny krok implementacyjny to podanie wygenerowanego `Database` jako typu
 generycznego do `createClient`. Typy powinny być generowane po migracji staging,
 nie ręcznie przepisywane.
 
-## 7. Przegląd AI z NVIDIA
+## 7. Funkcje AI z OpenAI
 
 Przegląd AI jest funkcją opt-in na ekranie tygodnia. Frontend wysyła tylko ID
 Workspace i sesyjny JWT; funkcja Edge pobiera ograniczony kontekst przez RLS.
 Pełny prompt, surowa odpowiedź i klucze nie są zapisywane w bazie ani logach.
 
-Skopiuj nazwy z `supabase/functions/.env.example` do sekretów projektu staging.
-Pierwszym kandydatem stagingowym jest `meta/muse-glimmer-30b` w trybie
-`NVIDIA_STRUCTURED_MODE=prompt`, ponieważ hostowany endpoint nie deklaruje
-natywnego structured output. Ustaw prawdziwy `NVIDIA_API_KEY`. Zarządzany
-runtime przekazuje funkcji klucze projektu automatycznie przez
+Skopiuj `supabase/functions/.env.example` do ignorowanego przez Git pliku
+`supabase/functions/.env.local`. Wpisz tam prawdziwy `OPENAI_API_KEY` z osobnego
+projektu OpenAI dla stagingu i ustaw `AI_PROVIDER=openai`. Domyślnym modelem dla
+obu funkcji jest `gpt-6-luna`; dla innego modelu wpisz także odpowiednie ceny
+tokenów do zmiennych `OPENAI_*_USD_PER_MTOK`. `AI_WORKSPACE_DAILY_BUDGET_USD`
+i `AI_PROJECT_MONTHLY_BUDGET_USD` ograniczają koszt rezerwowany przed każdym
+żądaniem. Przegląd Celów pozostaje uruchamiany ręcznie. Maksymalny czas
+ponownego użycia wyniku wybiera się w Ustawieniach Workspace (24, 72 albo 168
+godzin); cache nie jest konfigurowany zmienną środowiskową. `AI_PROMPT_VERSION`
+nadpisuje wersję z kodu, więc ustaw ją na `5` w sekretach stagingu po wdrożeniu
+nowego promptu. Do `supabase/functions/.env.local` skopiuj wartość z
+`.env.example` i zaktualizuj ją przed użyciem `supabase secrets set`.
+Staging i produkcja powinny używać osobnych kluczy i projektów OpenAI.
+Zarządzany runtime przekazuje funkcji klucze projektu automatycznie przez
 `SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS` (z fallbackiem do legacy
 `SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`), więc nie kopiuj ich do tego
 pliku. Żadna z tych wartości nie może trafić do `apps/web/.env.local`.
@@ -138,12 +147,20 @@ pliku. Żadna z tych wartości nie może trafić do `apps/web/.env.local`.
 pnpm --filter @command/web exec supabase secrets set --env-file "$PWD/supabase/functions/.env.local" --project-ref <staging-project-ref>
 pnpm --filter @command/web exec supabase secrets list --project-ref <staging-project-ref>
 pnpm --filter @command/web exec supabase functions deploy ai-goal-review --project-ref <staging-project-ref> --workdir ../..
+pnpm --filter @command/web exec supabase functions deploy ai-inbox-triage --project-ref <staging-project-ref> --workdir ../..
 ```
 
 `supabase/config.toml` pozostawia `verify_jwt = true`. Wywołanie z PWA musi
 mieć sesyjny JWT w `Authorization: Bearer ...` i publishable key w `apikey`.
 Kill switch to `AI_GOAL_REVIEW_ENABLED=false`; jego zmiana nie wymaga nowego
 builda frontendu.
+
+Przed wdrożeniem obu funkcji zastosuj migrację `ai_openai_budget`, która dodaje
+atomowe rezerwacje kosztu i limit wywołań. W projekcie OpenAI ustaw również
+limit wydatków i alerty. Przy błędzie `AI_BUDGET_EXCEEDED` zwiększaj limity
+tylko po sprawdzeniu rzeczywistego zużycia i konfiguracji cen. Klucz umieszcza
+się wyłącznie w sekretach Edge Functions projektu Supabase, nigdy w
+`apps/web/.env.local`, zmiennych `VITE_*` ani Vercel.
 
 Asystent Skrzynki działa osobno przez `ai-inbox-triage`. Ustaw
 `AI_INBOX_TRIAGE_ENABLED=false`, aby wyłączyć tylko tę funkcję. Limity, cache,
@@ -156,6 +173,6 @@ zanonimizowanych przykładów.
 Przed produkcją wykonaj na stagingu analizę małego i dużego portfolio, sprawdź
 cache oraz limit, błąd 401 bez JWT, brak dostępu drugiego użytkownika i logi pod
 kątem treści Celów, Skrzynki i sekretów. Zweryfikuj też aktualne warunki retencji,
-region i dostępność wybranego modelu NVIDIA. Funkcja nie powinna być wdrażana
-na produkcję bez benchmarku jakości opisanego w
-`docs/planning/nvidia-ai-implementation.md`.
+region i dostępność wybranego modelu OpenAI. Porównanie jakości Luna i Sol jest
+opisane w `docs/planning/2026-09-24-openai-api-integration.md`. Powrót do
+NVIDIA wymaga `AI_PROVIDER=nvidia` oraz sekretów `NVIDIA_*`.

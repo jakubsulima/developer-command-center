@@ -51,7 +51,7 @@ export function createNvidiaProvider(options: NvidiaOptions): AIProvider {
         // In prompt mode the same schema is embedded by goal-review-prompt.ts.
         if (options.structuredMode === "guided_json") body.response_format = {
           type: "json_schema",
-          json_schema: { name: "goal_portfolio_review", schema: sglangJsonSchema(request.jsonSchema) },
+          json_schema: { name: request.schemaName ?? "goal_portfolio_review", schema: sglangJsonSchema(request.jsonSchema) },
         };
         const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json" };
         if (options.authMode === "api-key") headers["x-api-key"] = options.apiKey;

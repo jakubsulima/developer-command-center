@@ -19,7 +19,7 @@ describe("lokalne repozytorium Workspace", () => {
 
     const restored = await repository.load();
     expect(restored?.projects[0]).toMatchObject({ id: "local-project", domainStatus: "shaped" });
-    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 4 });
+    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 5 });
   });
 
   it("wyszukuje bieżący Projekt i nie przeszukuje historycznego agregatu Project", async () => {
@@ -48,5 +48,19 @@ describe("lokalne repozytorium Workspace", () => {
     expect(ids).toHaveLength(65);
     expect(new Set(ids).size).toBe(65);
     expect(third.nextCursor).toBeUndefined();
+  });
+
+  it("zapisuje ustawienia Przeglądu AI lokalnie i uzupełnia starszy stan wartościami domyślnymi", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    await repository.save(structuredClone(emptyState));
+    await repository.saveAIReviewSettings("demo", { windowDays: 7, cacheHours: 24 });
+    await expect(repository.load()).resolves.toMatchObject({ aiReviewSettings: { windowDays: 7, cacheHours: 24 } });
+    await expect(repository.loadCore("demo")).resolves.toMatchObject({ aiReviewSettings: { windowDays: 7, cacheHours: 24 } });
+    await expect(repository.export()).resolves.toMatchObject({ state: { aiReviewSettings: { windowDays: 7, cacheHours: 24 } } });
+
+    const stored = JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}") as { state: Record<string, unknown> };
+    delete stored.state.aiReviewSettings;
+    localStorage.setItem("command-center-local-workspace-v2", JSON.stringify(stored));
+    await expect(repository.load()).resolves.toMatchObject({ aiReviewSettings: { windowDays: 28, cacheHours: 72 } });
   });
 });

@@ -24,6 +24,10 @@ const repository = vi.hoisted(() => ({
   setInboxStatusRemote: vi.fn(), releaseDueInboxItemsRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn()
 }));
 vi.mock("../data/supabaseRepository", () => repository);
+const goalReviewRepository = vi.hoisted(() => ({
+  getLatestGoalReview: vi.fn(), requestGoalReview: vi.fn(), saveAIReviewSettings: vi.fn()
+}));
+vi.mock("../data/supabaseWorkspaceRepository", () => ({ createSupabaseWorkspaceRepository: () => goalReviewRepository }));
 
 const auth: AuthContextValue = {
   mode: "supabase",
@@ -47,6 +51,10 @@ function Probe() {
     <span data-testid="commitment-status">{state.projects.find((item) => item.id === "portfolio-v2")?.commitmentStatus}</span>
     <span data-testid="goal-status">{state.learningGoals.find((item) => item.id === "goal-ts-modeling")?.status}</span>
     <span data-testid="ai-status">{state.aiProposal}</span><span data-testid="review-status">{state.reviewCompletedAt ? "reviewed" : "not-reviewed"}</span>{Object.values(store.syncState.errors).map((error) => <span key={error}>{error}</span>)}
+    <span data-testid="goal-review-id">{store.aiGoalReview?.reviewId ?? "none"}</span>
+    <span data-testid="ai-window-days">{state.aiReviewSettings?.windowDays}</span>
+    <button onClick={() => void store.requestGoalReview(false)}>GenerateGoalReview</button>
+    <button onClick={() => void store.saveAIReviewSettings({ windowDays: 7, cacheHours: 24 })}>SaveGoalReviewSettings</button>
     <button onClick={() => void store.capture("Nowy zdalny capture").catch(() => undefined)}>Capture</button>
     <button onClick={() => void store.resolveInbox("in-1")}>Resolve</button>
     <button onClick={() => void store.setInboxStatus("in-1", "discarded").catch(() => undefined)}>InboxStatus</button>
@@ -84,6 +92,9 @@ describe("StoreProvider", () => {
     repository.startFocusRemote.mockResolvedValue({ id: "server-session", startedAt: Date.now() });
     repository.exportWorkspaceRemote.mockResolvedValue({ format: "export" });
     repository.releaseDueInboxItemsRemote.mockResolvedValue(undefined);
+    goalReviewRepository.getLatestGoalReview.mockReset().mockResolvedValue({ review: null, freshness: "none", checkedAt: "2026-09-25T10:00:00Z" });
+    goalReviewRepository.requestGoalReview.mockReset();
+    goalReviewRepository.saveAIReviewSettings.mockReset().mockResolvedValue({ windowDays: 7, cacheHours: 24 });
   });
 
   it("ładuje prywatny Workspace i zapisuje capture przez repozytorium", async () => {
@@ -355,5 +366,30 @@ describe("StoreProvider", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.queryByText("Stare dane Usera")).not.toBeInTheDocument();
     expect(screen.getByText("Dane drugiego Usera")).toBeInTheDocument();
+  });
+
+  it("nie pokazuje wyniku AI ani nie zapisuje ustawień starej sesji po zmianie Usera", async () => {
+    const oldGeneration = deferred<{ reviewId: string; windowDays: number }>();
+    const oldSettings = deferred<{ windowDays: 7; cacheHours: 24 }>();
+    goalReviewRepository.requestGoalReview.mockReturnValue(oldGeneration.promise);
+    goalReviewRepository.saveAIReviewSettings.mockReturnValue(oldSettings.promise);
+    repository.loadSupabaseState.mockImplementation((userId: string) => Promise.resolve({ ...structuredClone(demoState), workspaceId: userId === "user-1" ? "workspace-1" : "workspace-2" }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstAuth = { ...auth, user: { id: "user-1", email: "one@example.com", name: "One" } };
+    const secondAuth = { ...auth, user: { id: "user-2", email: "two@example.com", name: "Two" } };
+    const view = renderStore(<Probe />, firstAuth, queryClient);
+    await screen.findByText("workspace-1");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "GenerateGoalReview" }));
+    await user.click(screen.getByRole("button", { name: "SaveGoalReviewSettings" }));
+    await waitFor(() => expect(goalReviewRepository.requestGoalReview).toHaveBeenCalledWith("workspace-1", false));
+    await waitFor(() => expect(goalReviewRepository.saveAIReviewSettings).toHaveBeenCalledWith("workspace-1", { windowDays: 7, cacheHours: 24 }));
+    view.rerender(<QueryClientProvider client={queryClient}><AuthContext.Provider value={secondAuth}><StoreProvider><Probe /></StoreProvider></AuthContext.Provider></QueryClientProvider>);
+    await screen.findByText("workspace-2");
+    oldGeneration.resolve({ reviewId: "old-private-review", windowDays: 28 });
+    oldSettings.resolve({ windowDays: 7, cacheHours: 24 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByTestId("goal-review-id")).toHaveTextContent("none");
+    expect(screen.getByTestId("ai-window-days")).toHaveTextContent("28");
   });
 });

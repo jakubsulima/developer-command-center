@@ -13,12 +13,12 @@ export const goalPortfolioReviewJsonSchema: Record<string, unknown> = {
     headline: { type: "string", minLength: 1, maxLength: 180 },
     summary: { type: "string", minLength: 1, maxLength: 1600 },
     overallStatus: { enum: statusValues },
-    recommendations: { type: "array", maxItems: 5, items: { type: "object", additionalProperties: false, required: ["title", "reason", "suggestedNextStep", "horizon", "confidence", "goalIds", "actionIds", "signalKeys"], properties: {
+    recommendations: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false, required: ["title", "reason", "suggestedNextStep", "horizon", "confidence", "goalIds", "actionIds", "signalKeys"], properties: {
       title: { type: "string", minLength: 1, maxLength: 160 }, reason: { type: "string", minLength: 1, maxLength: 800 }, suggestedNextStep: { type: "string", minLength: 1, maxLength: 500 }, horizon: { enum: horizonValues }, confidence: { enum: confidenceValues },
       goalIds: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string" } }, actionIds: { type: "array", uniqueItems: true, items: { type: "string" } }, signalKeys: { type: "array", uniqueItems: true, items: { type: "string" } },
       draftAction: { type: "object", additionalProperties: false, required: ["goalId", "title", "detail"], properties: { goalId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 300 }, detail: { type: "string", maxLength: 1000 } } },
     } } },
-    checks: { type: "array", maxItems: 5, items: { type: "object", additionalProperties: false, required: ["question", "whyItMatters", "goalIds", "signalKeys"], properties: { question: { type: "string", minLength: 1, maxLength: 500 }, whyItMatters: { type: "string", minLength: 1, maxLength: 800 }, goalIds: { type: "array", uniqueItems: true, items: { type: "string" } }, signalKeys: { type: "array", uniqueItems: true, items: { type: "string" } } } } },
+    checks: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false, required: ["question", "whyItMatters", "goalIds", "signalKeys"], properties: { question: { type: "string", minLength: 1, maxLength: 500 }, whyItMatters: { type: "string", minLength: 1, maxLength: 800 }, goalIds: { type: "array", uniqueItems: true, items: { type: "string" } }, signalKeys: { type: "array", uniqueItems: true, items: { type: "string" } } } } },
     goalAssessments: { type: "array", maxItems: 50, items: { type: "object", additionalProperties: false, required: ["goalId", "status", "rationale", "nextStep", "signalKeys"], properties: { goalId: { type: "string" }, status: { enum: statusValues }, rationale: { type: "string", minLength: 1, maxLength: 800 }, nextStep: { type: ["string", "null"], maxLength: 500 }, signalKeys: { type: "array", uniqueItems: true, items: { type: "string" } } } } },
   },
 };
@@ -48,11 +48,24 @@ export function parseProviderJson(content: string) {
   try { return JSON.parse(cleaned) as unknown; } catch { throw new Error("invalid_json"); }
 }
 
+export function normalizeOpenAIGoalReview(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const root = payload as Record<string, unknown>;
+  if (!Array.isArray(root.recommendations)) return payload;
+  return { ...root, recommendations: root.recommendations.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    const recommendation = item as Record<string, unknown>;
+    if (recommendation.draftAction !== null) return item;
+    const { draftAction: _unused, ...withoutDraft } = recommendation;
+    return withoutDraft;
+  }) };
+}
+
 export function validateAndFinalizeGoalReview(payload: unknown, context: GoalReviewContext) {
   const allow = contextAllowlists(context);
   const root = object(payload, "review");
   exact(root, ["schemaVersion", "headline", "summary", "overallStatus", "recommendations", "checks", "goalAssessments"], "review");
-  if (root.schemaVersion !== 1 || !Array.isArray(root.recommendations) || root.recommendations.length > 5 || !Array.isArray(root.checks) || root.checks.length > 5 || !Array.isArray(root.goalAssessments) || root.goalAssessments.length > 50) throw new Error("shape");
+  if (root.schemaVersion !== 1 || !Array.isArray(root.recommendations) || root.recommendations.length > 3 || !Array.isArray(root.checks) || root.checks.length > 3 || !Array.isArray(root.goalAssessments) || root.goalAssessments.length > 50) throw new Error("shape");
   const assertRefs = (goalIds: string[], actionIds: string[], signalKeys: string[]) => {
     if (goalIds.some((id) => !allow.goalIds.has(id)) || actionIds.some((id) => !allow.actionGoal.has(id)) || signalKeys.some((key) => !allow.signalKeys.has(key))) throw new Error("foreign_reference");
     if (actionIds.some((id) => !goalIds.includes(allow.actionGoal.get(id)!))) throw new Error("action_goal_mismatch");
@@ -83,5 +96,13 @@ export function validateAndFinalizeGoalReview(payload: unknown, context: GoalRev
     return { goalId, status: enumValue(value.status, statusValues, "status"), rationale: text(value.rationale, "rationale", 800), nextStep: value.nextStep === null ? null : text(value.nextStep, "nextStep", 500), signalKeys };
   });
   if (new Set(assessments.map((item) => item.goalId)).size !== assessments.length) throw new Error("duplicate_assessment");
-  return { schemaVersion: 1 as const, headline: text(root.headline, "headline", 180), summary: text(root.summary, "summary", 1600), overallStatus: enumValue(root.overallStatus, statusValues, "overallStatus"), recommendations, checks, goalAssessments: assessments };
+  const overallStatus = enumValue(root.overallStatus, statusValues, "overallStatus");
+  if (overallStatus === "insufficient_data") {
+    if (recommendations.length !== 0 || checks.length === 0) throw new Error("insufficient_data_contract");
+  } else if (recommendations.length === 0) {
+    throw new Error("empty_recommendations");
+  }
+  const normalizedSteps = recommendations.map((item) => item.suggestedNextStep.normalize("NFKC").toLocaleLowerCase("pl-PL").replace(/[^\p{L}\p{N}]+/gu, " ").trim());
+  if (new Set(normalizedSteps).size !== normalizedSteps.length) throw new Error("repeated_suggested_next_step");
+  return { schemaVersion: 1 as const, headline: text(root.headline, "headline", 180), summary: text(root.summary, "summary", 1600), overallStatus, recommendations, checks, goalAssessments: assessments };
 }

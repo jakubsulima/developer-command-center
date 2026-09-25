@@ -50,6 +50,7 @@ const RoutinesPage = lazy(() => timedImport("routines", () => import("../pages/R
 const ProjectsPage = lazy(() => timedImport("projects", () => import("../pages/ProjectsPage").then((module) => ({ default: module.ProjectsPage }))));
 const ProjectDetailPage = lazy(() => timedImport("project-detail", () => import("../pages/ProjectDetailPage").then((module) => ({ default: module.ProjectDetailPage }))));
 const ReviewPage = lazy(() => timedImport("review", () => import("../pages/ReviewPage").then((module) => ({ default: module.ReviewPage }))));
+const SettingsPage = lazy(() => timedImport("settings", () => import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))));
 
 export function App() {
   const { loading } = useStore();
@@ -79,6 +80,7 @@ export function App() {
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/knowledge/:knowledgeId" element={<KnowledgeDetailPage />} />
         <Route path="/review" element={<ReviewPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/history/focus/:sessionId" element={<LegacyFocusHistoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>

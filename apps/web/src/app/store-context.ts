@@ -4,8 +4,9 @@ import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
 import type { SearchResult } from "../data/workspaceRepository";
-import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import type { AIGoalReview, AIGoalReviewFeedbackRating, AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
+import type { AIReviewSettings } from "../domain/aiReviewSettings";
 
 export interface CreatedProjectReference {
   projectId: string;
@@ -58,6 +59,12 @@ export interface AppStore {
   aiGoalReview?: AIGoalReview;
   aiGoalReviewStatus: "idle" | "loading" | "refreshing" | "ready" | "error";
   aiGoalReviewError?: { code: string; message: string };
+  aiGoalReviewFreshness: AIGoalReviewFreshness;
+  aiGoalReviewCheckedAt?: string;
+  aiGoalReviewReadStatus: "idle" | "checking" | "checked" | "error";
+  aiGoalReviewReadError?: string;
+  refreshLatestGoalReview: () => Promise<void>;
+  saveAIReviewSettings: (settings: AIReviewSettings) => Promise<void>;
   requestGoalReview: (forceRefresh?: boolean) => Promise<void>;
   submitGoalReviewFeedback: (recommendationId: string | null, rating: AIGoalReviewFeedbackRating) => Promise<void>;
   requestInboxTriageProposal: (inboxItemId: string, forceRefresh?: boolean) => Promise<AIInboxTriageProposal>;

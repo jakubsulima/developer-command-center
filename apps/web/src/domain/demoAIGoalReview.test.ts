@@ -15,4 +15,12 @@ describe("demo AI Goal Review", () => {
   it("jawnie zatrzymuje analizę pustego portfolio", () => {
     expect(() => createDemoAIGoalReview(structuredClone(emptyState))).toThrow("Nie ma aktywnych Celów");
   });
+
+  it("ogranicza symulację do trzech zaleceń i pytań", () => {
+    const state = structuredClone(emptyState);
+    state.goals = Array.from({ length: 5 }, (_, index) => ({ id: `goal-${index}`, title: `Cel ${index}`, outcome: "Rezultat", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }));
+    const review = createDemoAIGoalReview(state, new Date("2026-08-25T10:00:00Z"));
+    expect(review.review.recommendations).toHaveLength(3);
+    expect(review.review.checks).toHaveLength(3);
+  });
 });

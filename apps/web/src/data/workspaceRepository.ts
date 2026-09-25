@@ -2,8 +2,9 @@ import type { DomainCommand } from "../domain/commands";
 import type { ActionListFilter } from "../domain/actionsList";
 import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
-import type { AIGoalReview, AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import type { AIGoalReview, AIGoalReviewFeedbackRating, AIGoalReviewLatest } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
+import type { AIReviewSettings } from "../domain/aiReviewSettings";
 
 export type WorkspaceIntent = DomainCommand;
 export type WorkspaceIntentResult<Intent extends WorkspaceIntent> = Intent extends unknown ? AppState : never;
@@ -107,6 +108,7 @@ export type WorkspacePageItem = InboxItem | KnowledgeItem | GoalProgressPageItem
 export interface WorkspaceCore {
   workspaceId?: string;
   workspaceTimezone: string;
+  aiReviewSettings: AIReviewSettings;
   areas: Area[];
   projectCategories?: AppState["projectCategories"];
   goalTemplates: GoalTemplate[];
@@ -146,13 +148,14 @@ export interface WorkspaceExport {
 
 export interface WorkspaceRepository {
   loadCore(userId: string): Promise<WorkspaceCore>;
+  saveAIReviewSettings(workspaceId: string, settings: AIReviewSettings): Promise<AIReviewSettings>;
   loadPage(query: WorkspacePageQuery): Promise<Page<WorkspacePageItem>>;
   loadKnowledgeItem(id: string): Promise<KnowledgeItem | undefined>;
   loadAction(id: string): Promise<GoalAction | undefined>;
   loadLegacyFocusSession(id: string): Promise<FocusSessionRecord | undefined>;
   search(query: string, limit?: number): Promise<SearchResult[]>;
   exportWorkspace(workspaceId: string): Promise<WorkspaceExport>;
-  getLatestGoalReview(workspaceId: string): Promise<AIGoalReview | undefined>;
+  getLatestGoalReview(workspaceId: string): Promise<AIGoalReviewLatest>;
   requestGoalReview(workspaceId: string, forceRefresh?: boolean): Promise<AIGoalReview>;
   submitGoalReviewFeedback(workspaceId: string, reviewId: string, recommendationId: string | null, rating: AIGoalReviewFeedbackRating): Promise<void>;
   getLatestInboxTriageProposal(workspaceId: string, inboxItemId: string): Promise<AIInboxTriageProposal | undefined>;

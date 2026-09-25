@@ -286,6 +286,7 @@ export async function loadSupabaseState(userId: string): Promise<AppState> {
       ...structuredClone(emptyState),
       workspaceId,
       workspaceTimezone: core.workspaceTimezone,
+      aiReviewSettings: core.aiReviewSettings,
       areas: core.areas,
       projectCategories: core.projectCategories ?? [],
       goalTemplates: core.goalTemplates,

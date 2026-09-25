@@ -4,8 +4,8 @@ import type { AIGoalReviewRecommendation } from "../domain/aiGoalReview";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
 
-export function AIGoalReviewConsentModal({ open, onClose, onConfirm }: { open: boolean; onClose: () => void; onConfirm: () => void }) {
-  return <Modal open={open} title="Zanim uruchomisz Przegląd AI" onClose={onClose}><div className="ai-consent"><p>Do skonfigurowanego dostawcy AI zostaną wysłane aktywne Cele, ich kryteria, powiązane Działania, blokady i ostatnie aktualizacje postępu z 28 dni.</p><p className="muted-copy">Nie wysyłamy profilu, e-maila, całej Skrzynki, pełnej Wiedzy ani historycznych sesji Focus. AI nie może zapisywać zmian.</p><div className="modal-actions"><Button onClick={onClose}>Anuluj</Button><Button variant="primary" onClick={onConfirm}><Sparkles />Rozumiem, uruchom analizę</Button></div></div></Modal>;
+export function AIGoalReviewConsentModal({ open, onClose, onConfirm, windowDays = 28 }: { open: boolean; onClose: () => void; onConfirm: () => void; windowDays?: number }) {
+  return <Modal open={open} title="Zanim uruchomisz Przegląd AI" onClose={onClose}><div className="ai-consent"><p>Do skonfigurowanego dostawcy AI zostaną wysłane aktywne Cele, ich kryteria, powiązane Działania, blokady i aktualizacje postępu z ostatnich {windowDays} dni.</p><p className="muted-copy">Nie wysyłamy profilu, e-maila, całej Skrzynki, pełnej Wiedzy ani historycznych sesji Focus. AI nie może zapisywać zmian.</p><div className="modal-actions"><Button onClick={onClose}>Anuluj</Button><Button variant="primary" onClick={onConfirm}><Sparkles />Rozumiem, uruchom analizę</Button></div></div></Modal>;
 }
 
 export type AIGoalReviewDraft = NonNullable<AIGoalReviewRecommendation["draftAction"]>;

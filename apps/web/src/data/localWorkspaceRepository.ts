@@ -7,18 +7,36 @@ import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import { emptyState } from "./empty";
+import { decodeAIReviewSettings, type AIReviewSettings } from "../domain/aiReviewSettings";
+import type { AIGoalReview, AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
 const DATABASE_NAME = "developer-command-center";
 const STORE_NAME = "workspace";
 const STATE_KEY = "active";
 const FALLBACK_KEY = "command-center-local-workspace-v2";
-const SCHEMA_VERSION = 4;
+const GOAL_REVIEW_KEY = "command-center-ai-goal-review-v1";
+const SCHEMA_VERSION = 5;
 
 interface StoredWorkspace {
   version: number;
   savedAt: string;
   state: AppState;
+}
+
+interface StoredDemoGoalReview {
+  review: AIGoalReview;
+  sourceSignature: string;
+  cacheExpiresAt: string;
+}
+
+function demoGoalReviewSourceSignature(state: AppState) {
+  return JSON.stringify({
+    goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
+    criteria: state.goalCriteria,
+    actions: state.actions.filter((action) => action.goalId),
+    progress: state.progressEntries.slice(0, 250)
+  });
 }
 
 export interface WorkspaceRepository extends CoreWorkspaceRepository {
@@ -43,6 +61,7 @@ function toWorkspaceCore(state: AppState): WorkspaceCore {
   return {
     workspaceId: state.workspaceId,
     workspaceTimezone: state.workspaceTimezone,
+    aiReviewSettings: decodeAIReviewSettings(state.aiReviewSettings),
     areas: structuredClone(state.areas),
     projectCategories: structuredClone(state.projectCategories ?? []),
     goalTemplates: structuredClone(state.goalTemplates),
@@ -126,8 +145,30 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
   storage: globalThis.localStorage
 }): WorkspaceRepository {
   const { indexedDb, storage } = options;
-  let latestGoalReview: ReturnType<typeof createDemoAIGoalReview> | undefined;
   const inboxTriageProposals = new Map<string, AIInboxTriageProposal>();
+
+  const readStoredGoalReview = (): StoredDemoGoalReview | undefined => {
+    try {
+      const value = JSON.parse(storage.getItem(GOAL_REVIEW_KEY) ?? "null") as StoredDemoGoalReview | null;
+      return value?.review && typeof value.sourceSignature === "string" && typeof value.cacheExpiresAt === "string" ? value : undefined;
+    } catch { return undefined; }
+  };
+
+  const readLatestDemoGoalReview = async () => {
+    const state = await load() ?? structuredClone(emptyState);
+    const settings = decodeAIReviewSettings(state.aiReviewSettings);
+    const stored = readStoredGoalReview();
+    const checkedAt = new Date().toISOString();
+    if (!stored) return { review: null, freshness: "none" as const, checkedAt };
+    let freshness: AIGoalReviewFreshness;
+    if (stored.review.windowDays !== settings.windowDays) freshness = "configuration_changed";
+    else if (stored.sourceSignature !== demoGoalReviewSourceSignature(state)) freshness = "source_changed";
+    else {
+      const expiry = Math.min(Date.parse(stored.cacheExpiresAt), Date.parse(stored.review.generatedAt) + settings.cacheHours * 3_600_000);
+      freshness = Number.isFinite(expiry) && Date.parse(checkedAt) < expiry ? "current" : "expired";
+    }
+    return { review: { ...structuredClone(stored.review), cached: true, stale: freshness !== "current" }, freshness, checkedAt };
+  };
 
   const load = async () => {
     const stored = indexedDb
@@ -135,7 +176,8 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       : JSON.parse(storage.getItem(FALLBACK_KEY) ?? "null") as StoredWorkspace | null;
     if (!stored?.state) return null;
     const snapshot = structuredClone(stored.state);
-    return stored.version < SCHEMA_VERSION ? migrateLegacyWorkspaceState(snapshot) : snapshot;
+    const migrated = stored.version < SCHEMA_VERSION ? migrateLegacyWorkspaceState(snapshot) : snapshot;
+    return { ...migrated, aiReviewSettings: decodeAIReviewSettings(migrated.aiReviewSettings) };
   };
 
   const save = async (state: AppState) => {
@@ -164,9 +206,16 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     async clear() {
       if (indexedDb) await writeIndexedDb(indexedDb, null);
       else storage.removeItem(FALLBACK_KEY);
+      storage.removeItem(GOAL_REVIEW_KEY);
     },
     async loadCore() {
       return toWorkspaceCore(await load() ?? structuredClone(emptyState));
+    },
+    async saveAIReviewSettings(_workspaceId: string, settings: AIReviewSettings) {
+      const validated = decodeAIReviewSettings(settings);
+      const current = await load() ?? structuredClone(emptyState);
+      await save({ ...current, aiReviewSettings: validated });
+      return validated;
     },
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
@@ -202,12 +251,22 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       return this.export();
     },
     async getLatestGoalReview() {
-      return latestGoalReview ? structuredClone(latestGoalReview) : undefined;
+      return readLatestDemoGoalReview();
     },
     async requestGoalReview(_workspaceId, forceRefresh = false) {
-      if (latestGoalReview && !forceRefresh) return { ...structuredClone(latestGoalReview), cached: true };
-      latestGoalReview = createDemoAIGoalReview(await load() ?? structuredClone(emptyState));
-      return structuredClone(latestGoalReview);
+      const current = await load() ?? structuredClone(emptyState);
+      if (!forceRefresh) {
+        const latest = await readLatestDemoGoalReview();
+        if (latest.review && latest.freshness === "current") return { ...latest.review, cached: true };
+      }
+      const settings = decodeAIReviewSettings(current.aiReviewSettings);
+      const review = createDemoAIGoalReview(current);
+      storage.setItem(GOAL_REVIEW_KEY, JSON.stringify({
+        review,
+        sourceSignature: demoGoalReviewSourceSignature(current),
+        cacheExpiresAt: new Date(Date.parse(review.generatedAt) + settings.cacheHours * 3_600_000).toISOString()
+      } satisfies StoredDemoGoalReview));
+      return structuredClone(review);
     },
     async submitGoalReviewFeedback() {
       // Demo zachowuje kontrakt bez wysyłania i trwałego śledzenia oceny.

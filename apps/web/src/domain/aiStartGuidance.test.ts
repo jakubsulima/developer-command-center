@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AIGoalReview, AIGoalReviewRecommendation } from "./aiGoalReview";
 import { AI_GOAL_REVIEW_SCHEMA_VERSION } from "./aiGoalReview";
-import { aiSignalLabel, selectAIStartGuidance, selectPrimaryAIRecommendation, shortenAIStartSummary } from "./aiStartGuidance";
+import { aiGoalReviewErrorCopy, aiSignalLabel, selectAIStartGuidance, selectPrimaryAIRecommendation, shortenAIStartSummary } from "./aiStartGuidance";
 import type { Goal, GoalAction } from "./types";
 
 const recommendation = (id: string, horizon: AIGoalReviewRecommendation["horizon"], changes: Partial<AIGoalReviewRecommendation> = {}): AIGoalReviewRecommendation => ({
@@ -9,7 +9,7 @@ const recommendation = (id: string, horizon: AIGoalReviewRecommendation["horizon
 });
 
 const review = (recommendations: AIGoalReviewRecommendation[]): AIGoalReview => ({
-  reviewId: "review", status: "ready", cached: false, generatedAt: "2026-09-19T10:00:00.000Z", periodStart: "2026-08-22", periodEnd: "2026-09-19", provider: "test", model: "test", analyzedGoalIds: [], omittedGoalIds: [],
+  reviewId: "review", status: "ready", cached: false, generatedAt: "2026-09-19T10:00:00.000Z", periodStart: "2026-08-22", periodEnd: "2026-09-19", windowDays: 28, provider: "test", model: "test", analyzedGoalIds: [], omittedGoalIds: [],
   review: { schemaVersion: AI_GOAL_REVIEW_SCHEMA_VERSION, headline: "Kierunek", summary: "Podsumowanie", overallStatus: "attention", recommendations, checks: [], goalAssessments: [] }
 });
 const goal = (changes: Partial<Goal> = {}): Goal => ({ id: "goal", title: "Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", ...changes });
@@ -36,6 +36,10 @@ describe("AI start guidance", () => {
     expect(aiSignalLabel("goal:1:missing-next-action")).toBe("brak następnego Działania");
     expect(aiSignalLabel("goal:1:blocked:2")).toBe("2 blokady");
     expect(aiSignalLabel("future-signal")).toBe("sygnał z danych przestrzeni pracy");
+  });
+
+  it("podpowiada wyłącznie sprawdzenie statusu, gdy inny request generuje analizę", () => {
+    expect(aiGoalReviewErrorCopy("AI_GENERATION_IN_PROGRESS")).toMatch(/Analiza jest już przygotowywana/);
   });
 
   it("skraca prezentację, zachowując pełną treść", () => {
