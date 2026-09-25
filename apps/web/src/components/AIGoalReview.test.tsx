@@ -48,6 +48,7 @@ describe("AIGoalReview", () => {
     expect(screen.getByText("Symulacja")).toBeInTheDocument();
     const target = screen.getAllByLabelText("Dotyczy")[0]!;
     expect(within(target).getByRole("link", { name: /Zbudować spokojny budżet domowy/i })).toHaveAttribute("href", "/goals/goal-budget");
+    expect(screen.queryByRole("link", { name: /Przejdź do Celu/ })).not.toBeInTheDocument();
   });
 
   it("draft AI nie zapisuje się przed zatwierdzeniem", async () => {
@@ -74,7 +75,7 @@ describe("AIGoalReview", () => {
     expect(within(consent).getByText(/aktywne Cele, ich kryteria/i)).toBeInTheDocument();
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
     expect(await screen.findByText("Główna rekomendacja")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/review");
+    expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/review?tab=ai");
     expect(screen.getByRole("button", { name: /Sygnały i dalszy plan/ })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "Pomocne" }));
     expect(screen.getByRole("button", { name: "Pomocne" })).toHaveAttribute("aria-pressed", "true");
@@ -92,7 +93,7 @@ describe("AIGoalReview", () => {
     await user.dblClick(within(draft).getByRole("button", { name: "Zatwierdź i dodaj" }));
     expect(await within(screen.getByRole("region", { name: "Na dziś" })).findByRole("link", { name: "Krok ze Startu" })).toBeInTheDocument();
     expect(screen.getAllByText("Krok ze Startu")).toHaveLength(1);
-    expect(screen.getByText("Analiza wymaga odświeżenia")).toBeInTheDocument();
+    expect(screen.getByText(/Dane Celów zmieniły się od tej analizy/)).toBeInTheDocument();
     expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
   });
 });

@@ -105,3 +105,8 @@ export function formatWorkspaceDateRange(startDate: string, endDateExclusive: st
   const formatter = new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", timeZone: "UTC" });
   return `${formatter.format(new Date(`${startDate}T12:00:00Z`))}–${formatter.format(new Date(`${endDate}T12:00:00Z`))}`;
 }
+
+export function formatInclusiveDateRange(startDate: string, endDateInclusive: string) {
+  const formatter = new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${formatter.format(new Date(`${startDate}T12:00:00Z`))}–${formatter.format(new Date(`${endDateInclusive}T12:00:00Z`))}`;
+}

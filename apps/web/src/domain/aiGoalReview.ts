@@ -3,6 +3,7 @@ export const AI_GOAL_REVIEW_SCHEMA_VERSION = 1 as const;
 export type AIGoalStatus = "on_track" | "attention" | "stuck" | "insufficient_data";
 export type AIReviewHorizon = "now" | "this_week" | "later";
 export type AIReviewConfidence = "low" | "medium" | "high";
+export type AIGoalReviewFreshness = "none" | "current" | "source_changed" | "expired" | "configuration_changed" | "unknown";
 
 export interface AIGoalReviewRecommendation {
   id: string;
@@ -51,11 +52,18 @@ export interface AIGoalReview {
   generatedAt: string;
   periodStart: string;
   periodEnd: string;
+  windowDays: 7 | 14 | 28;
   provider: string;
   model: string;
   analyzedGoalIds: string[];
   omittedGoalIds: string[];
   review: AIGoalReviewContent;
+}
+
+export interface AIGoalReviewLatest {
+  review: AIGoalReview | null;
+  freshness: AIGoalReviewFreshness;
+  checkedAt: string;
 }
 
 export type AIGoalReviewFeedbackRating = "helpful" | "not_helpful";
@@ -151,12 +159,13 @@ export function decodeAIGoalReviewContent(payload: unknown): AIGoalReviewContent
 
 export function decodeAIGoalReview(payload: unknown): AIGoalReview {
   const root = object(payload, "AIGoalReview");
-  exactKeys(root, ["reviewId", "status", "cached", "stale", "generatedAt", "periodStart", "periodEnd", "provider", "model", "analyzedGoalIds", "omittedGoalIds", "review"], "AIGoalReview");
+  exactKeys(root, ["reviewId", "status", "cached", "stale", "generatedAt", "periodStart", "periodEnd", "windowDays", "provider", "model", "analyzedGoalIds", "omittedGoalIds", "review"], "AIGoalReview");
   if (root.status !== "ready" || typeof root.cached !== "boolean") throw new AIGoalReviewError("INVALID_MODEL_OUTPUT", "Nieprawidłowy status przeglądu.");
+  if (root.windowDays !== undefined && (typeof root.windowDays !== "number" || ![7, 14, 28].includes(root.windowDays))) throw new AIGoalReviewError("INVALID_MODEL_OUTPUT", "Nieprawidłowy zakres Przeglądu AI.");
   return {
     reviewId: text(root.reviewId, "reviewId", 80), status: "ready", cached: root.cached,
     stale: typeof root.stale === "boolean" ? root.stale : undefined,
-    generatedAt: text(root.generatedAt, "generatedAt", 40), periodStart: text(root.periodStart, "periodStart", 40), periodEnd: text(root.periodEnd, "periodEnd", 40),
+    generatedAt: text(root.generatedAt, "generatedAt", 40), periodStart: text(root.periodStart, "periodStart", 40), periodEnd: text(root.periodEnd, "periodEnd", 40), windowDays: (root.windowDays ?? 28) as 7 | 14 | 28,
     provider: text(root.provider, "provider", 80), model: text(root.model, "model", 200),
     analyzedGoalIds: stringArray(root.analyzedGoalIds, "analyzedGoalIds", 50), omittedGoalIds: stringArray(root.omittedGoalIds, "omittedGoalIds", 1000),
     review: decodeAIGoalReviewContent(root.review)

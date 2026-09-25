@@ -13,7 +13,8 @@ const validContent = {
 
 describe("AI Goal Review contract", () => {
   it("dekoduje pełny, typowany wynik", () => {
-    expect(decodeAIGoalReview({ reviewId: "review-1", status: "ready", cached: false, generatedAt: "2026-08-25T10:00:00Z", periodStart: "2026-07-28", periodEnd: "2026-08-25", provider: "nvidia", model: "model", analyzedGoalIds: ["goal-1"], omittedGoalIds: [], review: validContent }).review.headline).toBe(validContent.headline);
+    expect(decodeAIGoalReview({ reviewId: "review-1", status: "ready", cached: false, generatedAt: "2026-08-25T10:00:00Z", periodStart: "2026-07-28", periodEnd: "2026-08-25", provider: "nvidia", model: "model", analyzedGoalIds: ["goal-1"], omittedGoalIds: [], review: validContent })).toMatchObject({ windowDays: 28, review: { headline: validContent.headline } });
+    expect(() => decodeAIGoalReview({ reviewId: "review-1", status: "ready", cached: false, generatedAt: "2026-08-25T10:00:00Z", periodStart: "2026-07-28", periodEnd: "2026-08-25", windowDays: 5, provider: "nvidia", model: "model", analyzedGoalIds: ["goal-1"], omittedGoalIds: [], review: validContent })).toThrow(AIGoalReviewError);
   });
 
   it.each([

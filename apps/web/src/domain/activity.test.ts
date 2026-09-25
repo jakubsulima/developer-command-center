@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { selectWorkspaceActivity, workspaceWeekBounds } from "./activity";
+import { formatInclusiveDateRange, formatWorkspaceDateRange, selectWorkspaceActivity, workspaceWeekBounds } from "./activity";
 import { emptyState } from "../data/empty";
 
 describe("tydzień Workspace", () => {
+  it("odróżnia wyłączny koniec tygodnia od daty końcowej analizy AI", () => {
+    expect(formatWorkspaceDateRange("2026-09-21", "2026-09-28")).toBe("21 wrz–27 wrz");
+    expect(formatInclusiveDateRange("2026-08-28", "2026-09-25")).toBe("28 sie–25 wrz");
+  });
   it("zaczyna się w poniedziałek w Europe/Warsaw", () => {
     const bounds = workspaceWeekBounds(new Date("2026-08-23T21:30:00.000Z"), "Europe/Warsaw");
     expect(bounds.startDate).toBe("2026-08-17");

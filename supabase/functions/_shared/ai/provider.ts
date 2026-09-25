@@ -10,6 +10,7 @@ export interface AIProviderRequest {
   system: string;
   input: unknown;
   jsonSchema: Record<string, unknown>;
+  schemaName?: string;
   maxOutputTokens: number;
   timeoutMs: number;
 }

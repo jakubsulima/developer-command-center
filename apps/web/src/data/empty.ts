@@ -1,7 +1,9 @@
 import type { AppState } from "../domain/types";
+import { DEFAULT_AI_REVIEW_SETTINGS } from "../domain/aiReviewSettings";
 
 export const emptyState: AppState = {
   workspaceTimezone: "Europe/Warsaw",
+  aiReviewSettings: { ...DEFAULT_AI_REVIEW_SETTINGS },
   areas: [],
   projectCategories: [],
   goalTemplates: [],

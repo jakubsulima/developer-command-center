@@ -51,6 +51,8 @@ describe("migracje Supabase", () => {
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918060424_add_action_testing_status.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918114425_fix_action_status_activity_audit.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260922135433_expand_action_status_filters.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260924175159_ai_openai_budget.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260925100000_ai_goal_review_settings_and_claims.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -117,6 +119,75 @@ describe("migracje Supabase", () => {
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
     expect(tableCount).toBe(34);
     expect(rlsCount).toBe(34);
+  });
+
+  it("rezerwuje koszt AI atomowo i rozlicza próby bez ujawnienia RPC użytkownikowi", async () => {
+    const user = "ca990000-0000-0000-0000-000000000001";
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    const reserve = `select public.reserve_ai_run($1::uuid, $2::uuid, 'goal_portfolio_review', 'openai',
+      'gpt-6-luna', 4, 1, 1000, $3::bigint, 100, 500, 2, false, $4::bigint, $5::bigint)`;
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await expect(database.query(reserve, [workspace, user, 2_000_000, 3_000_000, 10_000_000])).rejects.toThrow(/permission denied/);
+    await database.exec("reset role");
+    await database.exec("set role service_role");
+    const first = await scalar<string>(reserve, [workspace, user, 2_000_000, 3_000_000, 10_000_000]);
+    await expect(database.query(reserve, [workspace, user, 2_000_000, 3_000_000, 10_000_000])).rejects.toThrow(/ai_budget_exceeded/);
+    await database.query("select public.finish_ai_run($1::uuid, 'succeeded', null, 1000, 100, 150000, false, 1, 'resp_1', 1200)", [first]);
+    const second = await scalar<string>(reserve, [workspace, user, 2_000_000, 3_000_000, 10_000_000]);
+    await expect(database.query(reserve, [workspace, user, 2_000_000, 3_000_000, 10_000_000])).rejects.toThrow(/ai_daily_limit/);
+    await expect(database.query("select public.finish_ai_run($1::uuid, 'succeeded', null, 0, 0, 0, false, 1, null, 1)", [first])).rejects.toThrow(/ai_run_not_running/);
+    expect(await scalar<number>("select accounted_nano_usd::int from public.ai_runs where id = $1", [first])).toBe(150000);
+    expect(await scalar<number>("select count(*)::int from public.ai_runs where id = $1 and status = 'running'", [second])).toBe(1);
+    await database.exec("reset role");
+  });
+
+  it("dodaje ograniczone preferencje Workspace i claimy przeglądu bez ujawnienia ich użytkownikom", async () => {
+    const user = "ca990000-0000-0000-0000-000000000001";
+    const otherUser = "ca990000-0000-0000-0000-000000000099";
+    await database.query("insert into auth.users(id) values ($1)", [otherUser]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [user]);
+    const foreignWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [otherUser]);
+    expect(await scalar("select ai_review_window_days from public.workspaces where id = $1", [workspace])).toBe(28);
+    expect(await scalar("select ai_review_cache_hours from public.workspaces where id = $1", [workspace])).toBe(72);
+    expect(await scalar("select window_days from public.ai_goal_reviews where false")).toBeUndefined();
+    await expect(database.query("update public.workspaces set ai_review_window_days = 8 where id = $1", [workspace])).rejects.toThrow();
+    await expect(database.query("update public.workspaces set ai_review_cache_hours = 48 where id = $1", [workspace])).rejects.toThrow();
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.query("update public.workspaces set ai_review_window_days = 14, ai_review_cache_hours = 168 where id = $1", [workspace]);
+    await database.query("update public.workspaces set ai_review_window_days = 7 where id = $1", [foreignWorkspace]);
+    await database.exec("reset role");
+    expect(await scalar("select ai_review_window_days from public.workspaces where id = $1", [workspace])).toBe(14);
+    expect(await scalar("select ai_review_cache_hours from public.workspaces where id = $1", [workspace])).toBe(168);
+    expect(await scalar("select ai_review_window_days from public.workspaces where id = $1", [foreignWorkspace])).toBe(28);
+
+    const key = [workspace, 14, "a".repeat(64), "openai", "gpt-6-luna", 5, 1] as const;
+    await database.exec("set role authenticated");
+    await expect(database.query("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...key, "ca990000-0000-0000-0000-000000000098"])).rejects.toThrow(/permission denied/);
+    await database.exec("reset role");
+    await database.exec("set role service_role");
+    const owner = "ca990000-0000-0000-0000-000000000097";
+    const nextOwner = "ca990000-0000-0000-0000-000000000096";
+    expect(await scalar("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...key, owner])).toBe(true);
+    expect(await scalar("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...key, nextOwner])).toBe(false);
+    expect(await scalar("select public.release_ai_goal_review_claim($1,$2,$3,$4,$5,$6,$7,$8)", [...key, nextOwner])).toBe(false);
+    expect(await scalar("select public.release_ai_goal_review_claim($1,$2,$3,$4,$5,$6,$7,$8)", [...key, owner])).toBe(true);
+    expect(await scalar("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...key, nextOwner])).toBe(true);
+
+    const concurrentKey = [workspace, 14, "b".repeat(64), "openai", "gpt-6-luna", 5, 1] as const;
+    const concurrentClaims = await Promise.all([
+      scalar<boolean>("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...concurrentKey, "ca990000-0000-0000-0000-000000000095"]),
+      scalar<boolean>("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...concurrentKey, "ca990000-0000-0000-0000-000000000094"])
+    ]);
+    expect(concurrentClaims.filter(Boolean)).toHaveLength(1);
+
+    await database.query("update private.ai_goal_review_claims set lease_expires_at = now() - interval '1 second' where context_hash = $1", ["b".repeat(64)]);
+    expect(await scalar("select public.try_claim_ai_goal_review($1,$2,$3,$4,$5,$6,$7,$8)", [...concurrentKey, "ca990000-0000-0000-0000-000000000093"])).toBe(true);
+    expect(await scalar("select public.release_ai_goal_review_claim($1,$2,$3,$4,$5,$6,$7,$8)", [...concurrentKey, "ca990000-0000-0000-0000-000000000094"])).toBe(false);
+    expect(await scalar("select public.release_ai_goal_review_claim($1,$2,$3,$4,$5,$6,$7,$8)", [...concurrentKey, "ca990000-0000-0000-0000-000000000093"])).toBe(true);
+    await database.exec("reset role");
   });
 
   it("wymusza najwyżej jeden rezultat Wiedzy na Działanie", async () => {

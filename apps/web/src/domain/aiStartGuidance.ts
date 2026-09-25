@@ -17,9 +17,22 @@ export const aiGoalStatusLabels: Record<AIGoalStatus, string> = {
 export function aiGoalReviewErrorCopy(code?: string) {
   if (code === "AI_NOT_CONFIGURED") return "Przegląd AI nie jest jeszcze skonfigurowany. Podsumowanie systemowe pozostaje dostępne.";
   if (code === "AI_RATE_LIMITED") return "Limit analiz został osiągnięty. Spróbuj ponownie później.";
+  if (code === "AI_GENERATION_IN_PROGRESS") return "Analiza jest już przygotowywana. Za chwilę sprawdź jej status ponownie.";
+  if (code === "AI_BUDGET_EXCEEDED") return "Wyczerpano budżet AI dla tej przestrzeni pracy. Poprzedni wynik pozostaje dostępny.";
   if (code === "NO_ACTIVE_GOALS") return "Dodaj aktywny Cel, aby uruchomić analizę.";
   if (code === "CONTEXT_TOO_LARGE") return "Zakres jest zbyt duży do pojedynczej analizy. Żaden Cel nie został pominięty po cichu.";
   return "Nie udało się odświeżyć analizy. Poprzedni wynik i podsumowanie systemowe nadal są dostępne.";
+}
+
+export function aiGoalReviewFreshnessCopy(freshness: import("./aiGoalReview").AIGoalReviewFreshness) {
+  switch (freshness) {
+    case "none": return "Brak zapisanej analizy.";
+    case "current": return "Dane odpowiadają tej analizie.";
+    case "source_changed": return "Dane Celów zmieniły się od tej analizy.";
+    case "expired": return "Minął maksymalny czas ponownego użycia wyniku.";
+    case "configuration_changed": return "Zakres lub konfiguracja analizy zmieniły się od jej utworzenia.";
+    case "unknown": return "Nie udało się potwierdzić aktualności tej analizy.";
+  }
 }
 
 export function aiSignalLabel(key: string) {

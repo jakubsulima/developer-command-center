@@ -18,7 +18,7 @@ read-only i wyeksportować, ale aktywny produkt nie tworzy nowych sesji.
 
 Ekran `Podsumowanie tygodnia` zawiera opcjonalny, uruchamiany ręcznie Przegląd
 Celów z AI. W trybie demo jest to deterministyczna symulacja, a w Supabase
-bezpieczna funkcja Edge korzystająca z OpenAI-compatible NVIDIA API/NIM. Model
+bezpieczna funkcja Edge korzystająca z OpenAI API lub NVIDIA API/NIM. Model
 ma wyłącznie ograniczony kontekst aktywnych Celów i nie może wykonywać zmian.
 
 ## Uruchomienie z Supabase SaaS
@@ -58,8 +58,8 @@ pnpm supabase:deploy
 pnpm supabase:lint:remote
 ```
 
-Po konfiguracji sekretów NVIDIA funkcję AI wdraża się osobno zgodnie z sekcją
-„Przegląd AI” w `docs/deployment/managed-supabase.md`. Klucz NVIDIA ani secret
+Po konfiguracji sekretów OpenAI funkcje AI wdraża się osobno zgodnie z sekcją
+„Funkcje AI” w `docs/deployment/managed-supabase.md`. Klucz OpenAI ani secret
 key Supabase nie mogą trafić do aplikacji webowej.
 
 Pierwsze trzy komendy przed wdrożeniem są obowiązkową kontrolą. Produkcję można

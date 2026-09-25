@@ -56,3 +56,79 @@ describe("adapter listy Działań Supabase", () => {
     expect(page.items[0]).toMatchObject({ id: "action-1", reviewOn: "2026-09-09" });
   });
 });
+
+describe("ustawienia Przeglądu AI w Supabase", () => {
+  beforeEach(() => getClient.mockReset());
+
+  const core = {
+    workspaceId: "workspace-1", workspaceTimezone: "Europe/Warsaw", areas: [], goalTemplates: [], goals: [],
+    goalCriteria: [], actions: [], legacyProjects: [], recurringActionTemplates: [], knowledgeLinks: [],
+    counts: { inbox: 0, knowledge: 0, openActions: 0, start: 0 },
+    weeklySummary: { completedActions: 0, focusMinutes: 0, knowledgeAdded: 0, progressUpdates: 0, recentReviews: [] }
+  };
+
+  it("odczytuje wyłącznie dwa pola z tabeli po pobraniu Workspace", async () => {
+    const single = vi.fn(async () => ({ data: { ai_review_window_days: 14, ai_review_cache_hours: 168 }, error: null }));
+    const eq = vi.fn(() => ({ single }));
+    const select = vi.fn(() => ({ eq }));
+    const rpc = vi.fn(async (name: string) => name === "get_workspace_core" ? { data: core, error: null } : { data: null, error: null });
+    const from = vi.fn(() => ({ select }));
+    getClient.mockReturnValue({ rpc, from });
+
+    await expect(createSupabaseWorkspaceRepository().loadCore("user-1")).resolves.toMatchObject({ aiReviewSettings: { windowDays: 14, cacheHours: 168 } });
+    expect(from).toHaveBeenCalledWith("workspaces");
+    expect(select).toHaveBeenCalledWith("ai_review_window_days,ai_review_cache_hours");
+    expect(eq).toHaveBeenCalledWith("id", "workspace-1");
+    expect(rpc).toHaveBeenNthCalledWith(1, "get_workspace_core", { target_user_id: "user-1" });
+  });
+
+  it("używa domyślnych wartości tylko dla brakujących kolumn i zapisuje wyłącznie wybrane pola", async () => {
+    const single = vi.fn(async () => ({ data: null, error: { code: "42703", message: "column missing" } }));
+    const eq = vi.fn(() => ({ single }));
+    const select = vi.fn(() => ({ eq }));
+    const rpc = vi.fn(async (name: string) => name === "get_workspace_core" ? { data: core, error: null } : { data: null, error: null });
+    getClient.mockReturnValue({ rpc, from: vi.fn(() => ({ select })) });
+    await expect(createSupabaseWorkspaceRepository().loadCore("user-1")).resolves.toMatchObject({ aiReviewSettings: { windowDays: 28, cacheHours: 72 } });
+
+    const savedRow = { ai_review_window_days: 7, ai_review_cache_hours: 24 };
+    const saveSingle = vi.fn(async () => ({ data: savedRow, error: null }));
+    const saveSelect = vi.fn(() => ({ single: saveSingle }));
+    const saveEq = vi.fn(() => ({ select: saveSelect }));
+    const update = vi.fn(() => ({ eq: saveEq }));
+    getClient.mockReturnValue({ from: vi.fn(() => ({ update })) });
+    await expect(createSupabaseWorkspaceRepository().saveAIReviewSettings("workspace-1", { windowDays: 7, cacheHours: 24 })).resolves.toEqual({ windowDays: 7, cacheHours: 24 });
+    expect(update).toHaveBeenCalledWith({ ai_review_window_days: 7, ai_review_cache_hours: 24 });
+    expect(saveEq).toHaveBeenCalledWith("id", "workspace-1");
+    expect(saveSelect).toHaveBeenCalledWith("ai_review_window_days,ai_review_cache_hours");
+  });
+
+  it("nie ukrywa błędu odczytu spoza zgodności kolumn", async () => {
+    const single = vi.fn(async () => ({ data: null, error: { code: "42501", message: "permission denied" } }));
+    const eq = vi.fn(() => ({ single }));
+    const rpc = vi.fn(async (name: string) => name === "get_workspace_core" ? { data: core, error: null } : { data: null, error: null });
+    getClient.mockReturnValue({ rpc, from: vi.fn(() => ({ select: () => ({ eq }) })) });
+    await expect(createSupabaseWorkspaceRepository().loadCore("user-1")).rejects.toThrow(/permission denied/);
+  });
+
+  it("odczytuje wynik wraz ze stanem aktualności przez wyłącznie tryb latest", async () => {
+    const payload = {
+      review: {
+        reviewId: "review-1", status: "ready", cached: true, generatedAt: "2026-09-24T10:00:00.000Z",
+        periodStart: "2026-08-28", periodEnd: "2026-09-24", windowDays: 28, provider: "openai", model: "gpt-test",
+        analyzedGoalIds: [], omittedGoalIds: [],
+        review: { schemaVersion: 1, headline: "Warto wrócić do planu", summary: "Wynik", overallStatus: "insufficient_data", recommendations: [], checks: [{ id: "check-1", question: "Co blokuje postęp?", whyItMatters: "Brakuje danych.", goalIds: [], signalKeys: [] }], goalAssessments: [] }
+      },
+      freshness: "source_changed",
+      checkedAt: "2026-09-25T10:00:00.000Z"
+    };
+    const invoke = vi.fn(async () => ({ data: payload, error: null }));
+    getClient.mockReturnValue({ functions: { invoke } });
+
+    await expect(createSupabaseWorkspaceRepository().getLatestGoalReview("workspace-1")).resolves.toMatchObject({
+      freshness: "source_changed",
+      checkedAt: payload.checkedAt,
+      review: { reviewId: "review-1", stale: true, windowDays: 28 }
+    });
+    expect(invoke).toHaveBeenCalledWith("ai-goal-review", { body: { workspaceId: "workspace-1", operation: "latest" } });
+  });
+});

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Sparkles, TerminalSquare } from "lucide-react";
+import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
@@ -157,6 +157,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
             {mode === "supabase" ? <div className="profile-menu-freshness" data-testid="data-freshness"><small>{dataStatus}</small>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div> : null}
             {mode === "supabase" ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload().catch(() => undefined); }}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button> : null}
             {mode === "demo" ? <button role="menuitem" onClick={() => { resetDemo(); setProfileMenuOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
+            <NavLink role="menuitem" className="profile-settings-link" to="/settings" onClick={() => setProfileMenuOpen(false)}><Settings /><span>Ustawienia</span></NavLink>
             <button role="menuitem" disabled={exportState === "loading"} onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksportuj dane"}</span></button>
             {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
             {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
@@ -199,6 +200,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
+          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Przegląd Celów z AI</small></span><ChevronRight /></NavLink>
         </nav></section>
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
           {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}

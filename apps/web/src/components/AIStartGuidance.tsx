@@ -2,8 +2,8 @@ import { Activity, AlertTriangle, ArrowRight, Bot, CalendarClock, ChevronDown, C
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { formatWorkspaceDateRange } from "../domain/activity";
-import { aiGoalReviewErrorCopy, aiGoalStatusLabels, aiReviewHorizonLabels, selectAIStartGuidance, shortenAIStartSummary } from "../domain/aiStartGuidance";
+import { formatInclusiveDateRange, formatWorkspaceDateRange } from "../domain/activity";
+import { aiGoalReviewErrorCopy, aiGoalReviewFreshnessCopy, aiGoalStatusLabels, aiReviewHorizonLabels, selectAIStartGuidance, shortenAIStartSummary } from "../domain/aiStartGuidance";
 import type { HomeSummary } from "../domain/homeSummary";
 import { humanizeEntityReferences } from "../domain/humanizeAIText";
 import { polishCount, polishPluralForm } from "../domain/labels";
@@ -20,7 +20,7 @@ const terminalErrors = new Set(["AI_NOT_CONFIGURED", "NO_ACTIVE_GOALS"]);
 const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
 
 export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
-  const { state, mode, aiGoalReview, aiGoalReviewStatus, aiGoalReviewError, requestGoalReview, submitGoalReviewFeedback, createAction } = useStore();
+  const { state, mode, aiGoalReview, aiGoalReviewStatus, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewCheckedAt, aiGoalReviewReadStatus, aiGoalReviewReadError, refreshLatestGoalReview, requestGoalReview, submitGoalReviewFeedback, createAction } = useStore();
   const { notifySuccess } = useActionFeedback();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -51,7 +51,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
   useEffect(() => { if (requestedSignals) setSignalsOpen(true); }, [requestedSignals]);
 
   const begin = () => {
-    if (aiGoalReview) void requestGoalReview(true);
+    if (aiGoalReview) void requestGoalReview(false);
     else setConsentOpen(true);
   };
   const confirmConsent = () => {
@@ -101,11 +101,13 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
       </div>
 
       {!aiGoalReview && !busy ? <div className="ai-start-empty"><p>AI może podsumować aktywne Cele i wskazać następny krok.</p>{activeGoals.length ? <Button variant="primary" onClick={begin}><Sparkles />Przeanalizuj moje Cele</Button> : <><Button variant="primary" disabled><Sparkles />Przeanalizuj moje Cele</Button><Link className="section-link" to="/goals?create=true">Utwórz aktywny Cel<ChevronRight /></Link></>}</div> : null}
+      {!aiGoalReview && aiGoalReviewReadStatus === "checking" ? <p className="muted-copy" role="status">Sprawdzam zapisaną analizę. Ten odczyt nie uruchamia modelu.</p> : null}
       {!aiGoalReview && busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>Analizuję aktywne Cele…</strong><small>Możesz nadal korzystać ze Startu.</small></div></div> : null}
       {aiGoalReview && busy ? <div className="ai-start-refreshing" role="status"><RefreshCw className="spin" />Odświeżam analizę…</div> : null}
-      {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{aiGoalReviewErrorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{!terminalErrors.has(aiGoalReviewError.code) ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(Boolean(aiGoalReview))}>Spróbuj ponownie</Button> : null}</div> : null}
+      {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{aiGoalReviewErrorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{aiGoalReviewError.code === "AI_GENERATION_IN_PROGRESS" ? <Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Sprawdź status</Button> : !terminalErrors.has(aiGoalReviewError.code) ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(false)}>Spróbuj ponownie</Button> : null}</div> : null}
+      {aiGoalReviewReadError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>Nie udało się sprawdzić aktualności.</strong><small>{aiGoalReviewReadError}</small></div><Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Ponów odczyt</Button></div> : null}
 
-      {aiGoalReview?.stale ? <div className="ai-start-stale-summary" role="status"><CalendarClock /><div><strong>Analiza wymaga odświeżenia</strong><span>Dane Celów zmieniły się od {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}.</span><Link to="/review">Zobacz poprzedni wynik</Link></div></div> : null}
+      {aiGoalReview?.stale || aiGoalReviewFreshness !== "current" ? aiGoalReview ? <div className="ai-start-stale-summary" role="status"><CalendarClock /><div><strong>Poprzednia analiza · ostatnie {aiGoalReview.windowDays} dni</strong><span>{formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)} · {aiGoalReviewFreshnessCopy(aiGoalReviewFreshness)} Wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? `; sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}.</span>{summary ? <span>{summary.visible}</span> : null}<Link to="/review?tab=ai">Zobacz pełną analizę</Link><Link to="/settings">Ustawienia</Link></div></div> : null : null}
       {aiGoalReview && !aiGoalReview.stale ? <div className="ai-start-result">
         <div className="ai-start-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{aiGoalStatusLabels[aiGoalReview.review.overallStatus]}</Badge><span>{polishCount(aiGoalReview.analyzedGoalIds.length, "przeanalizowany Cel", "przeanalizowane Cele", "przeanalizowanych Celów")}</span></div>
         <div className="ai-start-direction"><h3>{humanize(aiGoalReview.review.headline)}</h3>{summary ? <p aria-label={summary.truncated ? summary.full : undefined}>{summary.visible}</p> : null}</div>
@@ -114,11 +116,11 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
           <h3>{humanize(selection.recommendation.title)}</h3>
           <div className="ai-start-next-step"><span><ArrowRight />Następny krok</span><strong>{humanize(selection.recommendation.suggestedNextStep)}</strong></div>
           {selection.signalLabels.length ? <div className="ai-start-evidence" aria-label="Sygnały z danych"><Activity />{selection.signalLabels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div> : null}
-          <div className="ai-start-actions">{primaryCTA}<Link className="ai-start-full-link" to="/review">Zobacz pełną analizę<ChevronRight /></Link></div>
+          <div className="ai-start-actions">{primaryCTA}<Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę<ChevronRight /></Link></div>
           <div className="ai-feedback" role="group" aria-label={`Oceń zalecenie: ${humanize(selection.recommendation.title)}`}><span>Czy to pomocne?</span><button type="button" aria-pressed={ratings[selection.recommendation.id] === "helpful"} aria-label="Pomocne" onClick={() => void rate(selection.recommendation!.id, "helpful")}><ThumbsUp /></button><button type="button" aria-pressed={ratings[selection.recommendation.id] === "not_helpful"} aria-label="Niepomocne" onClick={() => void rate(selection.recommendation!.id, "not_helpful")}><ThumbsDown /></button></div>
           {feedbackError ? <p className="inline-mutation-error" role="alert">{feedbackError}</p> : null}
-        </article> : <div className="ai-start-actions"><Link className="ai-start-full-link" to="/review">Zobacz pełną analizę<ChevronRight /></Link></div>}
-        <footer className="muted-copy">Wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReview.cached ? " · wynik z cache" : ""}</footer>
+        </article> : <div className="ai-start-actions"><Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę<ChevronRight /></Link></div>}
+        <footer className="muted-copy">Przegląd Celów · ostatnie {aiGoalReview.windowDays} dni · {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)} · wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}{aiGoalReview.cached ? " · wynik z cache" : ""} · <Link to="/settings">Ustawienia</Link></footer>
       </div> : null}
 
       <section className="start-overview ai-start-signals" aria-label="Sygnały i dalszy plan">
@@ -133,7 +135,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
         </div>
       </section>
     </Panel>
-    <AIGoalReviewConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} />
+    <AIGoalReviewConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} windowDays={state.aiReviewSettings?.windowDays} />
     <AIGoalReviewDraftModal draft={draft} saving={draftSaving} error={draftError} onChange={setDraft} onClose={() => setDraft(undefined)} onSubmit={saveDraft} />
   </>;
 }

@@ -16,8 +16,10 @@ import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspac
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
 import type { AIGoalReview } from "../domain/aiGoalReview";
 import { AIGoalReviewError } from "../domain/aiGoalReview";
+import type { AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import { AppErrorReporter } from "../lib/appErrorReporter";
 import type { AIInboxTriageFeedbackRating } from "../domain/aiInboxTriage";
+import { decodeAIReviewSettings, type AIReviewSettings } from "../domain/aiReviewSettings";
 
 const STORAGE_KEY = "command-center-state-v1";
 const loadRepository = () => import("../data/supabaseRepository");
@@ -78,6 +80,15 @@ function cloneDemoState() {
   return ensureGoalModel(structuredClone(demoState));
 }
 
+function localGoalReviewSourceSignature(state: AppState) {
+  return JSON.stringify({
+    goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
+    criteria: state.goalCriteria,
+    actions: state.actions.filter((action) => action.goalId),
+    progress: state.progressEntries.slice(0, 250)
+  });
+}
+
 function loadDemoState(): AppState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -93,7 +104,8 @@ function loadDemoState(): AppState {
       aiProposals: parsed.aiProposals ?? [],
       aiExecutions: parsed.aiExecutions ?? [],
       focusSessions: parsed.focusSessions ?? [],
-      projects: (parsed.projects ?? demo.projects).map((project) => ({ ...project, commitmentStatus: project.commitmentStatus ?? "active" }))
+      projects: (parsed.projects ?? demo.projects).map((project) => ({ ...project, commitmentStatus: project.commitmentStatus ?? "active" })),
+      aiReviewSettings: decodeAIReviewSettings(parsed.aiReviewSettings)
     });
   } catch {
     return cloneDemoState();
@@ -127,7 +139,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [aiGoalReview, setAIGoalReview] = useState<AIGoalReview>();
   const [aiGoalReviewStatus, setAIGoalReviewStatus] = useState<"idle" | "loading" | "refreshing" | "ready" | "error">("idle");
   const [aiGoalReviewError, setAIGoalReviewError] = useState<{ code: string; message: string }>();
+  const [aiGoalReviewFreshness, setAIGoalReviewFreshness] = useState<AIGoalReviewFreshness>("none");
+  const [aiGoalReviewCheckedAt, setAIGoalReviewCheckedAt] = useState<string>();
+  const [aiGoalReviewReadStatus, setAIGoalReviewReadStatus] = useState<"idle" | "checking" | "checked" | "error">("idle");
+  const [aiGoalReviewReadError, setAIGoalReviewReadError] = useState<string>();
+  const latestReviewRequestRef = useRef(0);
+  const goalReviewGenerationRef = useRef(0);
   const aiReviewSignatureRef = useRef<string | undefined>(undefined);
+  const aiReviewSettingsSignatureRef = useRef<string | undefined>(undefined);
 
   const remoteQuery = useQuery({
     queryKey: ["workspace-state", user?.id],
@@ -157,6 +176,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (identityRef.current === identityKey) return;
     identityRef.current = identityKey;
+    latestReviewRequestRef.current++;
+    goalReviewGenerationRef.current++;
     appliedSnapshotsRef.current = new WeakSet<object>();
     freshness.reset();
     mutationCoordinator.reset();
@@ -164,6 +185,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     stateRef.current = empty;
     setState(empty);
     setLocalHydrated(mode === "demo");
+    setAIGoalReview(undefined);
+    setAIGoalReviewStatus("idle");
+    setAIGoalReviewError(undefined);
+    setAIGoalReviewFreshness("none");
+    setAIGoalReviewCheckedAt(undefined);
+    setAIGoalReviewReadStatus("idle");
+    setAIGoalReviewReadError(undefined);
+    aiReviewSignatureRef.current = undefined;
+    aiReviewSettingsSignatureRef.current = undefined;
   }, [freshness, identityKey, mode, mutationCoordinator]);
 
   useEffect(() => {
@@ -287,25 +317,69 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     actions: state.actions.filter((action) => action.goalId),
     progress: state.progressEntries.slice(0, 250)
   }), [state.actions, state.goalCriteria, state.goals, state.progressEntries]);
+  const aiReviewSettingsSignature = useMemo(() => {
+    const settings = decodeAIReviewSettings(state.aiReviewSettings);
+    return `${settings.windowDays}:${settings.cacheHours}`;
+  }, [state.aiReviewSettings]);
+
+  const refreshLatestGoalReview = useCallback(async () => {
+    const requestedIdentity = identityKey;
+    const workspaceId = stateRef.current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+    if (!workspaceId) return;
+    const requestedSettings = decodeAIReviewSettings(stateRef.current.aiReviewSettings);
+    const requestedSettingsSignature = `${requestedSettings.windowDays}:${requestedSettings.cacheHours}`;
+    const requestedSourceSignature = localGoalReviewSourceSignature(stateRef.current);
+    const requestId = ++latestReviewRequestRef.current;
+    const generationRevision = goalReviewGenerationRef.current;
+    setAIGoalReviewReadStatus("checking");
+    setAIGoalReviewReadError(undefined);
+    const repositoryPromise = mode === "demo" ? Promise.resolve(localRepository) : import("../data/supabaseWorkspaceRepository").then((module) => module.createSupabaseWorkspaceRepository());
+    try {
+      const latest = await (await repositoryPromise).getLatestGoalReview(workspaceId);
+      const activeWorkspaceId = stateRef.current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (requestId !== latestReviewRequestRef.current || generationRevision !== goalReviewGenerationRef.current || identityRef.current !== requestedIdentity || activeWorkspaceId !== workspaceId) return;
+      const sourceSignatureUnchanged = requestedSourceSignature === localGoalReviewSourceSignature(stateRef.current);
+      const activeSettings = decodeAIReviewSettings(stateRef.current.aiReviewSettings);
+      const settingsSignatureUnchanged = requestedSettingsSignature === `${activeSettings.windowDays}:${activeSettings.cacheHours}`;
+      const freshness = latest.freshness === "current" && !settingsSignatureUnchanged
+        ? "configuration_changed"
+        : latest.freshness === "current" && !sourceSignatureUnchanged ? "source_changed" : latest.freshness;
+      setAIGoalReview(latest.review ? { ...latest.review, stale: freshness !== "current" } : undefined);
+      aiReviewSignatureRef.current = freshness === "current" && latest.review ? requestedSourceSignature : undefined;
+      aiReviewSettingsSignatureRef.current = requestedSettingsSignature;
+      setAIGoalReviewFreshness(freshness);
+      setAIGoalReviewCheckedAt(latest.checkedAt);
+      setAIGoalReviewReadStatus("checked");
+      setAIGoalReviewReadError(undefined);
+      setAIGoalReviewStatus(latest.review ? "ready" : "idle");
+      if (latest.freshness === "current" && (!sourceSignatureUnchanged || !settingsSignatureUnchanged)) void refreshLatestGoalReview();
+    } catch (error) {
+      if (requestId !== latestReviewRequestRef.current || generationRevision !== goalReviewGenerationRef.current || identityRef.current !== requestedIdentity) return;
+      setAIGoalReviewFreshness("unknown");
+      setAIGoalReviewReadStatus("error");
+      setAIGoalReviewReadError(error instanceof Error ? error.message : "Nie udało się sprawdzić aktualności.");
+      setAIGoalReview((current) => current ? { ...current, stale: true } : current);
+    }
+  }, [identityKey, localRepository, mode]);
 
   useEffect(() => {
     if (aiGoalReview && aiReviewSignatureRef.current && aiReviewSignatureRef.current !== aiReviewSignature && !aiGoalReview.stale) {
       setAIGoalReview({ ...aiGoalReview, stale: true });
+      setAIGoalReviewFreshness("source_changed");
+      void refreshLatestGoalReview();
     }
-  }, [aiGoalReview, aiReviewSignature]);
+  }, [aiGoalReview, aiReviewSignature, refreshLatestGoalReview]);
 
   useEffect(() => {
-    if (!state.workspaceId || aiGoalReviewStatus !== "idle") return;
-    let active = true;
-    const repositoryPromise = mode === "demo" ? Promise.resolve(localRepository) : import("../data/supabaseWorkspaceRepository").then((module) => module.createSupabaseWorkspaceRepository());
-    void repositoryPromise.then((repository) => repository.getLatestGoalReview(state.workspaceId!)).then((review) => {
-      if (!active || !review) return;
-      aiReviewSignatureRef.current = aiReviewSignature;
-      setAIGoalReview(review);
-      setAIGoalReviewStatus("ready");
-    }).catch(() => { /* AI pozostaje opcjonalne i nie blokuje przestrzeni pracy. */ });
-    return () => { active = false; };
-  }, [aiGoalReviewStatus, aiReviewSignature, localRepository, mode, state.workspaceId]);
+    if (aiReviewSettingsSignatureRef.current && aiReviewSettingsSignatureRef.current !== aiReviewSettingsSignature) {
+      void refreshLatestGoalReview();
+    }
+  }, [aiReviewSettingsSignature, refreshLatestGoalReview]);
+
+  useEffect(() => {
+    if ((!state.workspaceId && mode !== "demo") || aiGoalReviewReadStatus !== "idle") return;
+    void refreshLatestGoalReview();
+  }, [aiGoalReviewReadStatus, mode, refreshLatestGoalReview, state.workspaceId]);
 
 
   const runRemote = useCallback(async (operation: () => Promise<void>, key = "workspace") => {
@@ -371,19 +445,64 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     aiGoalReview,
     aiGoalReviewStatus,
     aiGoalReviewError,
-    async requestGoalReview(forceRefresh = false) {
+    aiGoalReviewFreshness,
+    aiGoalReviewCheckedAt,
+    aiGoalReviewReadStatus,
+    aiGoalReviewReadError,
+    refreshLatestGoalReview,
+    async saveAIReviewSettings(settings: AIReviewSettings) {
+      const requestedIdentity = identityRef.current;
+      const validated = decodeAIReviewSettings(settings);
       const current = await ensureWorkspaceState();
+      if (identityRef.current !== requestedIdentity) return;
       const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
       if (!workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
+      const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
+      const saved = await repository.saveAIReviewSettings(workspaceId, validated);
+      const activeWorkspaceId = stateRef.current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (identityRef.current !== requestedIdentity || activeWorkspaceId !== workspaceId) return;
+      const updated = { ...stateRef.current, aiReviewSettings: saved };
+      aiReviewSettingsSignatureRef.current = `${saved.windowDays}:${saved.cacheHours}`;
+      stateRef.current = updated;
+      setState(updated);
+      await refreshLatestGoalReview();
+    },
+    async requestGoalReview(forceRefresh = false) {
+      const requestedIdentity = identityRef.current;
+      const current = await ensureWorkspaceState();
+      if (identityRef.current !== requestedIdentity) return;
+      const workspaceId = current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+      if (!workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
+      const generationRevision = ++goalReviewGenerationRef.current;
       setAIGoalReviewStatus(aiGoalReview ? "refreshing" : "loading");
       setAIGoalReviewError(undefined);
+      const requestedSourceSignature = localGoalReviewSourceSignature(stateRef.current);
+      const requestedSettings = decodeAIReviewSettings(stateRef.current.aiReviewSettings);
+      const requestedSettingsSignature = `${requestedSettings.windowDays}:${requestedSettings.cacheHours}`;
       try {
         const repository = mode === "demo" ? localRepository : (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository();
         const review = await repository.requestGoalReview(workspaceId, forceRefresh);
-        aiReviewSignatureRef.current = JSON.stringify({ goals: stateRef.current.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"), criteria: stateRef.current.goalCriteria, actions: stateRef.current.actions.filter((action) => action.goalId), progress: stateRef.current.progressEntries.slice(0, 250) });
-        setAIGoalReview(review);
+        const activeWorkspaceId = stateRef.current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+        if (identityRef.current !== requestedIdentity || activeWorkspaceId !== workspaceId || generationRevision !== goalReviewGenerationRef.current) return;
+        const activeSettings = decodeAIReviewSettings(stateRef.current.aiReviewSettings);
+        if (`${activeSettings.windowDays}:${activeSettings.cacheHours}` !== requestedSettingsSignature) {
+          setAIGoalReviewStatus(aiGoalReview ? "ready" : "idle");
+          void refreshLatestGoalReview();
+          return;
+        }
+        const sourceSignatureUnchanged = requestedSourceSignature === localGoalReviewSourceSignature(stateRef.current);
+        aiReviewSignatureRef.current = sourceSignatureUnchanged ? requestedSourceSignature : undefined;
+        aiReviewSettingsSignatureRef.current = requestedSettingsSignature;
+        setAIGoalReview({ ...review, stale: !sourceSignatureUnchanged });
+        setAIGoalReviewFreshness(sourceSignatureUnchanged ? "current" : "source_changed");
+        setAIGoalReviewCheckedAt(new Date().toISOString());
+        setAIGoalReviewReadStatus("checked");
+        setAIGoalReviewReadError(undefined);
         setAIGoalReviewStatus("ready");
+        if (!sourceSignatureUnchanged) void refreshLatestGoalReview();
       } catch (error) {
+        const activeWorkspaceId = stateRef.current.workspaceId ?? (mode === "demo" ? "demo" : undefined);
+        if (identityRef.current !== requestedIdentity || activeWorkspaceId !== workspaceId || generationRevision !== goalReviewGenerationRef.current) return;
         const code = error instanceof AIGoalReviewError ? error.code : (error as { code?: string })?.code ?? "PROVIDER_REJECTED";
         const message = error instanceof Error ? error.message : "Nie udało się wygenerować Przeglądu AI.";
         setAIGoalReviewError({ code, message });
@@ -1106,7 +1225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewError, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;

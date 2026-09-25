@@ -15,6 +15,7 @@ export type ActionStatus = "ready" | "in_progress" | "testing" | "blocked" | "co
 export type ProgressKind = "note" | "decision" | "result" | "evidence" | "blocker";
 export type RecurrenceUnit = "day" | "week" | "month";
 export type MissedOccurrencePolicy = "skip_missed" | "carry_one";
+import type { AIReviewSettings } from "./aiReviewSettings";
 
 export interface ProjectCategory { id: string; name: string; color: string }
 
@@ -377,6 +378,7 @@ export interface FocusState {
 export interface AppState {
   workspaceId?: string;
   workspaceTimezone: string;
+  aiReviewSettings?: AIReviewSettings;
   areas: Area[];
   projectCategories?: ProjectCategory[];
   goalTemplates: GoalTemplate[];

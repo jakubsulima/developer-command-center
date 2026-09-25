@@ -30,6 +30,7 @@ function assessmentStatus(signals: string[]): AIGoalStatus {
 }
 
 export function createDemoAIGoalReview(state: AppState, now = new Date()): AIGoalReview {
+  const windowDays = state.aiReviewSettings?.windowDays ?? 28;
   const activeGoals = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active");
   if (!activeGoals.length) throw Object.assign(new Error("Nie ma aktywnych Celów do analizy."), { code: "NO_ACTIVE_GOALS" });
   const analyzed = activeGoals.slice(0, 50);
@@ -46,7 +47,7 @@ export function createDemoAIGoalReview(state: AppState, now = new Date()): AIGoa
     else if (signals.length) recommendations.push({ id: `demo-attention-${goal.id}`, title: `Sprawdź: ${goal.title}`, reason: "Deterministyczne sygnały wskazują, że plan wymaga aktualizacji.", suggestedNextStep: "Otwórz Cel i zweryfikuj termin, zakres oraz otwarte Działania.", horizon: "this_week", confidence: "medium", goalIds: [goal.id], actionIds: [], signalKeys: signals });
   }
   if (!recommendations.length) recommendations.push({ id: "demo-continue", title: "Utrzymaj obecny kierunek", reason: "Nie wykryto pilnych blokad ani brakujących następnych kroków.", suggestedNextStep: "Wybierz najważniejsze Działanie na początek tygodnia.", horizon: "this_week", confidence: "medium", goalIds: analyzed.slice(0, 1).map((goal) => goal.id), actionIds: [], signalKeys: [] });
-  const visibleRecommendations = recommendations.slice(0, 5);
+  const visibleRecommendations = recommendations.slice(0, 3);
   const assessments = analyzed.map((goal) => {
     const signals = signalMap.get(goal.id) ?? [];
     const status = assessmentStatus(signals);
@@ -60,8 +61,9 @@ export function createDemoAIGoalReview(state: AppState, now = new Date()): AIGoa
     status: "ready",
     cached: false,
     generatedAt,
-    periodStart: day(new Date(now.getTime() - 28 * 86_400_000)),
+    periodStart: day(new Date(now.getTime() - windowDays * 86_400_000)),
     periodEnd: day(now),
+    windowDays,
     provider: "demo",
     model: "deterministyczna symulacja",
     analyzedGoalIds: analyzed.map((goal) => goal.id),
@@ -69,10 +71,10 @@ export function createDemoAIGoalReview(state: AppState, now = new Date()): AIGoa
     review: {
       schemaVersion: AI_GOAL_REVIEW_SCHEMA_VERSION,
       headline: overallStatus === "on_track" ? "Portfolio Celów ma czytelny kierunek" : "Kilka Celów wymaga świadomej decyzji",
-      summary: `Przejrzano ${analyzed.length} aktywnych Celów. ${activeGoalsWithoutNextAction(state).length} nie ma następnego Działania; priorytetem są blokady i najbliższe konkretne ruchy.`,
+    summary: `Przejrzano ${analyzed.length} aktywnych Celów w ruchomym oknie ostatnich ${windowDays} dni. ${activeGoalsWithoutNextAction(state).length} nie ma następnego Działania; priorytetem są blokady i najbliższe konkretne ruchy.`,
       overallStatus,
       recommendations: visibleRecommendations,
-      checks: assessments.filter((item) => item.status !== "on_track").slice(0, 5).map((item) => ({ id: `demo-check-${item.goalId}`, question: "Czy rezultat, termin i następny krok tego Celu są nadal aktualne?", whyItMatters: "Aktualna odpowiedź pozwoli odróżnić realną blokadę od nieaktualnego planu.", goalIds: [item.goalId], signalKeys: item.signalKeys })),
+      checks: assessments.filter((item) => item.status !== "on_track").slice(0, 3).map((item) => ({ id: `demo-check-${item.goalId}`, question: "Czy rezultat, termin i następny krok tego Celu są nadal aktualne?", whyItMatters: "Aktualna odpowiedź pozwoli odróżnić realną blokadę od nieaktualnego planu.", goalIds: [item.goalId], signalKeys: item.signalKeys })),
       goalAssessments: assessments
     }
   };

@@ -1,8 +1,9 @@
 import type { FocusSessionRecord, GoalAction, KnowledgeItem } from "../domain/types";
 import { getSupabase } from "../lib/supabase";
 import type { Page, PageCursor, SearchResult, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
-import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent, type AIGoalReviewFeedbackRating } from "../domain/aiGoalReview";
+import { AIGoalReviewError, decodeAIGoalReview, type AIGoalReviewFeedbackRating, type AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import { AIInboxTriageError, decodeAIInboxTriageProposal, type AIInboxTriageFeedbackRating } from "../domain/aiInboxTriage";
+import { decodeAIReviewSettings } from "../domain/aiReviewSettings";
 
 function objectPayload(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}: nieprawidłowy JSON`);
@@ -55,6 +56,7 @@ export function decodeWorkspaceCore(payload: unknown): WorkspaceCore {
   return {
     workspaceId: typeof root.workspaceId === "string" ? root.workspaceId : undefined,
     workspaceTimezone: stringPayload(root.workspaceTimezone, "WorkspaceCore.workspaceTimezone"),
+    aiReviewSettings: decodeAIReviewSettings(root.aiReviewSettings),
     areas: arrayPayload(root.areas, "WorkspaceCore.areas"),
     projectCategories: arrayPayload(root.projectCategories ?? [], "WorkspaceCore.projectCategories"),
     goalTemplates: arrayPayload(root.goalTemplates, "WorkspaceCore.goalTemplates"),
@@ -89,6 +91,18 @@ function decodePage<T>(payload: unknown, label: string): Page<T> {
   };
 }
 
+function decodeLatestGoalReview(payload: unknown) {
+  const root = objectPayload(payload, "AIGoalReviewLatest");
+  const freshness = root.freshness;
+  if (!(["none", "current", "source_changed", "expired", "configuration_changed", "unknown"] as unknown[]).includes(freshness)) {
+    throw new AIGoalReviewError("INVALID_MODEL_OUTPUT", "Nieprawidłowy status aktualności Przeglądu AI.");
+  }
+  if (typeof root.checkedAt !== "string") throw new AIGoalReviewError("INVALID_MODEL_OUTPUT", "Brak czasu sprawdzenia Przeglądu AI.");
+  const review = root.review === null ? null : decodeAIGoalReview(root.review);
+  if ((freshness === "none") !== (review === null)) throw new AIGoalReviewError("INVALID_MODEL_OUTPUT", "Status Przeglądu AI nie pasuje do wyniku.");
+  return { review: review ? { ...review, stale: freshness !== "current" } : null, freshness: freshness as AIGoalReviewFreshness, checkedAt: root.checkedAt };
+}
+
 function cursorParams(cursor?: PageCursor) {
   return { cursor_sort_value: cursor?.sortValue ?? null, cursor_id: cursor?.id ?? null };
 }
@@ -112,6 +126,17 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`WorkspaceCore: ${error.message}`);
       const core = decodeWorkspaceCore(data);
       if (!core.workspaceId) return core;
+      const settingsResult = await getSupabase().from("workspaces")
+        .select("ai_review_window_days,ai_review_cache_hours")
+        .eq("id", core.workspaceId)
+        .single();
+      if (settingsResult.error) {
+        if (settingsResult.error.code === "42703") core.aiReviewSettings = decodeAIReviewSettings(undefined);
+        else throw new Error(`WorkspaceSettings: ${settingsResult.error.message}`);
+      } else {
+        if (!settingsResult.data) throw new Error("WorkspaceSettings: brak dostępnego Workspace.");
+        core.aiReviewSettings = decodeAIReviewSettings(settingsResult.data);
+      }
       core.actions = await withActionReviewDates(core.actions);
       try {
         const weekly = await getSupabase().rpc("get_workspace_weekly_summary", { target_workspace_id: core.workspaceId });
@@ -122,6 +147,16 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
         // Additive compatibility: older deployments keep the core aggregate.
       }
       return core;
+    },
+    async saveAIReviewSettings(workspaceId, settings) {
+      const validated = decodeAIReviewSettings(settings);
+      const { data, error } = await getSupabase().from("workspaces")
+        .update({ ai_review_window_days: validated.windowDays, ai_review_cache_hours: validated.cacheHours })
+        .eq("id", workspaceId)
+        .select("ai_review_window_days,ai_review_cache_hours")
+        .single();
+      if (error || !data) throw new Error(`WorkspaceSettings: ${error?.message ?? "brak dostępnego Workspace"}`);
+      return decodeAIReviewSettings(data);
     },
     async loadPage(query) {
       if (query.collection === "actions" && (!isUuid(query.actionFilter?.projectId) || !isUuid(query.actionFilter?.goalId))) {
@@ -171,21 +206,19 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       return exportWorkspaceRemote(workspaceId) as Promise<WorkspaceExport>;
     },
     async getLatestGoalReview(workspaceId) {
-      const { data, error } = await getSupabase().from("ai_goal_reviews")
-        .select("id,period_start,period_end,provider,model,review_json,analyzed_goal_ids,omitted_goal_ids,created_at,cache_expires_at")
-        .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data, error } = await getSupabase().functions.invoke("ai-goal-review", { body: { workspaceId, operation: "latest" } });
       if (error) {
-        if (error.code === "42P01" || /ai_goal_reviews.*does not exist/i.test(error.message)) return undefined;
-        throw new AIGoalReviewError("WORKSPACE_NOT_AVAILABLE", "Nie udało się pobrać ostatniego Przeglądu AI.");
+        const context = (error as { context?: Response }).context;
+        let code = "WORKSPACE_NOT_AVAILABLE";
+        let message = "Nie udało się sprawdzić aktualności Przeglądu AI.";
+        if (context) try {
+          const payload = await context.clone().json() as { error?: { code?: string; message?: string } };
+          code = payload.error?.code ?? code;
+          message = payload.error?.message ?? message;
+        } catch { /* zachowaj stabilny błąd odczytu */ }
+        throw new AIGoalReviewError(code, message);
       }
-      if (!data) return undefined;
-      return decodeAIGoalReview({
-        reviewId: data.id, status: "ready", cached: true,
-        stale: new Date(data.cache_expires_at).getTime() <= Date.now(), generatedAt: data.created_at,
-        periodStart: data.period_start, periodEnd: data.period_end, provider: data.provider, model: data.model,
-        analyzedGoalIds: data.analyzed_goal_ids, omittedGoalIds: data.omitted_goal_ids,
-        review: decodeAIGoalReviewContent(data.review_json)
-      });
+      return decodeLatestGoalReview(data);
     },
     async requestGoalReview(workspaceId, forceRefresh = false) {
       const { data, error } = await getSupabase().functions.invoke("ai-goal-review", { body: { workspaceId, forceRefresh } });

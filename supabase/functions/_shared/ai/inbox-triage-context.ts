@@ -27,6 +27,7 @@ export function contextAllowlists(context: InboxTriageContext) {
 
 export async function hashInboxTriageContext(context: InboxTriageContext) {
   const serialized = JSON.stringify(context);
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(serialized));
+  const { sourceSnapshotAt: _snapshot, ...stableContext } = context;
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(stableContext)));
   return { serialized, hash: [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
 }
