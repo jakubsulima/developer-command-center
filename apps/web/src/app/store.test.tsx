@@ -149,7 +149,8 @@ describe("StoreProvider", () => {
       undefined,
       expect.objectContaining({ title: "Early Goal", outcome: "Outcome" }),
       [],
-      expect.any(String)
+      expect.any(String),
+      []
     ));
     expect(screen.queryByText("Brak aktywnej przestrzeni pracy.")).not.toBeInTheDocument();
   });

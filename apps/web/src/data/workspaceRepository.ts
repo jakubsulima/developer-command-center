@@ -1,6 +1,6 @@
 import type { DomainCommand } from "../domain/commands";
 import type { ActionListFilter } from "../domain/actionsList";
-import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink } from "../domain/types";
+import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, KnowledgeKind, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink, ReadingStatus } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating, AIGoalReviewLatest } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
@@ -99,6 +99,10 @@ export interface WorkspacePageQuery {
   pageSize: number;
   goalId?: string;
   actionFilter?: ActionListFilter;
+  resourceFormat?: "book";
+  readingStatus?: ReadingStatus;
+  knowledgeKind?: KnowledgeKind;
+  searchText?: string;
   cursor?: PageCursor;
 }
 
@@ -151,6 +155,7 @@ export interface WorkspaceRepository {
   saveAIReviewSettings(workspaceId: string, settings: AIReviewSettings): Promise<AIReviewSettings>;
   loadPage(query: WorkspacePageQuery): Promise<Page<WorkspacePageItem>>;
   loadKnowledgeItem(id: string): Promise<KnowledgeItem | undefined>;
+  loadKnowledgeItems(ids: string[]): Promise<KnowledgeItem[]>;
   loadAction(id: string): Promise<GoalAction | undefined>;
   loadLegacyFocusSession(id: string): Promise<FocusSessionRecord | undefined>;
   search(query: string, limit?: number): Promise<SearchResult[]>;

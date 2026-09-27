@@ -1,4 +1,5 @@
 import { ProjectCategoryPicker } from "./ProjectCategoryPicker";
+import { ProjectPresetPicker } from "./ProjectPresetPicker";
 import { BookMarked, CalendarClock, ChevronDown, Flag, FolderKanban, Library, ListPlus, Plus, Repeat2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useStore } from "../app/useStore";
@@ -17,7 +18,8 @@ import { finishPerformanceTiming } from "../lib/performanceMetrics";
 import { KnowledgeKindPicker } from "./KnowledgeKindPicker";
 import { MultiCombobox } from "./MultiCombobox";
 import { nextOccurrenceDates } from "../domain/recurrence";
-import type { RecurringActionTemplate } from "../domain/types";
+import type { ProjectPreset, RecurringActionTemplate } from "../domain/types";
+import { categoryPresetSuggestion } from "../domain/projectPresets";
 import { describeActionSchedule } from "../domain/actionPresentation";
 
 export type QuickAddRequest = {
@@ -26,12 +28,13 @@ export type QuickAddRequest = {
   areaId?: string;
   scheduledFor?: string;
   pinnedToToday?: boolean;
+  materialKnowledgeIds?: string[];
   /** Distinguishes drafts belonging to contextual entry points. */
   draftKey?: string;
 };
 
-type QuickAddDraft = { projectCategoryIds?: string[]; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; contexts?: Partial<Record<QuickAddMode, string>> };
-const emptyDraft: QuickAddDraft = { mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: true, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [] };
+type QuickAddDraft = { projectCategoryIds?: string[]; projectPreset?: ProjectPreset; projectPresetManuallyChosen?: boolean; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; contexts?: Partial<Record<QuickAddMode, string>> };
+const emptyDraft: QuickAddDraft = { mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: true, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [], projectPreset: "standard", projectPresetManuallyChosen: false };
 const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
   if (!value || typeof value !== "object") return false;
   const draft = value as QuickAddDraft;
@@ -41,6 +44,8 @@ const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
     && ["note", "resource", "decision"].includes(draft.libraryKind)
     && ["day", "week", "month"].includes(draft.routineUnit)
     && (draft.projectCategoryIds === undefined || (Array.isArray(draft.projectCategoryIds) && draft.projectCategoryIds.every((id) => typeof id === "string")))
+    && (draft.projectPreset === undefined || ["standard", "reading"].includes(draft.projectPreset))
+    && (draft.projectPresetManuallyChosen === undefined || typeof draft.projectPresetManuallyChosen === "boolean")
     && Array.isArray(draft.goalIds) && draft.goalIds.every((id) => typeof id === "string")
     && Array.isArray(draft.routineWeekdays) && draft.routineWeekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
     && (draft.contexts === undefined || Boolean(draft.contexts && typeof draft.contexts === "object" && Object.entries(draft.contexts).every(([mode, context]) => (quickAddModes as readonly string[]).includes(mode) && typeof context === "string")));
@@ -95,6 +100,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const requestAreaId = request?.areaId;
   const requestScheduledFor = request?.scheduledFor;
   const requestPinnedToToday = request?.pinnedToToday;
+  const requestMaterialKnowledgeIds = request?.materialKnowledgeIds ?? [];
   const initialDraft = useMemo<QuickAddDraft>(() => ({ ...emptyDraft, mode: normalizeQuickAddMode(requestMode ?? "action"), context: requestGoalId ? `goal:${requestGoalId}` : requestAreaId ? `area:${requestAreaId}` : "", scheduledFor: requestScheduledFor ?? "", pinnedToToday: requestPinnedToToday ?? (requestMode === "action" ? false : true), routineStartsOn: currentDate, routineWeekdays: [new Date(`${currentDate}T12:00:00Z`).getUTCDay()] }), [currentDate, requestAreaId, requestGoalId, requestMode, requestPinnedToToday, requestScheduledFor]);
   const draftKind = request?.draftKey ? `quick-add:${request.draftKey}` : "global-quick-add";
   const migrate = useCallback((value: unknown) => migrateQuickAddDraft(value, initialDraft), [initialDraft]);
@@ -208,9 +214,9 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     savingRef.current = true;
     setSaving(true); setError("");
     try {
-      if (formData.mode === "action") { await createAction({ title: formData.title, detail: formData.detail, goalId: formData.goalId, areaId: formData.areaId, scheduledFor: formData.scheduledFor || undefined, pinnedToToday: formData.pinnedToToday }); notifySuccess(formData.pinnedToToday ? "Działanie dodane do Startu." : "Działanie dodane."); }
-      else if (formData.mode === "goal") { await createGoal({ title: formData.title, outcome: formData.detail || formData.title, areaId: formData.areaId }); notifySuccess("Cel utworzony."); }
-      else if (formData.mode === "project") { await createArea(formData.title, formData.detail || undefined, undefined, draft.value.projectCategoryIds ?? []); notifySuccess("Projekt utworzony."); }
+      if (formData.mode === "action") { await createAction({ title: formData.title, detail: formData.detail, goalId: formData.goalId, areaId: formData.areaId, scheduledFor: formData.scheduledFor || undefined, pinnedToToday: formData.pinnedToToday, materialKnowledgeIds: requestMaterialKnowledgeIds }); notifySuccess(formData.pinnedToToday ? "Działanie dodane do Startu." : "Działanie dodane."); }
+      else if (formData.mode === "goal") { await createGoal({ title: formData.title, outcome: formData.detail || formData.title, areaId: formData.areaId, materialKnowledgeIds: requestMaterialKnowledgeIds }); notifySuccess("Cel utworzony."); }
+      else if (formData.mode === "project") { await createArea(formData.title, formData.detail || undefined, undefined, draft.value.projectCategoryIds ?? [], draft.value.projectPreset ?? "standard"); notifySuccess("Projekt utworzony."); }
       else if (formData.mode === "routine") {
         const interval = Number(draft.value.routineInterval);
         const startsOn = draft.value.routineStartsOn || currentDate;
@@ -256,7 +262,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
             {draft.value.mode === "library" && draft.value.libraryKind === "resource" ? <label className="quick-add-field" htmlFor="quick-add-library-url"><span className="field-label">Link HTTP/HTTPS <span className="optional-label">opcjonalnie</span></span><input id="quick-add-library-url" type="url" placeholder="https://…" disabled={saving} value={draft.value.sourceUrl} onChange={(event) => draft.setValue((current) => ({ ...current, sourceUrl: event.target.value }))} /></label> : null}
             <label className="quick-add-field" htmlFor="quick-add-detail"><span className="field-label">{draft.value.mode === "goal" ? "Rezultat" : libraryGuidance?.detailLabel ?? "Opis"} {!(draft.value.mode === "library" && draft.value.libraryKind === "decision") ? <span className="optional-label">opcjonalnie</span> : null}</span><textarea id="quick-add-detail" rows={3} required={draft.value.mode === "library" && draft.value.libraryKind === "decision"} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && draft.value.mode === "library" && draft.value.libraryKind === "decision" && !draft.value.detail.trim() || undefined} placeholder={libraryGuidance?.detailPlaceholder ?? modeCopy.placeholder.split("\n")[1] ?? "Dodaj szczegóły, jeśli są potrzebne"} value={draft.value.detail} disabled={saving} onChange={(event) => updateStructuredField("detail", event.target.value)} /></label>
           </div>}
-          {draft.value.mode === "project" ? <ProjectCategoryPicker value={draft.value.projectCategoryIds ?? []} onChange={(projectCategoryIds) => draft.setValue((current) => ({ ...current, projectCategoryIds }))} /> : null}
+          {draft.value.mode === "project" ? <><ProjectPresetPicker value={draft.value.projectPreset ?? "standard"} categories={state.projectCategories ?? []} categoryIds={draft.value.projectCategoryIds ?? []} onChange={(projectPreset) => draft.setValue((current) => ({ ...current, projectPreset, projectPresetManuallyChosen: true }))} disabled={saving} /><ProjectCategoryPicker value={draft.value.projectCategoryIds ?? []} onChange={(projectCategoryIds) => draft.setValue((current) => ({ ...current, projectCategoryIds, projectPreset: current.projectPresetManuallyChosen ? current.projectPreset : categoryPresetSuggestion(state.projectCategories ?? [], projectCategoryIds).preset }))} /></> : null}
           <p className={`quick-add-context-summary${normalizedContext.unavailable ? " is-invalid" : ""}`}><strong>Miejsce zapisu:</strong> {draft.value.mode === "inbox" ? "Bez powiązań — uporządkujesz później" : normalizedContext.unavailable ? `${normalizedContext.unavailable.label} — wybierz inne lub odłącz` : draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.map((id) => activeGoals.find((goal) => goal.id === id)?.title).join(", ")}` : contextSummary}</p>
           {normalizedContext.unavailable ? <Button type="button" variant="ghost" disabled={saving} onClick={() => { setError(""); draft.setValue((current) => ({ ...current, context: "", goalIds: [], contexts: { ...current.contexts, [current.mode]: "" } })); }}>Odłącz niedostępne powiązanie</Button> : null}
           {scheduleSummary ? <p className="quick-add-context-summary"><strong>Termin:</strong> {scheduleSummary}</p> : null}

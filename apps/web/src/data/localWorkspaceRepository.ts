@@ -16,7 +16,7 @@ const STORE_NAME = "workspace";
 const STATE_KEY = "active";
 const FALLBACK_KEY = "command-center-local-workspace-v2";
 const GOAL_REVIEW_KEY = "command-center-ai-goal-review-v1";
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 interface StoredWorkspace {
   version: number;
@@ -219,7 +219,13 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
-      const items = pageItems(state, query.collection, query.goalId, query.actionFilter);
+      let items = pageItems(state, query.collection, query.goalId, query.actionFilter);
+      if (query.collection === "knowledge") items = (items as AppState["knowledge"]).filter((item) =>
+        (!query.resourceFormat || item.resourceFormat === query.resourceFormat)
+        && (!query.readingStatus || (item.resourceFormat === "book" && item.readingStatus === query.readingStatus))
+        && (!query.knowledgeKind || item.type === query.knowledgeKind)
+        && (!query.searchText || `${item.title} ${item.detail} ${item.resourceAuthor ?? ""}`.toLocaleLowerCase("pl").includes(query.searchText.toLocaleLowerCase("pl")))
+      );
       if (query.collection === "actions" && query.actionFilter) {
         return pageByCursor(items, query.pageSize, query.cursor, (item) => actionListSortValue(item as AppState["actions"][number], query.actionFilter!.view), actionListSortDirection(query.actionFilter.view));
       }
@@ -231,6 +237,10 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     async loadKnowledgeItem(id: string) {
       return (await load())?.knowledge.find((item) => item.id === id);
     },
+    async loadKnowledgeItems(ids: string[]) {
+      const wanted = new Set(ids);
+      return (await load())?.knowledge.filter((item) => wanted.has(item.id)) ?? [];
+    },
     async loadLegacyFocusSession(id: string) {
       return (await load())?.focusSessions.find((session) => session.id === id);
     },
@@ -241,7 +251,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       const results: SearchResult[] = [
         ...state.goals.filter((item) => `${item.title} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "goal" as const, title: item.title, detail: item.outcome, route: `/goals/${item.id}` })),
         ...state.actions.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "action" as const, title: item.title, detail: item.detail, route: `/actions/${item.id}` })),
-        ...state.knowledge.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
+        ...state.knowledge.filter((item) => `${item.title} ${item.detail} ${item.resourceAuthor ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
         ...state.areas.filter((item) => item.visibility === "active" && `${item.name} ${item.description ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.description, route: `/projects/${item.id}` })),
         ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: `/knowledge?section=inbox&item=${item.id}` }))
       ];

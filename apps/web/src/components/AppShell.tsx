@@ -71,6 +71,11 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
     setQuickAddRequest(request);
     setQuickAddOpen(true);
   }, []);
+  useEffect(() => {
+    const handleRequest = (event: Event) => openQuickAdd((event as CustomEvent<AppShellQuickAddRequest | undefined>).detail);
+    window.addEventListener("app-shell:quick-add", handleRequest);
+    return () => window.removeEventListener("app-shell:quick-add", handleRequest);
+  }, [openQuickAdd]);
   const triggerAdd = useCallback(() => {
     // Keyboard shortcuts must not open a second editor over an active dialog.
     if (document.querySelector('[aria-modal="true"]')) return;

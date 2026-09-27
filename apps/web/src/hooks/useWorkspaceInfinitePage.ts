@@ -5,7 +5,8 @@ import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 import { pageByCursor, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem } from "../data/workspaceRepository";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
-import type { AppState } from "../domain/types";
+import type { AppState, KnowledgeKind } from "../domain/types";
+import type { ReadingStatus } from "../domain/types";
 
 const defaultPageSize: Record<WorkspacePageCollection, number> = {
   inbox: 50,
@@ -16,11 +17,13 @@ const defaultPageSize: Record<WorkspacePageCollection, number> = {
   reviews: 20
 };
 
-export function workspacePageQueryKey(collection: WorkspacePageCollection, mode: string, workspaceId: string | undefined, options: { goalId?: string; actionFilter?: ActionListFilter } = {}) {
-  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today] as const;
+export interface WorkspacePageOptions { goalId?: string; actionFilter?: ActionListFilter; resourceFormat?: "book"; readingStatus?: ReadingStatus; knowledgeKind?: KnowledgeKind; searchText?: string }
+
+export function workspacePageQueryKey(collection: WorkspacePageCollection, mode: string, workspaceId: string | undefined, options: WorkspacePageOptions = {}) {
+  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today, options.resourceFormat, options.readingStatus, options.knowledgeKind, options.searchText] as const;
 }
 
-export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection: WorkspacePageCollection, pageSize = defaultPageSize[collection], options: { goalId?: string; actionFilter?: ActionListFilter } = {}) {
+export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection: WorkspacePageCollection, pageSize = defaultPageSize[collection], options: WorkspacePageOptions = {}) {
   const { mode, state, loading } = useStore();
   const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
   return useInfiniteQuery({
@@ -33,7 +36,7 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
         return pageByCursor(actions, pageSize, pageParam, (action) => actionListSortValue(action, options.actionFilter!.view), actionListSortDirection(options.actionFilter.view));
       }
       const repository = mode === "demo" ? localRepository : createSupabaseWorkspaceRepository();
-      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, goalId: options.goalId, actionFilter: options.actionFilter, cursor: pageParam });
+      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus, knowledgeKind: options.knowledgeKind, searchText: options.searchText, cursor: pageParam });
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     select: (data) => ({

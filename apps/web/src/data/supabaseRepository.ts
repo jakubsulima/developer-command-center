@@ -1,4 +1,4 @@
-import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectStatus, RecurringActionTemplate } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectPreset, ProjectStatus, RecurringActionTemplate } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
 import { migrateLegacyWorkspaceState } from "../domain/goals";
@@ -22,14 +22,14 @@ interface GoalSkillRow { learning_goal_id: string; skill_id: string }
 interface ProposalRow { id: string; status: "pending" | "approved" | "rejected"; created_at: string }
 interface ReviewRow { completed_at: string }
 interface GoalRow { id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
-interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
+interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; preset?: "standard" | "reading" | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalTemplateRow { id: string; name: string; kind: AppState["goalTemplates"][number]["kind"]; outcome_prompt: string; criterion_prompt: string | null; default_actions: Array<{ title: string; detail?: string }>; is_system: boolean; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalCriterionRow { id: string; goal_id: string; title: string; completed: boolean; legacy_source_id: string | null }
 interface ActionRow { id: string; version: number; goal_id: string | null; area_id: string | null; title: string; detail: string; status: ActionStatus; blocker: string | null; position: number; is_next: boolean; pinned_to_today: boolean; scheduled_for: string | null; completed_at: string | null; skipped_at: string | null; cancelled_at: string | null; recurring_template_id: string | null; occurrence_date: string | null; checklist: AppState["actions"][number]["checklist"]; legacy_source_id: string | null; created_at: string; updated_at: string }
 interface ProgressRow { id: string; goal_id: string; action_id: string | null; knowledge_entity_id: string | null; kind: AppState["progressEntries"][number]["kind"]; content: string; legacy_source: "learning_evidence" | "checkpoint" | null; legacy_source_id: string | null; created_at: string }
 interface RecurringRow { id: string; title: string; detail: string; goal_id: string | null; area_id: string | null; timezone: string; starts_on: string; recurrence_rule: RecurringActionTemplate["rule"]; missed_policy: RecurringActionTemplate["missedPolicy"]; status: RecurringActionTemplate["status"]; checklist: RecurringActionTemplate["checklist"]; last_materialized_on: string | null; skipped_occurrence_count: number; created_at: string; updated_at: string }
 interface KnowledgeLinkRow { id: string; knowledge_entity_id: string; target_knowledge_entity_id: string | null; area_id: string | null; goal_id: string | null; action_id: string | null; recurring_template_id: string | null; meaning: AppState["knowledgeLinks"][number]["meaning"]; created_at: string }
-interface KnowledgeContentRow { entity_id: string; detail: string; source_url: string | null; source_inbox_item_id: string | null; created_at: string; updated_at: string }
+interface KnowledgeContentRow { entity_id: string; detail: string; source_url: string | null; source_inbox_item_id: string | null; resource_format?: "book" | null; resource_author?: string | null; reading_status?: AppState["knowledge"][number]["readingStatus"] | null; created_at: string; updated_at: string }
 
 function dataOrThrow<T>(result: { data: T | null; error: { message: string } | null }, label: string): T {
   if (result.error) throw new Error(`${label}: ${result.error.message}`);
@@ -137,6 +137,21 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const recurringRows = dataOrThrow(recurringResult, "Działania cykliczne") as RecurringRow[];
   const knowledgeLinkRows = dataOrThrow(knowledgeLinksResult, "Powiązania Wiedzy") as KnowledgeLinkRow[];
   const knowledgeContents = dataOrThrow(knowledgeContentsResult, "Treść Wiedzy") as KnowledgeContentRow[];
+  const [projectPresetsResult, categoryPresetsResult, knowledgeMetadataResult] = await Promise.all([
+    client.from("areas").select("id,preset").eq("workspace_id", workspaceId),
+    client.from("project_categories").select("id,default_preset").eq("workspace_id", workspaceId),
+    client.from("knowledge_items").select("entity_id,resource_format,resource_author,reading_status").eq("workspace_id", workspaceId)
+  ]);
+  for (const [result, label] of [[projectPresetsResult, "Presety projektów"], [categoryPresetsResult, "Domyślne presety kategorii"], [knowledgeMetadataResult, "Metadane książek"]] as const) {
+    if (result.error && result.error.code !== "42703") throw new Error(`${label}: ${result.error.message}`);
+  }
+  const projectPresetById = new Map((projectPresetsResult.data ?? []).map((item) => [item.id, item.preset]));
+  const categoryPresetById = new Map((categoryPresetsResult.data ?? []).map((item) => [item.id, item.default_preset]));
+  const knowledgeMetadataById = new Map((knowledgeMetadataResult.data ?? []).map((item) => [item.entity_id, item]));
+  for (const item of knowledgeContents) {
+    const metadata = knowledgeMetadataById.get(item.entity_id);
+    if (metadata) Object.assign(item, metadata);
+  }
   const knowledgeContentMap = new Map(knowledgeContents.map((item) => [item.entity_id, item]));
   const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
   const workItemMap = new Map(workItems.map((item) => [item.entity_id, item]));
@@ -191,8 +206,8 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     ...emptyState,
     workspaceId,
     workspaceTimezone: workspace.timezone || "Europe/Warsaw",
-    projectCategories: dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów"),
-    areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
+    projectCategories: (dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów") as Array<{ id: string; name: string; color: string }>).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) === "reading" || categoryPresetById.get(category.id) === "standard" ? categoryPresetById.get(category.id) : undefined })),
+    areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, preset: projectPresetById.get(area.id) === "reading" ? "reading" : "standard", name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
     goalTemplates: templates.map((template) => ({ id: template.id, name: template.name, kind: template.kind, outcomePrompt: template.outcome_prompt, criterionPrompt: template.criterion_prompt ?? undefined, defaultActions: template.default_actions, system: template.is_system, visibility: template.trashed_at ? "trashed" : template.archived_at ? "archived" : "active", createdAt: template.created_at, updatedAt: template.updated_at })),
     goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
     goalCriteria: criteria.map((criterion) => ({ id: criterion.id, goalId: criterion.goal_id, title: criterion.title, completed: criterion.completed, legacySourceId: criterion.legacy_source_id ?? undefined })),
@@ -231,7 +246,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     })),
     knowledge: entities
       .filter((item): item is EntityRow & { type: KnowledgeKind } => ["note", "resource", "decision", "artifact", "investigation"].includes(item.type))
-      .map((item) => { const content = knowledgeContentMap.get(item.id); return { id: item.id, version: item.version, type: item.type, title: item.title, detail: content?.detail ?? "", sourceUrl: content?.source_url ?? undefined, sourceInboxItemId: content?.source_inbox_item_id ?? undefined, archivedAt: item.archived_at ?? undefined, trashedAt: item.trashed_at ?? undefined, createdAt: content?.created_at, updatedAt: content?.updated_at }; }),
+      .map((item) => { const content = knowledgeContentMap.get(item.id); return { id: item.id, version: item.version, type: item.type, title: item.title, detail: content?.detail ?? "", sourceUrl: content?.source_url ?? undefined, sourceInboxItemId: content?.source_inbox_item_id ?? undefined, resourceFormat: content?.resource_format ?? undefined, resourceAuthor: content?.resource_author ?? undefined, readingStatus: content?.reading_status ?? undefined, archivedAt: item.archived_at ?? undefined, trashedAt: item.trashed_at ?? undefined, createdAt: content?.created_at, updatedAt: content?.updated_at }; }),
     focusSessions: sessions.map((session) => ({
       id: session.id,
       projectId: workItemMap.get(session.work_item_id)?.primary_context_entity_id ?? "",
@@ -404,7 +419,7 @@ export async function createProjectRemote(workspaceId: string, input: NewProject
   return projectId as unknown as string;
 }
 
-export async function createGoalRemote(workspaceId: string, goalId: string, actionId: string | undefined, input: NewGoalInput, criteria: Array<{ id: string; title: string; completed: boolean }>, idempotencyKey: string) {
+export async function createGoalRemote(workspaceId: string, goalId: string, actionId: string | undefined, input: NewGoalInput, criteria: Array<{ id: string; title: string; completed: boolean }>, idempotencyKey: string, materialLinks: Array<{ id: string; knowledgeItemId: string }> = []) {
   return dataOrThrow(await getSupabase().rpc("create_goal_with_action_v2", {
     target_workspace_id: workspaceId,
     target_goal_id: goalId,
@@ -416,7 +431,8 @@ export async function createGoalRemote(workspaceId: string, goalId: string, acti
     first_action_title: input.firstActionTitle ?? null,
     first_action_detail: input.firstActionDetail ?? null,
     goal_criteria: criteria,
-    command_idempotency_key: idempotencyKey
+    command_idempotency_key: idempotencyKey,
+    ...(materialLinks.length ? { goal_material_links: materialLinks } : {})
   }), "Utworzenie Celu");
 }
 
@@ -424,7 +440,7 @@ export async function updateGoalRemote(goalId: string, expectedVersion: number, 
   dataOrThrow(await getSupabase().rpc("update_goal_details_checked", { target_goal_id: goalId, expected_version: expectedVersion, goal_changes: changes, command_idempotency_key: crypto.randomUUID() }), "Edycja Celu");
 }
 
-export async function createActionRemote(workspaceId: string, id: string, input: NewActionInput) {
+export async function createActionRemote(workspaceId: string, id: string, input: NewActionInput, materialLinks: Array<{ id: string; knowledgeItemId: string }> = []) {
   dataOrThrow(await getSupabase().rpc("create_action_item", {
     target_workspace_id: workspaceId,
     target_action_id: id,
@@ -434,7 +450,8 @@ export async function createActionRemote(workspaceId: string, id: string, input:
     action_detail: input.detail ?? "",
     action_scheduled_for: input.scheduledFor ?? null,
     action_pinned_to_today: input.pinnedToToday ?? false,
-    command_idempotency_key: crypto.randomUUID()
+    command_idempotency_key: id,
+    ...(materialLinks.length ? { action_material_links: materialLinks } : {})
   }), "Utworzenie Działania");
 }
 
@@ -489,16 +506,17 @@ export async function addProgressRemote(workspaceId: string, id: string, goalId:
   }), "Aktualizacja postępu");
 }
 
-export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string, parentProjectId?: string, categoryIds?: string[]) {
-  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, category_ids: categoryIds ?? [], parent_project_id: parentProjectId ?? null, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Projektu");
+export async function createAreaRemote(workspaceId: string, id: string, name: string, description?: string, parentProjectId?: string, categoryIds?: string[], preset: ProjectPreset = "standard") {
+  dataOrThrow(await getSupabase().from("areas").insert({ id, workspace_id: workspaceId, category_ids: categoryIds ?? [], parent_project_id: parentProjectId ?? null, preset, name: name.trim(), description: description?.trim() ?? "" }).select("id").single(), "Utworzenie Projektu");
 }
 
-export async function updateAreaRemote(areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[] }) {
+export async function updateAreaRemote(areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[]; preset?: ProjectPreset }) {
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (changes.name !== undefined) payload.name = changes.name.trim();
   if (changes.description !== undefined) payload.description = changes.description.trim();
   if (changes.categoryIds !== undefined) payload.category_ids = changes.categoryIds;
   if (changes.parentProjectId !== undefined) payload.parent_project_id = changes.parentProjectId || null;
+  if (changes.preset !== undefined) payload.preset = changes.preset;
   dataOrThrow(await getSupabase().from("areas").update(payload).eq("id", areaId).select("id").single(), "Edycja Projektu");
 }
 
@@ -612,7 +630,10 @@ export async function createKnowledgeRemote(workspaceId: string, id: string, inp
     knowledge_project_id: input.projectId ?? null,
     knowledge_source_inbox_id: input.sourceInboxItemId ?? null,
     relations,
-    command_idempotency_key: id
+    command_idempotency_key: id,
+    knowledge_resource_format: input.resourceFormat ?? null,
+    knowledge_resource_author: input.resourceAuthor ?? null,
+    knowledge_reading_status: input.readingStatus ?? null
   }), "Utworzenie elementu Wiedzy");
 }
 
@@ -628,7 +649,7 @@ export async function recordActionResultRemote(workspaceId: string, actionId: st
   }), "Zapis rezultatu Działania");
 }
 
-export async function updateKnowledgeRemote(knowledgeId: string, expectedVersion: number, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
+export async function updateKnowledgeRemote(knowledgeId: string, expectedVersion: number, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: import("../domain/types").ReadingStatus | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
   dataOrThrow(await getSupabase().rpc("update_knowledge_item_checked", {
     target_knowledge_id: knowledgeId,
     expected_version: expectedVersion,
@@ -703,8 +724,8 @@ export async function exportWorkspaceRemote(workspaceId: string) {
   };
 }
 
-export async function saveProjectCategoryRemote(workspaceId: string, id: string, name: string, color: string) {
-  dataOrThrow(await getSupabase().from("project_categories").upsert({ id, workspace_id: workspaceId, name: name.trim(), color }).select("id").single(), "Zapis kategorii");
+export async function saveProjectCategoryRemote(workspaceId: string, id: string, name: string, color: string, defaultPreset?: ProjectPreset) {
+  dataOrThrow(await getSupabase().from("project_categories").upsert({ id, workspace_id: workspaceId, name: name.trim(), color, default_preset: defaultPreset ?? null }).select("id").single(), "Zapis kategorii");
 }
 export async function deleteProjectCategoryRemote(id: string) {
   dataOrThrow(await getSupabase().from("project_categories").delete().eq("id", id).select("id").single(), "Usunięcie kategorii");

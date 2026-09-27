@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
-import { projectProjection, projectProjections, projectSignal } from "./projectModule";
+import { projectKnowledgeIds, projectProjection, projectProjections, projectSignal } from "./projectModule";
 import type { AppState, Goal, GoalAction } from "./types";
 
 const signalNow = new Date("2026-09-24T10:00:00.000Z");
@@ -164,5 +164,32 @@ describe("Project Module", () => {
     expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "empty", label: "Brak następnego kroku", counts: { currentGoals: 1 } });
     state.goals = [];
     expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "empty", label: "Brak pierwszego Celu", title: "Ustal pierwszy Cel" });
+  });
+
+  it("treats an empty Reading Library as neutral while keeping real Action signals", () => {
+    const state = signalState();
+    state.areas[0]!.preset = "reading";
+    state.knowledge = [{ id: "book", type: "resource", title: "Książka", detail: "", resourceFormat: "book", readingStatus: "to_read" }];
+    expect(projectSignal(state, "project", signalNow)).toMatchObject({
+      kind: "empty", title: "Czytelnia jest gotowa", label: "Bez zaplanowanej pracy", counts: { currentGoals: 0, openActions: 0 }
+    });
+    state.actions = [action({ id: "late", title: "Przeczytać rozdział", scheduledFor: "2026-09-20" })];
+    expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "overdue", actionId: "late" });
+  });
+
+  it("carries a source note's Project context to its book exactly one hop", () => {
+    const state = signalState();
+    state.knowledge = [
+      { id: "book", type: "resource", title: "Książka", detail: "", resourceFormat: "book" },
+      { id: "note", type: "note", title: "Notatka", detail: "Wniosek." },
+      { id: "other-note", type: "note", title: "Inna notatka", detail: "Bez kontekstu." }
+    ];
+    state.knowledgeLinks = [
+      { id: "note-project", knowledgeItemId: "note", areaId: "project", meaning: "reference", createdAt: "now" },
+      { id: "note-book", knowledgeItemId: "note", targetKnowledgeItemId: "book", meaning: "source", createdAt: "now" },
+      { id: "book-other-note", knowledgeItemId: "book", targetKnowledgeItemId: "other-note", meaning: "source", createdAt: "now" }
+    ];
+
+    expect([...projectKnowledgeIds(state, "project")].sort()).toEqual(["book", "note"]);
   });
 });

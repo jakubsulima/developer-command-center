@@ -12,6 +12,11 @@ go tak jak Celu. W bieżącym modelu danych jest addytywnie oparty na tabeli
 `areas`, aby zachować istniejące rekordy i relacje.
 _Avoid_: Goal, one-off outcome, temporary task list
 
+Projekt ma zapisany szablon prezentacji: **Standardowy** albo **Czytelnia**.
+Kategoria może podpowiedzieć wybór przy tworzeniu, lecz nie zmienia szablonu
+istniejącego Projektu. Czytelnia prezentuje książki i powiązaną Wiedzę w zwykłym
+kontekście Projektu; nie jest oddzielnym modułem ani wymogiem Workspace'u.
+
 **Goal / Cel**:
 Prosty, możliwy do zamknięcia rezultat. Cel może należeć do jednego Projektu
 albo pozostać samodzielny; nie jest nadrzędnym kontenerem całej pracy.
@@ -44,6 +49,11 @@ Biblioteką Notatek, Materiałów, Decyzji, Rezultatów i Poszukiwań. Link albo
 dodane z globalnego „Dodaj” trafiają najpierw do Skrzynki, gdzie można je
 przetworzyć. Element Wiedzy może mieć wiele relacji z Celami, Działaniami,
 seriami i innymi elementami Wiedzy; Materiał może na przykład potwierdzać Decyzję.
+Książka jest Materiałem z formatem, opcjonalnym autorem i wspólnym statusem
+czytania. Pozostaje jednym elementem Wiedzy w całym Workspace'ie, także gdy
+powiążą ją różne Projekty. Status czytania jest niezależny od Archiwum, Kosza,
+Celów i Działań. Relacja `source` oznacza Notatka → Materiał; nie jest
+potwierdzeniem Decyzji.
 
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest

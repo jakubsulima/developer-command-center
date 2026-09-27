@@ -57,6 +57,40 @@ describe("adapter listy Działań Supabase", () => {
   });
 });
 
+describe("adapter Biblioteki Wiedzy Supabase", () => {
+  beforeEach(() => getClient.mockReset());
+
+  it("pomija nowe argumenty przy zwykłym odczycie, zgodnym ze starszą bazą", async () => {
+    const rpc = vi.fn(async () => ({ data: { items: [], nextCursor: null }, error: null }));
+    getClient.mockReturnValue({ rpc });
+    await createSupabaseWorkspaceRepository().loadPage({ workspaceId: "workspace-1", collection: "knowledge", pageSize: 50 });
+    expect(rpc).toHaveBeenCalledWith("get_knowledge_page", { target_workspace_id: "workspace-1", page_size: 50, cursor_sort_value: null, cursor_id: null });
+  });
+
+  it("wyjaśnia brak migracji przy użyciu nowych filtrów", async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: { code: "PGRST202", message: "missing function" } }));
+    getClient.mockReturnValue({ rpc });
+    await expect(createSupabaseWorkspaceRepository().loadPage({ workspaceId: "workspace-1", collection: "knowledge", pageSize: 50, resourceFormat: "book" })).rejects.toThrow(/wymaga aktualizacji bazy/);
+  });
+
+  it("przekazuje filtry książek, statusu, rodzaju, autora i paginacji do RPC", async () => {
+    const rpc = vi.fn(async () => ({ data: { items: [{ id: "book", type: "resource", title: "Model danych", resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" }], nextCursor: null }, error: null }));
+    getClient.mockReturnValue({ rpc });
+    const page = await createSupabaseWorkspaceRepository().loadPage({
+      workspaceId: "workspace-1", collection: "knowledge", pageSize: 20,
+      resourceFormat: "book", readingStatus: "reading", knowledgeKind: "resource", searchText: "Autor",
+      cursor: { sortValue: "2026-09-01T00:00:00.000Z", id: "book-0" }
+    });
+
+    expect(page.items[0]).toMatchObject({ resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" });
+    expect(rpc).toHaveBeenCalledWith("get_knowledge_page", {
+      target_workspace_id: "workspace-1", target_resource_format: "book", target_reading_status: "reading",
+      target_knowledge_kind: "resource", target_search_text: "Autor", page_size: 20,
+      cursor_sort_value: "2026-09-01T00:00:00.000Z", cursor_id: "book-0"
+    });
+  });
+});
+
 describe("ustawienia Przeglądu AI w Supabase", () => {
   beforeEach(() => getClient.mockReset());
 
@@ -80,6 +114,26 @@ describe("ustawienia Przeglądu AI w Supabase", () => {
     expect(select).toHaveBeenCalledWith("ai_review_window_days,ai_review_cache_hours");
     expect(eq).toHaveBeenCalledWith("id", "workspace-1");
     expect(rpc).toHaveBeenNthCalledWith(1, "get_workspace_core", { target_user_id: "user-1" });
+  });
+
+  it("wczytuje zapisany preset Projektu i propozycje kategorii", async () => {
+    const rpc = vi.fn(async (name: string) => name === "get_workspace_core" ? {
+      data: { ...core, areas: [{ id: "library", name: "Czytelnia", visibility: "active", createdAt: "now", updatedAt: "now" }], projectCategories: [{ id: "books", name: "Książki", color: "#000000" }] }, error: null
+    } : { data: null, error: null });
+    const from = vi.fn((table: string) => ({ select: () => table === "workspaces"
+      ? { eq: () => ({ single: async () => ({ data: { ai_review_window_days: 28, ai_review_cache_hours: 72 }, error: null }) }) }
+      : { eq: async () => table === "areas"
+        ? { data: [{ id: "library", preset: "reading" }], error: null }
+        : { data: [{ id: "books", default_preset: "reading" }], error: null } }
+    }));
+    getClient.mockReturnValue({ rpc, from });
+
+    await expect(createSupabaseWorkspaceRepository().loadCore("user-1")).resolves.toMatchObject({
+      areas: [{ id: "library", preset: "reading" }],
+      projectCategories: [{ id: "books", defaultPreset: "reading" }]
+    });
+    expect(from).toHaveBeenCalledWith("areas");
+    expect(from).toHaveBeenCalledWith("project_categories");
   });
 
   it("używa domyślnych wartości tylko dla brakujących kolumn i zapisuje wyłącznie wybrane pola", async () => {

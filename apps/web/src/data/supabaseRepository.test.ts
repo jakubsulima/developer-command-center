@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  captureRemote, completeReviewRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
+  captureRemote, completeReviewRemote, createGoalRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
   decideAIProposalRemote, endFocusRemote, exportWorkspaceRemote, loadSupabaseState,
   recordLearningEvidenceRemote, resolveInboxRemote, setActionStatusRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
   setGoalVisibilityRemote, setInboxStatusRemote, setLearningGoalStatusRemote, setNextActionRemote, setRecurringStatusRemote,
@@ -47,6 +47,16 @@ const workItemId = "10000000-0000-0000-0000-000000000011";
 
 describe("repozytorium Supabase", () => {
   beforeEach(() => { getClient.mockReset(); });
+
+  it("przesyła identyfikatory relacji używane przez optymistyczny stan klienta", async () => {
+    const client = fakeClient();
+    getClient.mockReturnValue(client);
+    const links = [{ id: "client-link", knowledgeItemId: "book" }];
+    await createActionRemote(workspaceId, workItemId, { title: "Czytaj", materialKnowledgeIds: ["book"] }, links);
+    expect(client.rpc).toHaveBeenCalledWith("create_action_item", expect.objectContaining({ action_material_links: links }));
+    await createGoalRemote(workspaceId, projectId, undefined, { title: "Zastosuj", outcome: "Rezultat", materialKnowledgeIds: ["book"] }, [], projectId, links);
+    expect(client.rpc).toHaveBeenCalledWith("create_goal_with_action_v2", expect.objectContaining({ goal_material_links: links }));
+  });
 
   it("buduje spójną projekcję Workspace z rekordów chronionych przez RLS", async () => {
     const client = fakeClient({

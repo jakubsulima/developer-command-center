@@ -53,6 +53,7 @@ describe("migracje Supabase", () => {
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260922135433_expand_action_status_filters.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260924175159_ai_openai_budget.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260925100000_ai_goal_review_settings_and_claims.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260926150321_project_presets_and_reading_library.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -119,6 +120,49 @@ describe("migracje Supabase", () => {
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
     expect(tableCount).toBe(34);
     expect(rlsCount).toBe(34);
+  });
+
+  it("zachowuje dane książki i pozwala odłączyć nowe relacje według ID klienta", async () => {
+    const user = "ca990000-0000-0000-0000-000000000001";
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await database.exec("set role authenticated");
+    const book = "ca990000-0000-0000-0000-000000000080";
+    await database.query("select public.create_knowledge_with_relations($1,$2,'resource','Book','',null,null,null,'[]'::jsonb,$2,'book','Autor','read')", [workspace, book]);
+    await database.query(`select public.update_knowledge_item($1,'{"resourceFormat":null}'::jsonb,null,gen_random_uuid())`, [book]);
+    await database.query(`select public.update_knowledge_item($1,'{"resourceFormat":"book"}'::jsonb,null,gen_random_uuid())`, [book]);
+    expect((await database.query("select resource_author, reading_status from public.knowledge_items where entity_id=$1", [book])).rows[0]).toEqual({ resource_author: "Autor", reading_status: "read" });
+    const action = "ca990000-0000-0000-0000-000000000081";
+    const goal = "ca990000-0000-0000-0000-000000000082";
+    const actionLink = "ca990000-0000-0000-0000-000000000083";
+    const goalLink = "ca990000-0000-0000-0000-000000000084";
+    const actionLinks = JSON.stringify([{ id: actionLink, knowledgeItemId: book }]);
+    const goalLinks = JSON.stringify([{ id: goalLink, knowledgeItemId: book }]);
+    for (let retry = 0; retry < 2; retry++) {
+      await database.query("select public.create_action_item($1,$2,null,null,'Read','',null,false,$2,$3::jsonb)", [workspace, action, actionLinks]);
+      await database.query("select public.create_goal_with_action_v2($1,$2,null,'Learn','Apply','custom',null,null,null,'[]'::jsonb,$2,$3::jsonb)", [workspace, goal, goalLinks]);
+    }
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where id=any($1::uuid[])", [[actionLink, goalLink]])).toBe(2);
+    await database.query("delete from public.knowledge_links where id=any($1::uuid[])", [[actionLink, goalLink]]);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where knowledge_entity_id=$1", [book])).toBe(0);
+  });
+
+  it("ustawia domyślny preset, zapisuje metadane książki i blokuje nowe relacje do Kosza", async () => {
+    const user = "ca990000-0000-0000-0000-000000000001";
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    const book = "ca990000-0000-0000-0000-000000000040";
+    const note = "ca990000-0000-0000-0000-000000000041";
+    const otherNote = "ca990000-0000-0000-0000-000000000042";
+    await database.query("insert into public.entities(id, workspace_id, type, title) values ($1,$2,'resource','Książka'),($3,$2,'note','Notatka'),($4,$2,'note','Inna notatka')", [book, workspace, note, otherNote]);
+    await database.query("insert into public.knowledge_items(entity_id, workspace_id, detail, resource_format, resource_author, reading_status) values ($1,$2,'Opis','book','Autor','reading'),($3,$2,'Notatka',null,null,null),($4,$2,'Notatka 2',null,null,null)", [book, workspace, note, otherNote]);
+    const project = "ca990000-0000-0000-0000-000000000043";
+    await database.query("insert into public.areas(id, workspace_id, name) values ($1,$2,'Czytelnia')", [project, workspace]);
+    expect(await scalar<string>("select preset from public.areas where id = $1", [project])).toBe("standard");
+    expect(await scalar<string>("select reading_status from public.knowledge_items where entity_id = $1", [book])).toBe("reading");
+    await database.query("insert into public.knowledge_links(id, workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ('ca990000-0000-0000-0000-000000000044',$1,$2,$3,'source')", [workspace, note, book]);
+    await database.query("update public.entities set trashed_at = now() where id = $1", [book]);
+    await expect(database.query("insert into public.knowledge_links(id, workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ('ca990000-0000-0000-0000-000000000045',$1,$2,$3,'source')", [workspace, otherNote, book])).rejects.toThrow(/knowledge_target_trashed/);
+    expect(await scalar<number>("select count(*)::int from public.knowledge_links where target_knowledge_entity_id = $1", [book])).toBe(1);
   });
 
   it("rezerwuje koszt AI atomowo i rozlicza próby bez ujawnienia RPC użytkownikowi", async () => {

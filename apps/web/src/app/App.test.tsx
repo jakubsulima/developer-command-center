@@ -28,6 +28,22 @@ function renderApp(path = "/") {
 }
 
 describe("goal-centric workspace", () => {
+  it("na telefonie dodaje książkę przez pełny formularz Wiedzy", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("max-width"), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    localStorage.setItem("command-center-state-v1", JSON.stringify(emptyState));
+    const user = userEvent.setup();
+    renderApp("/knowledge");
+    const navigation = await screen.findByRole("navigation", { name: "Nawigacja mobilna" });
+    await user.click(within(navigation).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("radio", { name: /Materiał/ }));
+    await user.click(within(dialog).getByLabelText("To książka"));
+    await user.type(within(dialog).getByLabelText("Nazwa materiału"), "Książka mobilna");
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz materiał" }));
+    expect(await screen.findByText("Książka mobilna")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
   it("przechwytuje treść bez wcześniejszej klasyfikacji", async () => {
     const user = userEvent.setup();
     renderApp("/knowledge?section=inbox&capture=true");

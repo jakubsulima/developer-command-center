@@ -1,5 +1,24 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Wiedza i krótkie notatki — plan z 27 września 2026
+
+[Plan wykonawczy Wiedzy i krótkich notatek](./2026-09-27-knowledge-short-notes-implementation.md)
+opisuje naprawy filtrów i paginacji, zapis notatki z jednym wymaganym polem,
+ochronę szkiców, notatki przy książkach i kryteria odbioru. Zawiera mapę kodu,
+reguły kompatybilności oraz gotowe polecenie dla kolejnego modelu.
+Status: zaplanowane; etapy A–E stanowią pierwsze wydanie, etap F osobny przyrost.
+
+## Szablony Projektów i Czytelnia — plan z 26 września 2026
+
+[Plan wdrożenia szablonów i Czytelni](./2026-09-26-project-presets-and-reading-library.md)
+opisuje jeden szablon prezentacji na Projekt, propozycje z kategorii, książkę jako
+odmianę Materiału oraz notatki ze źródłem. Zawiera pięć etapów pierwszego wydania,
+integrację z Celami, Działaniami i Startem, migrację danych oraz kryteria odbioru.
+Status: etapy 1–5 zaimplementowane lokalnie; lint, typecheck, testy i build
+przechodzą. Dwie migracje wdrożone do podłączonego Supabase, historia i RPC
+zweryfikowane, lista Wiedzy ładuje się w przeglądarce. Demo zachowało wcześniejszy
+snapshot bez przykładowej Czytelni; etap 6 nierozpoczęty.
+
 ## Podsumowanie tygodnia i Przegląd AI — plan z 25 września 2026
 
 [Plan wykonawczy poprawy Podsumowania](./2026-09-25-weekly-review-improvements-handoff.md)

@@ -9,7 +9,7 @@ import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
-import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput } from "../domain/types";
+import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -231,7 +231,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ["workspace-page"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["actions-highlight"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["workspace-action"], refetchType: "active" }),
-      queryClient.invalidateQueries({ queryKey: ["knowledge-item"], refetchType: "active" })
+      queryClient.invalidateQueries({ queryKey: ["knowledge-item"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["knowledge-related"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["project-knowledge"], refetchType: "active" })
     ]);
   }, [queryClient]);
 
@@ -409,6 +411,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return hydrated;
   }, [mode, remoteQuery]);
 
+  const hydrateKnowledge = useCallback(async (ids: string[]) => {
+    const current = await ensureWorkspaceState();
+    const missing = [...new Set(ids)].filter((id) => !current.knowledge.some((item) => item.id === id));
+    if (mode === "demo" || !missing.length) return current;
+    const loaded = await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadKnowledgeItems(missing);
+    const hydrated = { ...stateRef.current, knowledge: [...stateRef.current.knowledge, ...loaded.filter((item) => !stateRef.current.knowledge.some((existing) => existing.id === item.id))] };
+    stateRef.current = hydrated;
+    setState(hydrated);
+    return hydrated;
+  }, [ensureWorkspaceState, mode]);
+
   const releaseDueInbox = useCallback(async (now = new Date()) => {
     const previous = stateRef.current;
     const released = releaseDueInboxItems(previous, now);
@@ -533,10 +546,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().search(query, limit);
     },
     async createGoal(input) {
-      await ensureWorkspaceState();
+      await hydrateKnowledge(input.materialKnowledgeIds ?? []);
       const goalId = crypto.randomUUID();
       const actionId = input.firstActionTitle?.trim() ? crypto.randomUUID() : undefined;
       const criteria = (input.criteria ?? []).filter((title) => title.trim()).map((title) => ({ id: crypto.randomUUID(), title, completed: false }));
+      const materialKnowledgeLinks = [...new Set(input.materialKnowledgeIds ?? [])].map((knowledgeItemId) => ({ id: crypto.randomUUID(), knowledgeItemId }));
       const createdAt = new Date().toISOString();
       const command = {
         type: "create_goal",
@@ -550,14 +564,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         areaId: input.areaId,
         templateId: input.templateId,
         criteria,
+        materialKnowledgeLinks,
         createdAt
       } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [
         { collection: "goals", ids: [goalId] },
         { collection: "actions", ids: actionId ? [actionId] : [] },
-        { collection: "goalCriteria", ids: criteria.map((item) => item.id) }
+        { collection: "goalCriteria", ids: criteria.map((item) => item.id) },
+        { collection: "knowledgeLinks", ids: materialKnowledgeLinks.map((link) => link.id) }
       ], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createGoalRemote(stateRef.current.workspaceId!, goalId, actionId, input, criteria, goalId), `goal:${goalId}`);
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createGoalRemote(stateRef.current.workspaceId!, goalId, actionId, input, criteria, goalId, materialKnowledgeLinks), `goal:${goalId}`);
       });
       return goalId;
     },
@@ -595,13 +611,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     async createAction(input) {
+      await hydrateKnowledge(input.materialKnowledgeIds ?? []);
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const current = await ensureWorkspaceState();
+      const current = stateRef.current;
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
-      const command = { type: "create_action", id, ...input, createdAt } as const;
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${id}`, command, [{ collection: "actions", ids: [id] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createActionRemote(stateRef.current.workspaceId!, id, input), `action:${id}`);
+      const materialKnowledgeLinks = [...new Set(input.materialKnowledgeIds ?? [])].map((knowledgeItemId) => ({ id: crypto.randomUUID(), knowledgeItemId }));
+      const command = { type: "create_action", id, ...input, materialKnowledgeLinks, createdAt } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${id}`, command, [{ collection: "actions", ids: [id] }, { collection: "knowledgeLinks", ids: materialKnowledgeLinks.map((link) => link.id) }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createActionRemote(stateRef.current.workspaceId!, id, input, materialKnowledgeLinks), `action:${id}`);
       });
       return id;
     },
@@ -699,12 +717,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).addProgressRemote(stateRef.current.workspaceId!, id, goalId, kind, content, actionId, knowledgeItemId), `progress:${id}`);
       });
     },
-    async saveProjectCategory(categoryId, name, color) {
+    async saveProjectCategory(categoryId, name, color, defaultPreset) {
       const current = await ensureWorkspaceState();
       const id = categoryId ?? crypto.randomUUID();
-      const command = { type: "save_project_category", id, name, color } as const;
+      const command = { type: "save_project_category", id, name, color, defaultPreset } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `category:${id}`, command, [{ collection: "projectCategories", ids: [id] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).saveProjectCategoryRemote(current.workspaceId!, id, name, color), `category:${id}`);
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).saveProjectCategoryRemote(current.workspaceId!, id, name, color, defaultPreset), `category:${id}`);
       });
       return id;
     },
@@ -714,14 +732,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).deleteProjectCategoryRemote(id), `category:${id}`);
       });
     },
-    async createArea(name, description, parentProjectId, categoryIds) {
+    async createArea(name, description, parentProjectId, categoryIds, preset: ProjectPreset = "standard") {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
-      const command = { type: "create_area", id, name, description, parentProjectId, categoryIds, createdAt } as const;
+      const command = { type: "create_area", id, name, description, parentProjectId, categoryIds, preset, createdAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `area:${id}`, command, [{ collection: "areas", ids: [id] }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description, parentProjectId, categoryIds), `area:${id}`);
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).createAreaRemote(stateRef.current.workspaceId!, id, name, description, parentProjectId, categoryIds, preset), `area:${id}`);
       });
       return id;
     },
@@ -871,8 +889,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `knowledge-link:${id}`, { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt }, [{ collection: "knowledgeLinks", ids: [id] }], async () => {
+      const referencedIds = [knowledgeItemId, ...(target.targetKnowledgeItemId ? [target.targetKnowledgeItemId] : [])];
+      const missingIds = referencedIds.filter((itemId) => !current.knowledge.some((item) => item.id === itemId));
+      const hydrated = mode === "demo" || !missingIds.length ? [] : await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadKnowledgeItems(missingIds);
+      const withHydrated = (base: AppState) => ({ ...base, knowledge: [...base.knowledge, ...hydrated.filter((item) => !base.knowledge.some((existing) => existing.id === item.id))] });
+      await mutationCoordinator.run({
+        key: `knowledge-link:${id}`,
+        apply: () => {
+          const previous = stateRef.current;
+          const nextState = executeDomainCommand(withHydrated(previous), { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt });
+          return {
+            nextState,
+            rollback: (state: AppState) => restoreMutationScopes(state, previous, [{ collection: "knowledgeLinks", ids: [id] }]),
+            reapply: (state: AppState) => executeDomainCommand(withHydrated(state), { type: "link_knowledge", id, knowledgeItemId, ...target, meaning, createdAt })
+          };
+        },
+        persist: async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).linkKnowledgeRemote(stateRef.current.workspaceId!, id, knowledgeItemId, target, meaning), `knowledge-link:${id}`);
+        }
       });
     },
     async unlinkKnowledge(linkId) {
@@ -1034,24 +1068,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     releaseDueInbox,
     async createKnowledge(input: CreateKnowledgeInput) {
-      const id = crypto.randomUUID();
+      const id = input.idempotencyKey ?? crypto.randomUUID();
       const relations = (input.relations ?? []).map((relation) => ({ ...relation, id: relation.id ?? crypto.randomUUID() }));
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
+      const relationTargetIds = relations.flatMap((relation) => relation.target.targetKnowledgeItemId ? [relation.target.targetKnowledgeItemId] : []);
+      const missingTargetIds = [...new Set(relationTargetIds)].filter((targetId) => !current.knowledge.some((item) => item.id === targetId));
+      const hydratedTargets = mode === "demo" || !missingTargetIds.length ? [] : await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadKnowledgeItems(missingTargetIds);
+      const withHydrated = (base: AppState) => ({ ...base, knowledge: [...base.knowledge, ...hydratedTargets.filter((item) => !base.knowledge.some((existing) => existing.id === item.id))] });
       const scopes: MutationScope[] = [{ collection: "knowledge", ids: [id] }, { collection: "knowledgeLinks", ids: relations.map((relation) => relation.id!) }];
       const applyCreate = (base: AppState) => {
         const createdAt = new Date().toISOString();
-        const created = executeDomainCommand(base, { type: "create_knowledge", id, kind: input.kind, title: input.title, detail: input.detail, sourceUrl: input.sourceUrl, projectId: input.projectId, sourceInboxItemId: input.sourceInboxItemId, createdAt });
+        const created = executeDomainCommand(base, { type: "create_knowledge", id, kind: input.kind, title: input.title, detail: input.detail, sourceUrl: input.sourceUrl, projectId: input.projectId, sourceInboxItemId: input.sourceInboxItemId, resourceFormat: input.resourceFormat, resourceAuthor: input.resourceAuthor, readingStatus: input.readingStatus, createdAt });
         return relations.reduce((next, relation) => executeDomainCommand(next, { type: "link_knowledge", id: relation.id!, knowledgeItemId: id, ...relation.target, meaning: relation.meaning, createdAt }), created);
       };
       await mutationCoordinator.run({
         key: `knowledge:${id}`,
         apply: () => {
-          const base = stateRef.current;
+          const original = stateRef.current;
+          const base = withHydrated(original);
           return {
             nextState: applyCreate(base),
-            rollback: (currentState: AppState) => restoreMutationScopes(currentState, base, scopes),
-            reapply: (fresh: AppState) => applyCreate(fresh)
+            rollback: (currentState: AppState) => restoreMutationScopes(currentState, original, scopes),
+            reapply: (fresh: AppState) => applyCreate(withHydrated(fresh))
           };
         },
         persist: async () => {
@@ -1079,7 +1118,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return knowledgeId;
     },
     async updateKnowledge(knowledgeId, changes, requestedVersion) {
-      await ensureWorkspaceState();
+      await hydrateKnowledge([knowledgeId]);
       let expectedVersion = 1;
       let failed = false;
       await mutationCoordinator.run({
@@ -1225,7 +1264,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, hydrateKnowledge, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;
