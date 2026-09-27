@@ -21,6 +21,8 @@ import { nextOccurrenceDates } from "../domain/recurrence";
 import type { ProjectPreset, RecurringActionTemplate } from "../domain/types";
 import { categoryPresetSuggestion } from "../domain/projectPresets";
 import { describeActionSchedule } from "../domain/actionPresentation";
+import { prepareKnowledgeNote } from "../domain/knowledgeNote";
+import { KnowledgeNoteFields } from "./KnowledgeNoteFields";
 
 export type QuickAddRequest = {
   mode?: QuickAddMode;
@@ -33,8 +35,8 @@ export type QuickAddRequest = {
   draftKey?: string;
 };
 
-type QuickAddDraft = { projectCategoryIds?: string[]; projectPreset?: ProjectPreset; projectPresetManuallyChosen?: boolean; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; contexts?: Partial<Record<QuickAddMode, string>> };
-const emptyDraft: QuickAddDraft = { mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: true, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [], projectPreset: "standard", projectPresetManuallyChosen: false };
+type QuickAddDraft = { projectCategoryIds?: string[]; projectPreset?: ProjectPreset; projectPresetManuallyChosen?: boolean; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; knowledgeIdempotencyKey: string; contexts?: Partial<Record<QuickAddMode, string>> };
+const emptyDraft: QuickAddDraft = { mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: true, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [], knowledgeIdempotencyKey: "", projectPreset: "standard", projectPresetManuallyChosen: false };
 const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
   if (!value || typeof value !== "object") return false;
   const draft = value as QuickAddDraft;
@@ -48,6 +50,7 @@ const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
     && (draft.projectPresetManuallyChosen === undefined || typeof draft.projectPresetManuallyChosen === "boolean")
     && Array.isArray(draft.goalIds) && draft.goalIds.every((id) => typeof id === "string")
     && Array.isArray(draft.routineWeekdays) && draft.routineWeekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+    && typeof draft.knowledgeIdempotencyKey === "string"
     && (draft.contexts === undefined || Boolean(draft.contexts && typeof draft.contexts === "object" && Object.entries(draft.contexts).every(([mode, context]) => (quickAddModes as readonly string[]).includes(mode) && typeof context === "string")));
 };
 function migrateQuickAddDraft(value: unknown, initialDraft: QuickAddDraft): QuickAddDraft | undefined {
@@ -59,6 +62,7 @@ function migrateQuickAddDraft(value: unknown, initialDraft: QuickAddDraft): Quic
   const content = typeof legacy.content === "string" ? legacy.content : legacy.title!;
   const split = splitQuickAddContent(content);
   const migrated = { ...initialDraft, mode, content, title: split.title, detail: split.detail };
+  migrated.knowledgeIdempotencyKey = typeof legacy.knowledgeIdempotencyKey === "string" && legacy.knowledgeIdempotencyKey ? legacy.knowledgeIdempotencyKey : crypto.randomUUID();
   for (const field of ["title", "detail", "context", "scheduledFor", "sourceUrl", "routineInterval", "routineStartsOn"] as const) {
     if (typeof legacy[field] === "string") migrated[field] = legacy[field];
   }
@@ -101,7 +105,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const requestScheduledFor = request?.scheduledFor;
   const requestPinnedToToday = request?.pinnedToToday;
   const requestMaterialKnowledgeIds = request?.materialKnowledgeIds ?? [];
-  const initialDraft = useMemo<QuickAddDraft>(() => ({ ...emptyDraft, mode: normalizeQuickAddMode(requestMode ?? "action"), context: requestGoalId ? `goal:${requestGoalId}` : requestAreaId ? `area:${requestAreaId}` : "", scheduledFor: requestScheduledFor ?? "", pinnedToToday: requestPinnedToToday ?? (requestMode === "action" ? false : true), routineStartsOn: currentDate, routineWeekdays: [new Date(`${currentDate}T12:00:00Z`).getUTCDay()] }), [currentDate, requestAreaId, requestGoalId, requestMode, requestPinnedToToday, requestScheduledFor]);
+  const initialDraft = useMemo<QuickAddDraft>(() => ({ ...emptyDraft, knowledgeIdempotencyKey: crypto.randomUUID(), mode: normalizeQuickAddMode(requestMode ?? "action"), context: requestGoalId ? `goal:${requestGoalId}` : requestAreaId ? `area:${requestAreaId}` : "", scheduledFor: requestScheduledFor ?? "", pinnedToToday: requestPinnedToToday ?? (requestMode === "action" ? false : true), routineStartsOn: currentDate, routineWeekdays: [new Date(`${currentDate}T12:00:00Z`).getUTCDay()] }), [currentDate, requestAreaId, requestGoalId, requestMode, requestPinnedToToday, requestScheduledFor]);
   const draftKind = request?.draftKey ? `quick-add:${request.draftKey}` : "global-quick-add";
   const migrate = useCallback((value: unknown) => migrateQuickAddDraft(value, initialDraft), [initialDraft]);
   const draft = usePersistentDraft<QuickAddDraft>(draftKind, initialDraft, 450, {
@@ -119,6 +123,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const [scheduleChoiceOverride, setScheduleChoiceOverride] = useState<"today" | "tomorrow" | "unscheduled" | "custom">();
   const modeCopy = copy[draft.value.mode] ?? copy.inbox;
   const libraryGuidance = draft.value.mode === "library" ? knowledgeKindGuidance[draft.value.libraryKind] : undefined;
+  const shortNote = draft.value.mode === "library" && draft.value.libraryKind === "note";
   const scheduledFor = draft.value.scheduledFor ?? "";
   const tomorrowDate = shiftDate(currentDate, 1);
   const scheduleChoice = scheduleChoiceOverride ?? (scheduledFor === currentDate ? "today" : scheduledFor === tomorrowDate ? "tomorrow" : scheduledFor ? "custom" : "unscheduled");
@@ -153,7 +158,11 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const setMode = (mode: QuickAddMode) => {
     if (saving) return;
     setError(""); setTypePickerOpen(false);
-    draft.setValue((current) => changeMode(current, mode));
+    draft.setValue((current) => {
+      const changed = changeMode(current, mode);
+      if (mode !== "library" || current.mode === "library" || current.libraryKind !== "note") return changed;
+      return { ...changed, title: "", detail: current.mode === "inbox" ? current.content : `${current.title}${current.detail ? `\n${current.detail}` : ""}` };
+    });
     typeSummaryRef.current?.focus({ preventScroll: true });
   };
 
@@ -192,9 +201,12 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     event.preventDefault();
     if (savingRef.current) return;
     const mode = draft.value.mode;
-    const content = mode === "inbox" ? draft.value.content : `${draft.value.title.trim()}${draft.value.detail.trim() ? `\n${draft.value.detail.trim()}` : ""}`;
-    const title = draft.value.title.trim();
+    const shortNote = mode === "library" && draft.value.libraryKind === "note";
     const detail = draft.value.detail.trim();
+    if (shortNote && !detail) { showFieldError("Wpisz treść notatki.", "quick-add-detail"); return; }
+    const preparedNote = shortNote ? prepareKnowledgeNote(detail, draft.value.title) : undefined;
+    const content = mode === "inbox" ? draft.value.content : shortNote ? detail : `${draft.value.title.trim()}${detail ? `\n${detail}` : ""}`;
+    const title = preparedNote?.title ?? draft.value.title.trim();
     const formData = { mode: normalizeQuickAddMode(mode), content, title, detail, goalId: normalizedContext.goalId, areaId: effectiveAreaId, scheduledFor, pinnedToToday: draft.value.pinnedToToday };
     if (!content.trim() || (mode !== "inbox" && !title)) return;
     if (normalizedContext.unavailable) { setError(`Wybrane powiązanie jest niedostępne: ${normalizedContext.unavailable.label}. Zmień je albo odłącz przed zapisem.`); return; }
@@ -214,6 +226,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     savingRef.current = true;
     setSaving(true); setError("");
     try {
+      let draftAlreadyCleared = false;
       if (formData.mode === "action") { await createAction({ title: formData.title, detail: formData.detail, goalId: formData.goalId, areaId: formData.areaId, scheduledFor: formData.scheduledFor || undefined, pinnedToToday: formData.pinnedToToday, materialKnowledgeIds: requestMaterialKnowledgeIds }); notifySuccess(formData.pinnedToToday ? "Działanie dodane do Startu." : "Działanie dodane."); }
       else if (formData.mode === "goal") { await createGoal({ title: formData.title, outcome: formData.detail || formData.title, areaId: formData.areaId, materialKnowledgeIds: requestMaterialKnowledgeIds }); notifySuccess("Cel utworzony."); }
       else if (formData.mode === "project") { await createArea(formData.title, formData.detail || undefined, undefined, draft.value.projectCategoryIds ?? [], draft.value.projectPreset ?? "standard"); notifySuccess("Projekt utworzony."); }
@@ -239,10 +252,14 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
           ...(formData.areaId ? [{ meaning: knowledgeDefaultRelationMeaning(draft.value.libraryKind), target: { areaId: formData.areaId } }] : []),
           ...normalizedContext.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(draft.value.libraryKind), target: { goalId } }))
         ];
-        await createKnowledge({ kind: draft.value.libraryKind, title: formData.title, detail: formData.detail, sourceUrl, relations });
+        await createKnowledge({ kind: draft.value.libraryKind, title: formData.title, detail: formData.detail, sourceUrl, relations, ...(draft.value.libraryKind === "note" ? { idempotencyKey: draft.value.knowledgeIdempotencyKey } : {}) });
+        if (draft.value.libraryKind === "note") {
+          draftAlreadyCleared = draft.clear({ ...initialDraft, knowledgeIdempotencyKey: crypto.randomUUID() });
+          if (!draftAlreadyCleared) throw new Error("Notatka została zapisana, ale jej szkic pozostał na tym urządzeniu. Ponów zapis szkicu lub skopiuj treść.");
+        }
         notifySuccess(`${guidance.label} zapisano w Bibliotece.`);
       }
-      draft.clear(); setError(""); onClose();
+      if (!draftAlreadyCleared) draft.clear({ ...initialDraft, knowledgeIdempotencyKey: crypto.randomUUID() }); setError(""); onClose();
     } catch (caught) { setError(caught instanceof Error ? captureErrorMessage(caught.message) : "Nie udało się zapisać. Spróbuj ponownie."); }
     finally { savingRef.current = false; setSaving(false); }
   };
@@ -257,13 +274,16 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
           <div className="quick-add-mode-heading"><span>{modeCopy.label}</span><small>{modeCopy.detail}</small></div>
           {draft.value.mode === "library" ? <KnowledgeKindPicker value={draft.value.libraryKind} disabled={saving} name="quick-add-library-kind" onChange={(libraryKind) => draft.setValue((current) => ({ ...current, libraryKind }))} /> : null}
           <FormTransition stateKey={`${draft.value.mode}:${draft.value.libraryKind}`} className="quick-add-form-fields">
-          {draft.value.mode === "inbox" ? <label className="quick-add-field" htmlFor="quick-add-content"><span className="field-label">Treść</span><textarea ref={contentRef} id="quick-add-content" aria-label={modeCopy.label} aria-describedby={error ? "quick-add-error" : undefined} rows={5} required placeholder={modeCopy.placeholder} value={draft.value.content} disabled={saving} onChange={(event) => updateContent(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /></label> : <div className="quick-add-structured-fields">
+          {draft.value.mode === "inbox" ? <label className="quick-add-field" htmlFor="quick-add-content"><span className="field-label">Treść</span><textarea ref={contentRef} id="quick-add-content" aria-label={modeCopy.label} aria-describedby={error ? "quick-add-error" : undefined} rows={5} required placeholder={modeCopy.placeholder} value={draft.value.content} disabled={saving} onChange={(event) => updateContent(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /></label> : shortNote ? <KnowledgeNoteFields idPrefix="quick-add" content={draft.value.detail} onContentChange={(value) => updateStructuredField("detail", value)} title={draft.value.title} onTitleChange={(value) => updateStructuredField("title", value)} context={`Miejsce zapisu: ${contextSummary}`} disabled={saving}>
+            <label className="field-label" htmlFor="quick-add-library-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-library-project" disabled={saving} value={effectiveAreaId ? `area:${effectiveAreaId}` : ""} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}><option value="">Bez Projektu</option>{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</select>
+            <span className="field-label">Powiązane Cele <span className="optional-label">opcjonalnie</span></span><MultiCombobox disabled={saving} label="Powiązane Cele" options={activeGoals.map((goal) => ({ id: goal.id, label: goal.title }))} value={normalizedContext.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds, context: effectiveAreaId ? `area:${effectiveAreaId}` : "" }))} />
+          </KnowledgeNoteFields> : <div className="quick-add-structured-fields">
             <label className="quick-add-field" htmlFor="quick-add-title"><span className="field-label">{libraryGuidance?.titleLabel ?? "Nazwa"}</span><input ref={titleRef} id="quick-add-title" required aria-label={libraryGuidance?.titleLabel ?? modeCopy.label} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && !draft.value.title.trim() || undefined} placeholder={libraryGuidance?.titlePlaceholder ?? modeCopy.placeholder.split("\n")[0]} value={draft.value.title} disabled={saving} onChange={(event) => updateTitleField(event.target.value)} /></label>
             {draft.value.mode === "library" && draft.value.libraryKind === "resource" ? <label className="quick-add-field" htmlFor="quick-add-library-url"><span className="field-label">Link HTTP/HTTPS <span className="optional-label">opcjonalnie</span></span><input id="quick-add-library-url" type="url" placeholder="https://…" disabled={saving} value={draft.value.sourceUrl} onChange={(event) => draft.setValue((current) => ({ ...current, sourceUrl: event.target.value }))} /></label> : null}
             <label className="quick-add-field" htmlFor="quick-add-detail"><span className="field-label">{draft.value.mode === "goal" ? "Rezultat" : libraryGuidance?.detailLabel ?? "Opis"} {!(draft.value.mode === "library" && draft.value.libraryKind === "decision") ? <span className="optional-label">opcjonalnie</span> : null}</span><textarea id="quick-add-detail" rows={3} required={draft.value.mode === "library" && draft.value.libraryKind === "decision"} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && draft.value.mode === "library" && draft.value.libraryKind === "decision" && !draft.value.detail.trim() || undefined} placeholder={libraryGuidance?.detailPlaceholder ?? modeCopy.placeholder.split("\n")[1] ?? "Dodaj szczegóły, jeśli są potrzebne"} value={draft.value.detail} disabled={saving} onChange={(event) => updateStructuredField("detail", event.target.value)} /></label>
           </div>}
           {draft.value.mode === "project" ? <><ProjectPresetPicker value={draft.value.projectPreset ?? "standard"} categories={state.projectCategories ?? []} categoryIds={draft.value.projectCategoryIds ?? []} onChange={(projectPreset) => draft.setValue((current) => ({ ...current, projectPreset, projectPresetManuallyChosen: true }))} disabled={saving} /><ProjectCategoryPicker value={draft.value.projectCategoryIds ?? []} onChange={(projectCategoryIds) => draft.setValue((current) => ({ ...current, projectCategoryIds, projectPreset: current.projectPresetManuallyChosen ? current.projectPreset : categoryPresetSuggestion(state.projectCategories ?? [], projectCategoryIds).preset }))} /></> : null}
-          <p className={`quick-add-context-summary${normalizedContext.unavailable ? " is-invalid" : ""}`}><strong>Miejsce zapisu:</strong> {draft.value.mode === "inbox" ? "Bez powiązań — uporządkujesz później" : normalizedContext.unavailable ? `${normalizedContext.unavailable.label} — wybierz inne lub odłącz` : draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.map((id) => activeGoals.find((goal) => goal.id === id)?.title).join(", ")}` : contextSummary}</p>
+          {!shortNote ? <p className={`quick-add-context-summary${normalizedContext.unavailable ? " is-invalid" : ""}`}><strong>Miejsce zapisu:</strong> {draft.value.mode === "inbox" ? "Bez powiązań — uporządkujesz później" : normalizedContext.unavailable ? `${normalizedContext.unavailable.label} — wybierz inne lub odłącz` : draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.map((id) => activeGoals.find((goal) => goal.id === id)?.title).join(", ")}` : contextSummary}</p> : null}
           {normalizedContext.unavailable ? <Button type="button" variant="ghost" disabled={saving} onClick={() => { setError(""); draft.setValue((current) => ({ ...current, context: "", goalIds: [], contexts: { ...current.contexts, [current.mode]: "" } })); }}>Odłącz niedostępne powiązanie</Button> : null}
           {scheduleSummary ? <p className="quick-add-context-summary"><strong>Termin:</strong> {scheduleSummary}</p> : null}
           {draft.value.mode === "routine" ? <p className="quick-add-occurrence-preview" aria-live="polite"><CalendarClock />Najbliższe: {routinePreview.length ? routinePreview.join(" · ") : "brak przy wybranym harmonogramie"}</p> : null}
@@ -272,14 +292,14 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
           ] as const).map(([value, label]) => <label key={value}><input type="radio" name="quick-add-schedule" value={value} disabled={saving} checked={scheduleChoice === value} onChange={() => { setScheduleChoiceOverride(value); if (value === "today") draft.setValue((current) => ({ ...current, scheduledFor: currentDate })); else if (value === "tomorrow") draft.setValue((current) => ({ ...current, scheduledFor: tomorrowDate })); else if (value === "unscheduled") draft.setValue((current) => ({ ...current, scheduledFor: "" })); }} />{label}</label>)}</div>{scheduleChoice === "custom" ? <><label className="field-label" htmlFor="quick-add-date"><CalendarClock /> Dokładna data</label><input id="quick-add-date" type="date" disabled={saving} value={scheduledFor} onChange={(event) => { setScheduleChoiceOverride("custom"); draft.setValue((current) => ({ ...current, scheduledFor: event.target.value })); }} /></> : null}<label className="field-label" htmlFor="quick-add-context">Cel lub Projekt</label><select id="quick-add-context" disabled={saving} value={draft.value.context} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}>{contextOptions}</select><label className="switch-card quick-add-today"><input type="checkbox" disabled={saving} checked={draft.value.pinnedToToday} onChange={(event) => draft.setValue((current) => ({ ...current, pinnedToToday: event.target.checked }))} /><span><strong>Pokaż na Starcie</strong><small>To osobne ustawienie od terminu.</small></span></label></div></details> : null}
           {draft.value.mode === "goal" ? <div className="quick-add-project-field"><label className="field-label" htmlFor="quick-add-context-secondary">Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-context-secondary" disabled={saving} value={effectiveAreaId ? `area:${effectiveAreaId}` : ""} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}><option value="">Bez Projektu</option>{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</select></div> : null}
           {draft.value.mode === "routine" ? <details className="quick-add-options" open><summary><span className="quick-add-options-leading"><span className="quick-add-options-icon"><Repeat2 /></span><span><strong>Harmonogram i kontekst</strong><small>Ustaw rytm przed utworzeniem Rutyny.</small></span></span><ChevronDown className="quick-add-options-chevron" /></summary><div className="quick-add-options-panel"><label className="field-label" htmlFor="quick-add-routine-unit">Powtarzaj</label><select id="quick-add-routine-unit" disabled={saving} value={draft.value.routineUnit} onChange={(event) => draft.setValue((current) => ({ ...current, routineUnit: event.target.value as QuickAddDraft["routineUnit"] }))}><option value="day">Codziennie</option><option value="week">Co tydzień</option><option value="month">Co miesiąc</option></select><label className="field-label" htmlFor="quick-add-routine-interval">Co ile?</label><input id="quick-add-routine-interval" type="number" min="1" max="99" inputMode="numeric" disabled={saving} value={draft.value.routineInterval} onChange={(event) => draft.setValue((current) => ({ ...current, routineInterval: event.target.value }))} /><label className="field-label" htmlFor="quick-add-routine-start">Początek</label><input id="quick-add-routine-start" type="date" disabled={saving} value={draft.value.routineStartsOn} onChange={(event) => draft.setValue((current) => ({ ...current, routineStartsOn: event.target.value }))} />{draft.value.routineUnit === "week" ? <fieldset className="quick-add-weekdays"><legend className="field-label">Dni tygodnia</legend><div>{[["Pn", 1], ["Wt", 2], ["Śr", 3], ["Cz", 4], ["Pt", 5], ["So", 6], ["Nd", 0]].map(([label, value]) => <label key={label as string}><input id={`quick-add-weekday-${value}`} type="checkbox" disabled={saving} checked={draft.value.routineWeekdays.includes(value as number)} onChange={(event) => draft.setValue((current) => ({ ...current, routineWeekdays: event.target.checked ? [...current.routineWeekdays, value as number].sort() : current.routineWeekdays.filter((day) => day !== value) }))} />{label}</label>)}</div></fieldset> : null}<label className="field-label" htmlFor="quick-add-context-routine">Cel lub Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-context-routine" disabled={saving} value={draft.value.context} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}>{contextOptions}</select></div></details> : null}
-          {draft.value.mode === "library" ? <div className="quick-add-library-fields"><label className="field-label" htmlFor="quick-add-library-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-library-project" disabled={saving} value={effectiveAreaId ? `area:${effectiveAreaId}` : ""} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}><option value="">Bez Projektu</option>{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</select><span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span><MultiCombobox disabled={saving} label="Powiązane Cele" options={activeGoals.map((goal) => ({ id: goal.id, label: goal.title }))} value={normalizedContext.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds, context: effectiveAreaId ? `area:${effectiveAreaId}` : "" }))} /></div> : null}
+          {draft.value.mode === "library" && !shortNote ? <div className="quick-add-library-fields"><label className="field-label" htmlFor="quick-add-library-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-library-project" disabled={saving} value={effectiveAreaId ? `area:${effectiveAreaId}` : ""} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}><option value="">Bez Projektu</option>{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</select><span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span><MultiCombobox disabled={saving} label="Powiązane Cele" options={activeGoals.map((goal) => ({ id: goal.id, label: goal.title }))} value={normalizedContext.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds, context: effectiveAreaId ? `area:${effectiveAreaId}` : "" }))} /></div> : null}
           </FormTransition>
         </div>
         <div className="quick-add-hint" aria-label="Dostępne komendy"><span>Możesz też zacząć od</span>{modes.map(({ id, command }) => <button type="button" disabled={saving} key={command} onClick={() => setMode(id)}><kbd>{command}</kbd></button>)}</div>
         <div className="quick-add-draft"><DraftStatus compact status={draft.status} restored={draft.restored} context={draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.length}` : contextSummary} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(draft.value.mode === "inbox" ? draft.value.content : [draft.value.title, draft.value.detail, draft.value.sourceUrl].filter(Boolean).join("\n"))} />{draft.dirty ? <Button type="button" variant="ghost" disabled={saving} onClick={draft.discard}>Odrzuć szkic</Button> : null}</div>
         {error ? <p id="quick-add-error" className="auth-message error" role="alert">{error}</p> : null}
       </div>
-      <div className="quick-add-footer"><Button type="submit" variant="primary" loading={saving} disabled={draft.value.mode === "inbox" ? !draft.value.content.trim() : !draft.value.title.trim()}><Plus />{modeCopy.submit}</Button></div>
+        <div className="quick-add-footer"><Button type="submit" variant="primary" loading={saving} disabled={draft.value.mode === "inbox" ? !draft.value.content.trim() : shortNote ? !draft.value.detail.trim() : !draft.value.title.trim()}><Plus />{shortNote ? "Zapisz notatkę" : modeCopy.submit}</Button></div>
     </form>
   </Modal>;
 }

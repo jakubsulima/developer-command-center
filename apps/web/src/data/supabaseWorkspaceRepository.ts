@@ -84,6 +84,7 @@ function decodePage<T>(payload: unknown, label: string): Page<T> {
   const cursor = root.nextCursor;
   return {
     items: arrayPayload<T>(root.items, `${label}.items`),
+    totalCount: typeof root.totalCount === "number" && Number.isFinite(root.totalCount) ? root.totalCount : undefined,
     nextCursor: cursor && typeof cursor === "object" ? {
       sortValue: stringPayload((cursor as Record<string, unknown>).sortValue, `${label}.nextCursor.sortValue`),
       id: stringPayload((cursor as Record<string, unknown>).id, `${label}.nextCursor.id`)
@@ -181,16 +182,19 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
           target_goal_id: query.actionFilter?.goalId ?? null,
           target_today: query.actionFilter?.today ?? null
         } : {}),
-        ...(query.collection === "knowledge" && (query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim()) ? {
+        ...(query.collection === "knowledge" && (query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim() || query.projectId || query.knowledgeGoalId || query.knowledgeVisibility) ? {
           target_resource_format: query.resourceFormat ?? null,
           target_reading_status: query.readingStatus ?? null,
           target_knowledge_kind: query.knowledgeKind ?? null,
-          target_search_text: query.searchText ?? null
+          target_search_text: query.searchText ?? null,
+          target_project_id: query.projectId ?? null,
+          target_goal_id: query.knowledgeGoalId ?? null,
+          target_visibility: query.knowledgeVisibility ?? null
         } : {}),
         page_size: query.pageSize,
         ...cursorParams(query.cursor)
       });
-      if (error?.code === "PGRST202" && query.collection === "knowledge") throw new Error("Czytelnia wymaga aktualizacji bazy danych. Zastosuj migrację project_presets_and_reading_library.");
+      if (error?.code === "PGRST202" && query.collection === "knowledge") throw new Error("Filtry Wiedzy wymagają aktualizacji bazy danych. Zastosuj migrację knowledge_filtered_page.");
       if (error) throw new Error(`WorkspacePage: ${error.message}`);
       const page = decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
       if (query.collection === "actions") return { ...page, items: await withActionReviewDates(page.items as GoalAction[]) };

@@ -24,15 +24,58 @@ import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { DraftStatus } from "../components/DraftStatus";
 import { DraftConflictNotice } from "../components/DraftConflictNotice";
 import { isDraftVersionConflict } from "../components/draftConflict";
-import { Modal } from "../components/Modal";
 import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
+import { KnowledgeNoteFields } from "../components/KnowledgeNoteFields";
+import { prepareKnowledgeNote } from "../domain/knowledgeNote";
+
+type BookNoteDraft = { content: string; title: string; projectId: string; goalIds: string[]; idempotencyKey: string };
+
+function BookNoteComposer({ book, defaultProjectId, onClose }: { book: KnowledgeItem; defaultProjectId: string; onClose: () => void }) {
+  const { state, createKnowledge } = useStore();
+  const initial = useMemo<BookNoteDraft>(() => ({ content: "", title: "", projectId: defaultProjectId, goalIds: [], idempotencyKey: crypto.randomUUID() }), [defaultProjectId]);
+  const draft = usePersistentDraft<BookNoteDraft>("book-knowledge-note", initial, 450, { targetId: book.id });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const close = () => { if (draft.flush()) onClose(); };
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!draft.value.content.trim() || saving || book.trashedAt) return;
+    setSaving(true); setError("");
+    try {
+      const note = prepareKnowledgeNote(draft.value.content, draft.value.title);
+      await createKnowledge({ idempotencyKey: draft.value.idempotencyKey, kind: "note", title: note.title, detail: note.detail, relations: [
+        { meaning: "source", target: { targetKnowledgeItemId: book.id } },
+        ...(draft.value.projectId ? [{ meaning: "reference" as const, target: { areaId: draft.value.projectId } }] : []),
+        ...draft.value.goalIds.map((goalId) => ({ meaning: "reference" as const, target: { goalId } }))
+      ] });
+      if (!draft.clear({ content: "", title: "", projectId: draft.value.projectId, goalIds: [], idempotencyKey: crypto.randomUUID() })) {
+        setError("Notatka została zapisana, ale jej szkic pozostał na tym urządzeniu. Ponów zapis lub skopiuj treść.");
+        return;
+      }
+      setError("");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Nie udało się zapisać notatki."); }
+    finally { setSaving(false); }
+  };
+  return <form className="book-note-composer" onSubmit={(event) => void save(event)}>
+    <KnowledgeNoteFields idPrefix={`book-note-${book.id}`} content={draft.value.content} onContentChange={(content) => draft.setValue((current) => ({ ...current, content }))} title={draft.value.title} onTitleChange={(title) => draft.setValue((current) => ({ ...current, title }))} context={`Źródło · ${book.title}`} disabled={saving}>
+      <label className="field-label" htmlFor={`book-note-project-${book.id}`}>Projekt <span className="optional-label">opcjonalnie</span></label>
+      <select id={`book-note-project-${book.id}`} value={draft.value.projectId} disabled={saving} onChange={(event) => draft.setValue((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
+      <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
+      <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={draft.value.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds }))} />
+    </KnowledgeNoteFields>
+    <DraftStatus status={draft.status} restored={draft.restored} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${draft.value.title}\n${draft.value.content}`)} />
+    {draft.dirty ? <Button type="button" variant="ghost" disabled={saving} onClick={() => draft.discard()}>Odrzuć szkic</Button> : null}
+    {error ? <p className="inline-mutation-error" role="alert">{error}</p> : null}
+    <div className="button-row"><Button type="button" disabled={saving} onClick={close}>Zamknij</Button><Button type="submit" variant="primary" loading={saving} disabled={!draft.value.content.trim() || Boolean(book.trashedAt)}>Zapisz notatkę</Button></div>
+  </form>;
+}
 
 export function KnowledgeDetailPage() {
   const { knowledgeId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { state, mode, createKnowledge, updateKnowledge, linkKnowledge, unlinkKnowledge, setVisibility } = useStore();
+  const { state, mode, updateKnowledge, linkKnowledge, unlinkKnowledge, setVisibility } = useStore();
   const { user } = useAuth();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
@@ -53,11 +96,8 @@ export function KnowledgeDetailPage() {
   const [supportingId, setSupportingId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [noteError, setNoteError] = useState("");
-  const [sourceNoteKey, setSourceNoteKey] = useState(() => crypto.randomUUID());
+  const [sourceNoteQuery, setSourceNoteQuery] = useState("");
   const [sourceNoteToLink, setSourceNoteToLink] = useState("");
-  const [sourceNoteForm, setSourceNoteForm] = useState({ title: "", detail: "", projectId: "" });
   const navigationReturn = readNavigationState(location.state)?.returnTo;
   const contextualProjectId = navigationReturn?.match(/^\/projects\/([^/?#]+)/)?.[1];
   const activeContextProjectId = state.areas.find((area) => area.visibility === "active" && area.id === (contextualProjectId ? decodeURIComponent(contextualProjectId) : undefined))?.id ?? "";
@@ -109,28 +149,6 @@ export function KnowledgeDetailPage() {
     catch (caught) { if (isDraftVersionConflict(caught)) setConflict(true); setError(caught instanceof Error ? caught.message : "Nie udało się zapisać zmian."); }
     finally { setSaving(false); }
   };
-  const createSourceNote = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!sourceNoteForm.title.trim() || !sourceNoteForm.detail.trim() || noteSaving) return;
-    setNoteSaving(true); setNoteError("");
-    try {
-      await createKnowledge({
-        idempotencyKey: sourceNoteKey,
-        kind: "note", title: sourceNoteForm.title, detail: sourceNoteForm.detail,
-        relations: [
-          { meaning: "source", target: { targetKnowledgeItemId: item.id } },
-          ...(sourceNoteForm.projectId ? [{ meaning: "reference" as const, target: { areaId: sourceNoteForm.projectId } }] : [])
-        ]
-      });
-      setSourceNoteForm({ title: "", detail: "", projectId: "" }); setSourceNoteKey(crypto.randomUUID()); setNoteOpen(false);
-    } catch (caught) { setNoteError(caught instanceof Error ? caught.message : "Nie udało się zapisać notatki."); }
-    finally { setNoteSaving(false); }
-  };
-  const openSourceNote = () => {
-    setSourceNoteForm({ title: "", detail: "", projectId: activeContextProjectId });
-    setSourceNoteKey(crypto.randomUUID());
-    setNoteError(""); setNoteOpen(true);
-  };
   const openBookQuickAdd = (mode: "goal" | "action") => requestAppQuickAdd({
     mode, areaId: bookProjectId || undefined, materialKnowledgeIds: [item.id], pinnedToToday: false,
     draftKey: `book-${item.id}-${mode}-${bookProjectId || "global"}`
@@ -138,7 +156,9 @@ export function KnowledgeDetailPage() {
   const relatedItemById = new Map([...(sourceNotesQuery.data ?? []), ...state.knowledge].map((candidate) => [candidate.id, candidate]));
   const linkedTargets = links.filter((link) => !link.areaId).map((link) => ({ link, goal: state.goals.find((goal) => goal.id === link.goalId), action: state.actions.find((action) => action.id === link.actionId), series: state.recurringActionTemplates.find((series) => series.id === link.recurringTemplateId), knowledge: link.targetKnowledgeItemId ? relatedItemById.get(link.targetKnowledgeItemId) : undefined }));
   const supportItemById = new Map([...(sourceNotesQuery.data ?? []), ...state.knowledge].map((candidate) => [candidate.id, candidate]));
-  const sourceNotes = supportingLinks.filter((link) => link.meaning === "source").map((link) => ({ link, item: supportItemById.get(link.knowledgeItemId) })).filter((entry) => entry.item);
+  const sourceNotes = supportingLinks.filter((link) => link.meaning === "source").map((link) => ({ link, item: supportItemById.get(link.knowledgeItemId) })).filter((entry): entry is { link: typeof supportingLinks[number]; item: KnowledgeItem } => Boolean(entry.item))
+    .filter(({ item: sourceNote }) => !sourceNote.archivedAt && !sourceNote.trashedAt && (!sourceNoteQuery.trim() || `${sourceNote.title}\n${sourceNote.detail}`.toLocaleLowerCase("pl").includes(sourceNoteQuery.trim().toLocaleLowerCase("pl"))))
+    .sort((a, b) => (b.item.updatedAt ?? b.item.createdAt ?? "").localeCompare(a.item.updatedAt ?? a.item.createdAt ?? "") || a.item.id.localeCompare(b.item.id));
   const linkedSourceNoteIds = new Set(supportingLinks.filter((link) => link.meaning === "source").map((link) => link.knowledgeItemId));
   const existingSourceNoteCandidates = [...new Map([...(existingNotesQuery.data?.items ?? []), ...state.knowledge]
     .filter((candidate) => candidate.type === "note" && !candidate.archivedAt && !candidate.trashedAt && !linkedSourceNoteIds.has(candidate.id))
@@ -153,10 +173,19 @@ export function KnowledgeDetailPage() {
     await setVisibility("knowledge", item.id, "active");
     notifyUndo({ message: `„${item.title}” przywrócono.`, undo: () => setVisibility("knowledge", item.id, previous) });
   });
+  const readingStatusKey = `book-reading-status:${item.id}`;
+  const changeReadingStatus = (readingStatus: ReadingStatus) => {
+    const previous = item.readingStatus ?? "to_read";
+    if (readingStatus === previous) return;
+    void mutation.run(readingStatusKey, async () => {
+      await updateKnowledge(item.id, { readingStatus }, item.version);
+      notifyUndo({ message: `Status książki zmieniono na „${readingStatusLabels[readingStatus]}”.`, undo: () => updateKnowledge(item.id, { readingStatus: previous }, typeof item.version === "number" ? item.version + 1 : undefined) });
+    });
+  };
 
   return <AppShell appearance="focus-detail"><div className="knowledge-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo="/knowledge" fallbackReturnLabel="Wróć do Wiedzy" />
-    <div className="knowledge-detail-head"><div className="knowledge-detail-meta"><KnowledgeKindBadge kind={item.type} /><div className="button-row">{item.resourceFormat === "book" && !item.trashedAt ? <Button onClick={openSourceNote}><Plus />Notatka do książki</Button> : null}<Button onClick={() => setEditing((value) => !value)}><Pencil />{editing ? "Zamknij edycję" : "Edytuj"}</Button>{item.archivedAt || item.trashedAt ? <Button loading={mutation.isBusy(restoreKey)} onClick={() => void restore()}><RotateCcw />Przywróć</Button> : null}</div></div><h1>{item.title}</h1>{item.resourceFormat === "book" ? <p>{[item.resourceAuthor, item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ")}</p> : null}<p>Zaktualizowano {item.updatedAt || item.createdAt ? new Date(item.updatedAt ?? item.createdAt!).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" }) : "—"}</p></div>
+    <div className="knowledge-detail-head"><div className="knowledge-detail-meta"><KnowledgeKindBadge kind={item.type} /><div className="button-row"><Button onClick={() => setEditing((value) => !value)}><Pencil />{editing ? "Zamknij edycję" : "Edytuj"}</Button>{item.archivedAt || item.trashedAt ? <Button loading={mutation.isBusy(restoreKey)} onClick={() => void restore()}><RotateCcw />Przywróć</Button> : null}</div></div><h1>{item.title}</h1>{item.resourceFormat === "book" ? <><div className="book-reading-status-control"><label htmlFor="book-reading-status">Status czytania</label><select id="book-reading-status" value={item.readingStatus ?? "to_read"} disabled={mutation.isBusy(readingStatusKey)} onChange={(event) => changeReadingStatus(event.target.value as ReadingStatus)}>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>{[item.resourceAuthor].filter(Boolean).map((author) => <p key={author}>{author}</p>)}{mutation.error(readingStatusKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(readingStatusKey)} <button type="button" onClick={() => void mutation.retry(readingStatusKey)?.()}>Spróbuj ponownie</button></p> : null}</> : null}<p>Zaktualizowano {item.updatedAt || item.createdAt ? new Date(item.updatedAt ?? item.createdAt!).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" }) : "—"}</p></div>
     {mutation.error(restoreKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(restoreKey)} <button type="button" onClick={() => void mutation.retry(restoreKey)?.()}>Spróbuj ponownie</button></p> : null}
     <div className="goal-detail-grid"><div className="detail-main"><Panel>
       {editing ? <form onSubmit={save}>
@@ -179,7 +208,29 @@ export function KnowledgeDetailPage() {
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}{conflict ? <DraftConflictNotice onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} onOpenCurrent={() => { formDraft.clear(); setConflict(false); setEditing(false); }} /> : null}
         <div className="modal-actions"><DraftStatus status={formDraft.status} errorMessage={formDraft.errorMessage} onRetry={() => void formDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} />{formDraft.dirty ? <Button type="button" variant="ghost" onClick={formDraft.discard}>Odrzuć szkic</Button> : null}<Button type="button" disabled={saving} onClick={() => setEditing(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.title.trim() || Boolean(editGuidance?.detailRequired && !form.detail.trim())}>Zapisz zmiany</Button></div>
       </form> : <><div className="knowledge-body">{item.detail || <span className="muted-copy">{item.type === "resource" && sourceHref ? "Opis nie został dodany." : "Brak treści."}</span>}</div>{sourceHref ? <a className="source-link" href={sourceHref} target="_blank" rel="noopener noreferrer">Otwórz źródło <ExternalLink /></a> : null}</>}
-    </Panel></div><aside className="detail-aside">
+    </Panel>
+      {item.resourceFormat === "book" ? <Panel className="book-reading-notes" aria-labelledby="book-notes-heading"><div className="section-heading"><div><h2 id="book-notes-heading">Notatki do książki</h2><span>Każda notatka zachowuje link do tej książki.</span></div>{!item.trashedAt && !noteOpen ? <Button onClick={() => setNoteOpen(true)}><Plus />Zapisz myśl</Button> : null}</div>
+        {noteOpen && !item.trashedAt ? <BookNoteComposer key={item.id} book={item} defaultProjectId={activeContextProjectId} onClose={() => setNoteOpen(false)} /> : null}
+        <label className="knowledge-search book-note-search"><span className="sr-only">Szukaj w notatkach książki</span><input type="search" aria-label="Szukaj w notatkach książki" placeholder="Szukaj w notatkach…" value={sourceNoteQuery} onChange={(event) => setSourceNoteQuery(event.target.value)} /></label>
+        {sourceNotesQuery.isLoading ? <p className="muted-copy">Ładowanie notatek…</p> : null}
+        {sourceNotesQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać notatek. <button type="button" onClick={() => void sourceNotesQuery.refetch()}>Spróbuj ponownie</button></p> : null}
+        {sourceNotes.map(({ link, item: sourceNote }) => {
+          const firstLine = sourceNote.detail.split("\n").find((line) => line.trim())?.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl");
+          const titleIsFirstLine = Boolean(firstLine && firstLine === sourceNote.title.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl"));
+          const displayDetail = titleIsFirstLine ? sourceNote.detail.replace(/^\s*[^\n]*\n?/, "").trim() : sourceNote.detail;
+          const long = displayDetail.length > 600 || displayDetail.split("\n").length > 8;
+          const preview = long ? `${displayDetail.slice(0, 520).trimEnd()}…` : displayDetail;
+          return <article className="book-note-card" key={link.id} data-navigation-card-id={navigationCardId("knowledge", sourceNote.id)} tabIndex={-1}>
+            <NavigationLink to={routeForEntity({ type: "knowledge", id: sourceNote.id })} breadcrumbs={breadcrumbs} returnTo={itemNavigation.returnTo} returnLabel={itemNavigation.returnLabel} sourceCardId={navigationCardId("knowledge", sourceNote.id)}>{sourceNote.title}</NavigationLink>
+            {preview ? <p>{preview}</p> : null}
+            {long ? <details><summary>Pokaż więcej</summary><p>{displayDetail}</p></details> : null}
+            <div className="book-note-card-footer"><small>{new Date(sourceNote.updatedAt ?? sourceNote.createdAt ?? 0).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" })}</small><Button variant="ghost" aria-label={`Odłącz notatkę: ${sourceNote.title}`} onClick={() => void unlinkKnowledge(link.id)}>Odłącz</Button></div>
+          </article>;
+        })}
+        {!sourceNotes.length && !sourceNotesQuery.isLoading && !sourceNotesQuery.isError ? <p className="muted-copy">{sourceNoteQuery.trim() ? "Brak pasujących notatek." : "Ta książka nie ma jeszcze notatek."}</p> : null}
+        {item.trashedAt ? <p className="muted-copy">Książka w Koszu pozostaje źródłem istniejących notatek. Przywróć ją, aby zapisać nową myśl lub utworzyć powiązanie.</p> : null}
+      </Panel> : null}
+    </div><aside className="detail-aside">
       <Panel className="knowledge-connections" aria-labelledby="knowledge-connections-title"><h2 id="knowledge-connections-title">Powiązania</h2>
         <section className="knowledge-projects-panel" aria-label="Projekty"><h3 className="sr-only">Projekty</h3>
           {projectContexts.length > 1 ? <div className="cross-project-signal">Łączy {projectContexts.length} Projekty</div> : null}
@@ -193,9 +244,9 @@ export function KnowledgeDetailPage() {
           <Button variant="ghost" onClick={() => setEditing(true)}><Flag />Edytuj powiązane Cele</Button>
         </details>
       </Panel>
-      {item.resourceFormat === "book" ? <><Panel className="book-reading-notes"><h2>Notatki do książki</h2><p className="muted-copy">Każda notatka pozostaje osobnym elementem Wiedzy i zachowuje źródło.</p>{sourceNotes.map(({ link, item: sourceNote }) => sourceNote ? <div className="linked-knowledge" key={link.id} data-navigation-card-id={navigationCardId("knowledge", sourceNote.id)} tabIndex={-1}><NavigationLink to={routeForEntity({ type: "knowledge", id: sourceNote.id })} breadcrumbs={breadcrumbs} returnTo={itemNavigation.returnTo} returnLabel={itemNavigation.returnLabel} sourceCardId={navigationCardId("knowledge", sourceNote.id)}>{sourceNote.title}</NavigationLink><Button variant="ghost" aria-label={`Odłącz notatkę: ${sourceNote.title}`} onClick={() => void unlinkKnowledge(link.id)}>×</Button></div> : null)}{sourceNotesQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać notatek. <button type="button" onClick={() => void sourceNotesQuery.refetch()}>Spróbuj ponownie</button></p> : null}{item.trashedAt ? <p className="muted-copy">Materiał w Koszu pozostaje źródłem istniejących notatek. Przywróć go, aby tworzyć nowe powiązania.</p> : <><div className="inline-link"><select aria-label="Połącz istniejącą notatkę z książką" value={sourceNoteToLink} onChange={(event) => setSourceNoteToLink(event.target.value)}><option value="">Wybierz istniejącą notatkę…</option>{existingSourceNoteCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><Button disabled={!sourceNoteToLink} loading={mutation.isBusy(`book-source-note:${item.id}`)} onClick={() => void mutation.run(`book-source-note:${item.id}`, async () => { await linkKnowledge(sourceNoteToLink, { targetKnowledgeItemId: item.id }, "source"); setSourceNoteToLink(""); })}><Link2 />Połącz notatkę</Button></div>{existingNotesQuery.hasNextPage ? <Button variant="ghost" loading={existingNotesQuery.isFetchingNextPage} onClick={() => void existingNotesQuery.fetchNextPage()}>Wczytaj więcej notatek</Button> : null}{existingNotesQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać biblioteki notatek. <button type="button" onClick={() => void existingNotesQuery.refetch()}>Spróbuj ponownie</button></p> : null}<Button onClick={openSourceNote}><Plus />Dodaj notatkę</Button></>}</Panel>{!item.trashedAt ? <Panel className="book-work-links"><h2>Połącz z pracą</h2><p className="muted-copy">Działania korzystają ze Startu, a Cele pozostają niezależne od statusu czytania.</p><label className="field-label" htmlFor="book-work-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="book-work-project" value={bookProjectId} onChange={(event) => setBookProjectId(event.target.value)}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select><div className="button-row"><Button onClick={() => openBookQuickAdd("action")}><ListTodo />Nowe Działanie</Button><Button variant="secondary" onClick={() => openBookQuickAdd("goal")}><Flag />Nowy Cel</Button></div></Panel> : null}</> : null}
+      {item.resourceFormat === "book" && !item.trashedAt ? <Panel className="book-source-note-connect"><h2>Połącz notatkę</h2><p className="muted-copy">Dołącz istniejącą notatkę do tej książki.</p><div className="inline-link"><select aria-label="Połącz istniejącą notatkę z książką" value={sourceNoteToLink} onChange={(event) => setSourceNoteToLink(event.target.value)}><option value="">Wybierz istniejącą notatkę…</option>{existingSourceNoteCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><Button disabled={!sourceNoteToLink} loading={mutation.isBusy(`book-source-note:${item.id}`)} onClick={() => void mutation.run(`book-source-note:${item.id}`, async () => { await linkKnowledge(sourceNoteToLink, { targetKnowledgeItemId: item.id }, "source"); setSourceNoteToLink(""); })}><Link2 />Połącz</Button></div>{existingNotesQuery.hasNextPage ? <Button variant="ghost" loading={existingNotesQuery.isFetchingNextPage} onClick={() => void existingNotesQuery.fetchNextPage()}>Wczytaj więcej notatek</Button> : null}{existingNotesQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać biblioteki notatek. <button type="button" onClick={() => void existingNotesQuery.refetch()}>Spróbuj ponownie</button></p> : null}</Panel> : null}
+      {item.resourceFormat === "book" && !item.trashedAt ? <Panel className="book-work-links"><h2>Połącz z pracą</h2><p className="muted-copy">Działania korzystają ze Startu, a Cele pozostają niezależne od statusu czytania.</p><label className="field-label" htmlFor="book-work-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="book-work-project" value={bookProjectId} onChange={(event) => setBookProjectId(event.target.value)}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select><div className="button-row"><Button onClick={() => openBookQuickAdd("action")}><ListTodo />Nowe Działanie</Button><Button variant="secondary" onClick={() => openBookQuickAdd("goal")}><Flag />Nowy Cel</Button></div></Panel> : null}
       {item.type === "decision" ? <Panel className="decision-evidence-panel"><h2><CheckCircle2 />Potwierdzenia decyzji</h2><p className="muted-copy">Dołącz materiał, notatkę lub wynik poszukiwania, który uzasadnia tę decyzję.</p>{supportingItems.map(({ link, item: supportingItem }) => <div className="linked-knowledge" key={link.id} data-navigation-card-id={navigationCardId("knowledge", supportingItem!.id)} tabIndex={-1}><NavigationLink to={routeForEntity({ type: "knowledge", id: supportingItem!.id })} breadcrumbs={breadcrumbs} returnTo={itemNavigation.returnTo} returnLabel={itemNavigation.returnLabel} sourceCardId={navigationCardId("knowledge", supportingItem!.id)}>{supportingItem!.title}</NavigationLink><Button variant="ghost" aria-label={`Odłącz potwierdzenie: ${supportingItem!.title}`} onClick={() => void unlinkKnowledge(link.id)}>×</Button></div>)}<details className="detail-connect-disclosure"><summary><Plus />Dodaj potwierdzenie</summary><div className="inline-link"><select aria-label="Materiał potwierdzający decyzję" value={supportingId} onChange={(event) => setSupportingId(event.target.value)}><option value="">Wybierz materiał…</option>{state.knowledge.filter((candidate) => candidate.id !== item.id && !candidate.archivedAt && !candidate.trashedAt && !supportingLinks.some((link) => link.knowledgeItemId === candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{labels[candidate.type]} · {candidate.title}</option>)}</select><Button disabled={!supportingId} onClick={() => void mutation.run(`decision-evidence:${item.id}`, async () => { await linkKnowledge(supportingId, { targetKnowledgeItemId: item.id }, "material"); setSupportingId(""); })}><Plus />Dołącz</Button></div></details>{mutation.error(`decision-evidence:${item.id}`) ? <p className="inline-mutation-error" role="alert">{mutation.error(`decision-evidence:${item.id}`)} <button type="button" onClick={() => void mutation.retry(`decision-evidence:${item.id}`)?.()}>Spróbuj ponownie</button></p> : null}</Panel> : null}
 {sourceInboxItem ? <Panel><h2>Pochodzenie</h2><p className="muted-copy">Zapisano ze Skrzynki; oryginał i sposób przetworzenia pozostają w historii.</p><Link className="history-link" to={routeForEntity({ type: "inbox", id: sourceInboxItem.id, status: sourceInboxItem.status })}><span>{sourceInboxItem.content}</span><span>Otwórz przechwycenie</span></Link></Panel> : null}</aside></div>
-    <Modal open={noteOpen && item.resourceFormat === "book"} closeDisabled={noteSaving} title={`Notatka do: ${item.title}`} onClose={() => setNoteOpen(false)}><form onSubmit={(event) => void createSourceNote(event)}><label className="field-label" htmlFor="book-note-title">Tytuł</label><input id="book-note-title" value={sourceNoteForm.title} onChange={(event) => setSourceNoteForm((current) => ({ ...current, title: event.target.value }))} required /><label className="field-label" htmlFor="book-note-detail">Notatka</label><textarea id="book-note-detail" rows={6} value={sourceNoteForm.detail} onChange={(event) => setSourceNoteForm((current) => ({ ...current, detail: event.target.value }))} required /><label className="field-label" htmlFor="book-note-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="book-note-project" value={sourceNoteForm.projectId} onChange={(event) => setSourceNoteForm((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>{noteError ? <p className="auth-message error" role="alert">{noteError}</p> : null}<div className="modal-actions"><Button type="button" disabled={noteSaving} onClick={() => setNoteOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={noteSaving} disabled={!sourceNoteForm.title.trim() || !sourceNoteForm.detail.trim()}>Zapisz notatkę</Button></div></form></Modal>
   </div></AppShell>;
 }

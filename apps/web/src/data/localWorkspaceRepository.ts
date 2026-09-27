@@ -7,6 +7,7 @@ import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import { emptyState } from "./empty";
+import { createKnowledgeFilter } from "../domain/knowledgeFilters";
 import { decodeAIReviewSettings, type AIReviewSettings } from "../domain/aiReviewSettings";
 import type { AIGoalReview, AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
@@ -99,6 +100,7 @@ function pageItems(state: AppState, collection: WorkspacePageQuery["collection"]
 }
 
 function pageSortValue(item: WorkspacePageItem, collection: WorkspacePageQuery["collection"]) {
+  if (collection === "knowledge") return (item as AppState["knowledge"][number]).updatedAt ?? (item as AppState["knowledge"][number]).createdAt ?? "";
   if (collection === "actions") return actionListSortValue(item as AppState["actions"][number], "open");
   if (collection === "completed-actions") return (item as AppState["actions"][number]).completedAt ?? (item as AppState["actions"][number]).updatedAt ?? "";
   if (collection === "reviews") return (item as AppState["reviews"][number]).completedAt;
@@ -220,16 +222,24 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
       let items = pageItems(state, query.collection, query.goalId, query.actionFilter);
-      if (query.collection === "knowledge") items = (items as AppState["knowledge"]).filter((item) =>
-        (!query.resourceFormat || item.resourceFormat === query.resourceFormat)
-        && (!query.readingStatus || (item.resourceFormat === "book" && item.readingStatus === query.readingStatus))
-        && (!query.knowledgeKind || item.type === query.knowledgeKind)
-        && (!query.searchText || `${item.title} ${item.detail} ${item.resourceAuthor ?? ""}`.toLocaleLowerCase("pl").includes(query.searchText.toLocaleLowerCase("pl")))
-      );
+      let totalCount: number | undefined;
+      if (query.collection === "knowledge") {
+        const filter = createKnowledgeFilter(state, {
+          resourceFormat: query.resourceFormat,
+          readingStatus: query.readingStatus,
+          knowledgeKind: query.knowledgeKind,
+          searchText: query.searchText,
+          projectId: query.projectId,
+          goalId: query.knowledgeGoalId,
+          visibility: query.knowledgeVisibility
+        });
+        items = (items as AppState["knowledge"]).filter(filter);
+        totalCount = items.length;
+      }
       if (query.collection === "actions" && query.actionFilter) {
         return pageByCursor(items, query.pageSize, query.cursor, (item) => actionListSortValue(item as AppState["actions"][number], query.actionFilter!.view), actionListSortDirection(query.actionFilter.view));
       }
-      return pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection));
+      return { ...pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection)), totalCount };
     },
     async loadAction(id) {
       return (await load())?.actions.find((action) => action.id === id);

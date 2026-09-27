@@ -5,6 +5,7 @@ import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating, AIGoalReviewLatest } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 import type { AIReviewSettings } from "../domain/aiReviewSettings";
+import type { KnowledgeVisibilityFilter } from "../domain/knowledgeFilters";
 
 export type WorkspaceIntent = DomainCommand;
 export type WorkspaceIntentResult<Intent extends WorkspaceIntent> = Intent extends unknown ? AppState : never;
@@ -89,6 +90,7 @@ export interface PageCursor {
 export interface Page<T> {
   items: T[];
   nextCursor?: PageCursor;
+  totalCount?: number;
 }
 
 export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "actions" | "reviews";
@@ -103,6 +105,9 @@ export interface WorkspacePageQuery {
   readingStatus?: ReadingStatus;
   knowledgeKind?: KnowledgeKind;
   searchText?: string;
+  projectId?: string;
+  knowledgeGoalId?: string;
+  knowledgeVisibility?: KnowledgeVisibilityFilter;
   cursor?: PageCursor;
 }
 

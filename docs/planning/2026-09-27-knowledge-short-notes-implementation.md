@@ -1,6 +1,6 @@
 # Wiedza i krótkie notatki — plan wykonawczy dla kolejnego modelu
 
-Data: 27 września 2026. Status: plan, bez wdrożenia zmian opisanych poniżej.
+Data: 27 września 2026. Status: etapy A–E zaimplementowane i zweryfikowane lokalnie; migracja `20260927093322_knowledge_filtered_page.sql` zastosowana i zweryfikowana zdalnie. Aplikacja nie została wdrożona. Etap F odłożony.
 
 ## 1. Cel i kontekst użytkownika
 
@@ -347,3 +347,54 @@ niezrealizowany etap F. Nie opisuj pomysłów odłożonych jako istniejących fu
 > źródło i szkic. Napraw potwierdzone regresje, wykonaj testy i odbiór
 > przeglądarkowy. Etap F zostaw jako osobny przyrost. Nie zmieniaj danych
 > użytkownika na potrzeby testów. Raportuj faktycznie zweryfikowany stan.
+
+## 11. Stan realizacji A–E (27 września 2026)
+
+- **A:** lokalna i zdalna implementacja stronicowania filtruje przed kursorem;
+  kontrakt obejmuje Projekt, Cel i widoczność, licznik jest dokładny, a sort
+  stabilny po `id`. Lista rozróżnia ładowanie, błąd, pusty wynik i błąd kolejnej
+  strony; filtry pozostają w URL.
+- **B:** wspólny formularz zapisuje samą treść, wylicza tytuł przy tworzeniu,
+  zachowuje wielowierszowy `detail`, obsługuje opcjonalny tytuł i lokalny szkic
+  z kluczem idempotencji. Formularz jest użyty w Bibliotece, Projekcie,
+  szczególe książki i ręcznym triage Skrzynki.
+- **C:** notatki książki są w głównej kolumnie, z wyszukiwaniem, pełną treścią,
+  relacją `source`, linkiem powrotnym do książki i zmianą statusu czytania.
+- **D:** Biblioteka pokazuje autora/status książek, treść notatek i czytelne
+  źródło; poprawiono etykiety dodawania zależne od filtra.
+- **E — lokalna weryfikacja:** `pnpm lint`, `pnpm typecheck`, `pnpm test`
+  (65 plików, 462 testy) i `pnpm build` przeszły. Testy obejmują adaptery
+  repozytoriów, ponadstronicowe filtry oraz nową funkcję SQL w testowej bazie
+  PGlite. W przeglądarce na osobnym demo sprawdzono zapis samej treści, zapis
+  notatki ze źródłem książki, ręczny triage z zachowaniem oryginału, kontekst
+  Projektu i widok 390 px bez poziomego przewijania.
+- **Zdalna migracja:** zastosowano `20260927093322_knowledge_filtered_page.sql`
+  do projektu Supabase `khlhhwfsxfxffawlghxh`. Historia migracji potwierdza wersję
+  `20260927093322`; katalog bazy potwierdza nową sygnaturę 11-argumentową,
+  `SECURITY INVOKER`, pusty `search_path`, uprawnienie `authenticated` i brak
+  uprawnienia `anon`. Wersja lokalnego pliku odpowiada wpisowi zdalnemu.
+- **Wdrożenie aplikacji i zdalny przepływ zapisu:** aplikacja nie została
+  wdrożona, a zapis przez zalogowaną sesję zdalną nie był testowany.
+- **Doradcy Supabase po migracji:** nie zgłosili problemu dla nowej funkcji.
+  W projekcie pozostają ostrzeżenia dotyczące innych funkcji i tabel: m.in.
+  zmienny `search_path`, brak polityk RLS w dwóch tabelach prywatnych oraz
+  ustawienia ochrony przed wyciekłymi hasłami. Doradca wydajności zgłosił
+  nieindeksowane klucze obce i nieużywane indeksy; wśród nich świeżo utworzony
+  `knowledge_page_cursor_idx`. Wymagają osobnego przeglądu poza etapami A–E.
+- **F:** bez zmian w tym zakresie; pozostaje osobnym przyrostem.
+
+## 12. Poprawki po review (27 września 2026)
+
+- Wyszukiwanie ma jedno źródło stanu w URL. Debounce opóźnia odczyt wyników,
+  ale nie zapisuje poprzedniej frazy z powrotem po wyczyszczeniu filtrów lub
+  nawigacji wstecz.
+- Edycja propozycji AI typu Notatka zasila właściwy szkic treścią, tytułem
+  i powiązaniem. Jeśli istnieje własny szkic, użytkownik może go otworzyć albo
+  jawnie zastąpić propozycją; samo „Edytuj” nie nadpisuje własnej treści.
+- Biblioteka zachowuje identyfikatory wpisów utworzonych w bieżącym widoku
+  i dołącza je do pobranych stron, z zachowaniem filtrów, wersji i deduplikacji.
+  Nowa notatka jest widoczna również przy ponad 50 rekordach. Nie zmieniono
+  kontraktu ani kierunku paginacji; po ponownym wejściu obowiązuje zwykła kolejność.
+- Dodano 6 testów regresji w KnowledgePage.test.tsx i InboxPage.test.tsx.
+  Pełny zestaw: 468 testów w 67 plikach zakończonych sukcesem.
+  Poprawki nie wymagają nowej migracji ani zmian danych użytkownika.

@@ -1097,6 +1097,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (mode !== "demo") await runRemote(async () => await (await loadRepository()).createKnowledgeRemote(stateRef.current.workspaceId!, id, input, relations), `knowledge:${id}`);
         }
       });
+      await invalidateActiveWorkspaceQueries();
       return id;
     },
     async recordActionResult(actionId: string, result: ActionResultInput) {
@@ -1264,7 +1265,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, hydrateKnowledge, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, hydrateKnowledge, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;

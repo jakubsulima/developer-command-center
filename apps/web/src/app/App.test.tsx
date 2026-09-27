@@ -39,7 +39,7 @@ describe("goal-centric workspace", () => {
     await user.click(within(dialog).getByRole("radio", { name: /Materiał/ }));
     await user.click(within(dialog).getByLabelText("To książka"));
     await user.type(within(dialog).getByLabelText("Nazwa materiału"), "Książka mobilna");
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz materiał" }));
+    await user.click(within(dialog).getByRole("button", { name: "Dodaj książkę" }));
     expect(await screen.findByText("Książka mobilna")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });

@@ -55,6 +55,21 @@ powiążą ją różne Projekty. Status czytania jest niezależny od Archiwum, K
 Celów i Działań. Relacja `source` oznacza Notatka → Materiał; nie jest
 potwierdzeniem Decyzji.
 
+Krótka Notatka wymaga niepustej treści. Tytuł jest opcjonalny; jeśli go nie
+podano, przy utworzeniu powstaje z pierwszej niepustej linii, po normalizacji
+białych znaków i skróceniu do 100 punktów kodowych. Pełna treść po usunięciu
+skrajnych białych znaków zachowuje podziały linii. Późniejsza edycja treści nie
+zmienia automatycznie utrwalonego tytułu. Notatka zapisana przy książce wskazuje
+ją przez relację `source`; jawny Projekt i Cel pozostają odrębnymi powiązaniami.
+
+Szkice nowych notatek są trwałe tylko na bieżącym urządzeniu i rozdzielone
+według kontekstu, takiego jak książka albo Projekt. Retry używa stabilnego
+klucza idempotencji, a potwierdzony zapis czyści tylko właściwy szkic. Filtry
+Biblioteki działają przed kursorem strony: Projekt korzysta z semantyki
+`projectKnowledgeIds` (łącznie z jednokrotnym przejściem od notatki źródłowej
+do książki), a Cel obejmuje bezpośrednie powiązanie i powiązanie przez Działanie
+z tym Celem. Aktywne, archiwalne i usunięte wpisy są osobnymi widokami.
+
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
 planem, sesją pracy, timerem ani osobnym stanem domenowym.

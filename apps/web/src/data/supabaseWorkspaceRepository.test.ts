@@ -70,11 +70,11 @@ describe("adapter Biblioteki Wiedzy Supabase", () => {
   it("wyjaśnia brak migracji przy użyciu nowych filtrów", async () => {
     const rpc = vi.fn(async () => ({ data: null, error: { code: "PGRST202", message: "missing function" } }));
     getClient.mockReturnValue({ rpc });
-    await expect(createSupabaseWorkspaceRepository().loadPage({ workspaceId: "workspace-1", collection: "knowledge", pageSize: 50, resourceFormat: "book" })).rejects.toThrow(/wymaga aktualizacji bazy/);
+    await expect(createSupabaseWorkspaceRepository().loadPage({ workspaceId: "workspace-1", collection: "knowledge", pageSize: 50, resourceFormat: "book" })).rejects.toThrow(/aktualizacji bazy/);
   });
 
   it("przekazuje filtry książek, statusu, rodzaju, autora i paginacji do RPC", async () => {
-    const rpc = vi.fn(async () => ({ data: { items: [{ id: "book", type: "resource", title: "Model danych", resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" }], nextCursor: null }, error: null }));
+    const rpc = vi.fn(async () => ({ data: { items: [{ id: "book", type: "resource", title: "Model danych", resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" }], nextCursor: null, totalCount: 117 }, error: null }));
     getClient.mockReturnValue({ rpc });
     const page = await createSupabaseWorkspaceRepository().loadPage({
       workspaceId: "workspace-1", collection: "knowledge", pageSize: 20,
@@ -83,10 +83,26 @@ describe("adapter Biblioteki Wiedzy Supabase", () => {
     });
 
     expect(page.items[0]).toMatchObject({ resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" });
+    expect(page.totalCount).toBe(117);
     expect(rpc).toHaveBeenCalledWith("get_knowledge_page", {
       target_workspace_id: "workspace-1", target_resource_format: "book", target_reading_status: "reading",
-      target_knowledge_kind: "resource", target_search_text: "Autor", page_size: 20,
+      target_knowledge_kind: "resource", target_search_text: "Autor", target_project_id: null, target_goal_id: null,
+      target_visibility: null, page_size: 20,
       cursor_sort_value: "2026-09-01T00:00:00.000Z", cursor_id: "book-0"
+    });
+  });
+
+  it("przekazuje filtry Projektu, Celu i widoczności przed paginacją", async () => {
+    const rpc = vi.fn(async () => ({ data: { items: [], nextCursor: null, totalCount: 0 }, error: null }));
+    getClient.mockReturnValue({ rpc });
+    await createSupabaseWorkspaceRepository().loadPage({
+      workspaceId: "workspace-1", collection: "knowledge", pageSize: 50,
+      projectId: "project-1", knowledgeGoalId: "goal-1", knowledgeVisibility: "archived"
+    });
+    expect(rpc).toHaveBeenCalledWith("get_knowledge_page", {
+      target_workspace_id: "workspace-1", target_project_id: "project-1", target_goal_id: "goal-1", target_visibility: "archived",
+      target_resource_format: null, target_reading_status: null, target_knowledge_kind: null, target_search_text: null,
+      page_size: 50, cursor_sort_value: null, cursor_id: null
     });
   });
 });
