@@ -29,7 +29,7 @@ describe("Dodaj — formularze i kontekst", () => {
     ["goal", "Co chcesz osiągnąć?", "Utwórz Cel", "createGoal"],
     ["project", "Jaki Projekt utworzyć?", "Utwórz Projekt", "createArea"],
     ["routine", "Co ma się powtarzać?", "Utwórz Rutynę", "createRecurringAction"],
-    ["library", "Tytuł notatki", "Zapisz w Bibliotece", "createKnowledge"],
+    ["library", "Treść notatki", "Zapisz notatkę", "createKnowledge"],
     ["inbox", "Co chcesz zachować?", "Zapisz do Skrzynki", "capture"]
   ] as const)("zapisuje %s", async (mode, field, submit, command) => {
     const user = userEvent.setup();
@@ -39,7 +39,7 @@ describe("Dodaj — formularze i kontekst", () => {
     await user.click(screen.getByRole("button", { name: submit }));
     expect(store[command]).toHaveBeenCalledTimes(1);
     if (mode === "action" || mode === "goal" || mode === "routine") expect(store[command]).toHaveBeenCalledWith(expect.objectContaining({ title: "Nowy wpis", areaId: "project" }));
-    if (mode === "project") expect(store.createArea).toHaveBeenCalledWith("Nowy wpis", undefined, undefined, []);
+    if (mode === "project") expect(store.createArea).toHaveBeenCalledWith("Nowy wpis", undefined, undefined, [], "standard");
     if (mode === "library") expect(store.createKnowledge).toHaveBeenCalledWith(expect.objectContaining({ relations: [expect.objectContaining({ target: { areaId: "project" } })] }));
     if (mode === "inbox") expect(store.capture).toHaveBeenCalledWith("Nowy wpis", "text");
     expect(close).toHaveBeenCalledOnce();
@@ -62,8 +62,23 @@ describe("Dodaj — formularze i kontekst", () => {
     await switchType(user, "Biblioteka");
     expect(screen.getByRole("button", { name: "Usuń powiązanie: Wynik" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Usuń powiązanie: Wynik" }));
-    await user.click(screen.getByRole("button", { name: "Zapisz w Bibliotece" }));
+    await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
     expect(store.createKnowledge).toHaveBeenCalledWith(expect.objectContaining({ relations: [expect.objectContaining({ target: { areaId: "project" } })] }));
+  });
+
+  it("zapisuje krótką notatkę z samej treści i wylicza tytuł", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    render(<QuickAdd open request={{ mode: "library", draftKey: "content-only-note" }} onClose={close} />);
+    await user.type(screen.getByLabelText("Treść notatki"), "  \nMyśl do zachowania\nDruga linia  ");
+    await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
+    expect(store.createKnowledge).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "note",
+      title: "Myśl do zachowania",
+      detail: "Myśl do zachowania\nDruga linia",
+      idempotencyKey: expect.any(String)
+    }));
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("powrót przez Projekt zachowuje Cel, termin i niezależne przypięcie", async () => {
@@ -148,12 +163,11 @@ describe("Dodaj — formularze i kontekst", () => {
     const user = userEvent.setup();
     render(<QuickAdd open request={{ mode: "library" }} onClose={vi.fn()} />);
     expect(screen.queryByText(/^Typ:/)).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("Tytuł notatki"), "Wspólny tytuł");
-    await user.type(screen.getByLabelText(/Treść notatki/), "Zachowaj tę treść");
+    await user.type(screen.getByLabelText("Treść notatki"), "Zachowaj tę treść");
     await user.click(screen.getByRole("radio", { name: /^Materiał/ }));
     await user.type(screen.getByLabelText(/Link HTTP/), "https://example.com");
     await user.click(screen.getByRole("radio", { name: /^Decyzja/ }));
-    expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("Wspólny tytuł");
+    expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("");
     expect(screen.getByLabelText("Uzasadnienie i konsekwencje")).toBeRequired();
     expect(screen.getByLabelText("Uzasadnienie i konsekwencje")).toHaveValue("Zachowaj tę treść");
     expect(screen.queryByLabelText(/Link HTTP/)).not.toBeInTheDocument();

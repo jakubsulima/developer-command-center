@@ -1,10 +1,11 @@
-import type { ActionStatus, GoalKind, GoalStatus, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, ProgressKind } from "./types";
+import type { ActionStatus, GoalKind, GoalStatus, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, ProgressKind, ReadingStatus } from "./types";
 
 export const goalStatusLabels: Record<GoalStatus, string> = { active: "Aktywny", paused: "Wstrzymany", achieved: "Osiągnięty", abandoned: "Porzucony" };
 export const goalKindLabels: Record<GoalKind, string> = { project: "Projektowy", learning: "Nauka", personal: "Osobisty", maintenance: "Utrzymanie", custom: "Własny" };
 export const knowledgeKindLabels: Record<KnowledgeKind, string> = { note: "Notatka", resource: "Materiał", decision: "Decyzja", artifact: "Rezultat", investigation: "Poszukiwanie" };
+export const readingStatusLabels: Record<ReadingStatus, string> = { to_read: "Do przeczytania", reading: "W trakcie", read: "Przeczytana", paused: "Wstrzymana", abandoned: "Porzucona" };
 export const knowledgeKindIcons: Record<KnowledgeKind, string> = { note: "FileText", resource: "Library", decision: "GitBranch", artifact: "CircleCheck", investigation: "Search" };
-export const knowledgeRelationMeaningLabels: Record<KnowledgeRelationMeaning, string> = { material: "Materiał", result: "Rezultat", decision: "Decyzja", reference: "Pozostałe" };
+export const knowledgeRelationMeaningLabels: Record<KnowledgeRelationMeaning, string> = { material: "Materiał", result: "Rezultat", decision: "Decyzja", reference: "Pozostałe", source: "Źródło" };
 export function knowledgeDefaultRelationMeaning(kind: KnowledgeKind): KnowledgeRelationMeaning {
   if (kind === "artifact") return "result";
   if (kind === "decision") return "decision";

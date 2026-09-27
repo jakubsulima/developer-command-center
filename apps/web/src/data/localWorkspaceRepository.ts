@@ -7,6 +7,7 @@ import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import { emptyState } from "./empty";
+import { createKnowledgeFilter } from "../domain/knowledgeFilters";
 import { decodeAIReviewSettings, type AIReviewSettings } from "../domain/aiReviewSettings";
 import type { AIGoalReview, AIGoalReviewFreshness } from "../domain/aiGoalReview";
 import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
@@ -16,7 +17,7 @@ const STORE_NAME = "workspace";
 const STATE_KEY = "active";
 const FALLBACK_KEY = "command-center-local-workspace-v2";
 const GOAL_REVIEW_KEY = "command-center-ai-goal-review-v1";
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 interface StoredWorkspace {
   version: number;
@@ -99,6 +100,7 @@ function pageItems(state: AppState, collection: WorkspacePageQuery["collection"]
 }
 
 function pageSortValue(item: WorkspacePageItem, collection: WorkspacePageQuery["collection"]) {
+  if (collection === "knowledge") return (item as AppState["knowledge"][number]).updatedAt ?? (item as AppState["knowledge"][number]).createdAt ?? "";
   if (collection === "actions") return actionListSortValue(item as AppState["actions"][number], "open");
   if (collection === "completed-actions") return (item as AppState["actions"][number]).completedAt ?? (item as AppState["actions"][number]).updatedAt ?? "";
   if (collection === "reviews") return (item as AppState["reviews"][number]).completedAt;
@@ -219,17 +221,35 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
-      const items = pageItems(state, query.collection, query.goalId, query.actionFilter);
+      let items = pageItems(state, query.collection, query.goalId, query.actionFilter);
+      let totalCount: number | undefined;
+      if (query.collection === "knowledge") {
+        const filter = createKnowledgeFilter(state, {
+          resourceFormat: query.resourceFormat,
+          readingStatus: query.readingStatus,
+          knowledgeKind: query.knowledgeKind,
+          searchText: query.searchText,
+          projectId: query.projectId,
+          goalId: query.knowledgeGoalId,
+          visibility: query.knowledgeVisibility
+        });
+        items = (items as AppState["knowledge"]).filter(filter);
+        totalCount = items.length;
+      }
       if (query.collection === "actions" && query.actionFilter) {
         return pageByCursor(items, query.pageSize, query.cursor, (item) => actionListSortValue(item as AppState["actions"][number], query.actionFilter!.view), actionListSortDirection(query.actionFilter.view));
       }
-      return pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection));
+      return { ...pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection)), totalCount };
     },
     async loadAction(id) {
       return (await load())?.actions.find((action) => action.id === id);
     },
     async loadKnowledgeItem(id: string) {
       return (await load())?.knowledge.find((item) => item.id === id);
+    },
+    async loadKnowledgeItems(ids: string[]) {
+      const wanted = new Set(ids);
+      return (await load())?.knowledge.filter((item) => wanted.has(item.id)) ?? [];
     },
     async loadLegacyFocusSession(id: string) {
       return (await load())?.focusSessions.find((session) => session.id === id);
@@ -241,7 +261,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       const results: SearchResult[] = [
         ...state.goals.filter((item) => `${item.title} ${item.outcome}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "goal" as const, title: item.title, detail: item.outcome, route: `/goals/${item.id}` })),
         ...state.actions.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "action" as const, title: item.title, detail: item.detail, route: `/actions/${item.id}` })),
-        ...state.knowledge.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
+        ...state.knowledge.filter((item) => `${item.title} ${item.detail} ${item.resourceAuthor ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
         ...state.areas.filter((item) => item.visibility === "active" && `${item.name} ${item.description ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.description, route: `/projects/${item.id}` })),
         ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: `/knowledge?section=inbox&item=${item.id}` }))
       ];

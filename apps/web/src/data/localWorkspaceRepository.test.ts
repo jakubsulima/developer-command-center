@@ -19,7 +19,7 @@ describe("lokalne repozytorium Workspace", () => {
 
     const restored = await repository.load();
     expect(restored?.projects[0]).toMatchObject({ id: "local-project", domainStatus: "shaped" });
-    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 5 });
+    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 6 });
   });
 
   it("wyszukuje bieżący Projekt i nie przeszukuje historycznego agregatu Project", async () => {
@@ -48,6 +48,60 @@ describe("lokalne repozytorium Workspace", () => {
     expect(ids).toHaveLength(65);
     expect(new Set(ids).size).toBe(65);
     expect(third.nextCursor).toBeUndefined();
+  });
+
+  it("filtruje książki po statusie i autorze przed paginacją", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    const state = structuredClone(emptyState);
+    state.knowledge = [
+      { id: "book-1", type: "resource", title: "Książka 1", detail: "Opis", resourceFormat: "book", resourceAuthor: "Ada Autor", readingStatus: "reading", updatedAt: "2026-09-01" },
+      { id: "book-2", type: "resource", title: "Książka 2", detail: "Opis", resourceFormat: "book", resourceAuthor: "Ada Autor", readingStatus: "read", updatedAt: "2026-09-02" },
+      { id: "book-3", type: "resource", title: "Książka 3", detail: "Opis", resourceFormat: "book", resourceAuthor: "Inny Autor", readingStatus: "reading", updatedAt: "2026-09-03" }
+    ];
+    await repository.save(state);
+    const page = await repository.loadPage({ workspaceId: "demo", collection: "knowledge", pageSize: 1, resourceFormat: "book", readingStatus: "reading", searchText: "Ada Autor" });
+
+    expect(page.items).toMatchObject([{ id: "book-1", readingStatus: "reading" }]);
+    expect(page.nextCursor).toBeUndefined();
+  });
+
+  it("filtruje po Projekcie, Celu i widoczności przed kursorem oraz liczy pełny wynik", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: "", updatedAt: "" }];
+    state.goals = [{ id: "goal", title: "Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project" }];
+    state.actions = [{ id: "action", version: 1, goalId: "goal", title: "Działanie", detail: "", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [] }];
+    state.knowledge = Array.from({ length: 120 }, (_, index) => ({ id: `item-${String(index).padStart(3, "0")}`, type: "note" as const, title: `Wpis ${index}`, detail: "", updatedAt: `2026-09-${String(Math.floor(index / 28) + 1).padStart(2, "0")}T00:00:00.000Z` }));
+    state.knowledge.push({ id: "project-note", type: "note", title: "Poza pierwszą stroną", detail: "", updatedAt: "2026-12-01T00:00:00.000Z" });
+    state.knowledge.push({ id: "goal-note", type: "note", title: "Cel", detail: "", updatedAt: "2026-12-02T00:00:00.000Z" });
+    state.knowledge.push({ id: "archived-note", type: "note", title: "Archiwum", detail: "", archivedAt: "2026-12-03T00:00:00.000Z", updatedAt: "2026-12-03T00:00:00.000Z" });
+    state.knowledgeLinks = [
+      { id: "project-link", knowledgeItemId: "project-note", areaId: "project", meaning: "reference", createdAt: "" },
+      { id: "goal-link", knowledgeItemId: "goal-note", actionId: "action", meaning: "reference", createdAt: "" }
+    ];
+    await repository.save(state);
+
+    const projectPage = await repository.loadPage({ workspaceId: "demo", collection: "knowledge", pageSize: 1, projectId: "project", knowledgeVisibility: "active" });
+    const nextProjectPage = await repository.loadPage({ workspaceId: "demo", collection: "knowledge", pageSize: 1, projectId: "project", knowledgeVisibility: "active", cursor: projectPage.nextCursor });
+    const goalPage = await repository.loadPage({ workspaceId: "demo", collection: "knowledge", pageSize: 50, knowledgeGoalId: "goal", knowledgeVisibility: "active" });
+    const archivedPage = await repository.loadPage({ workspaceId: "demo", collection: "knowledge", pageSize: 50, knowledgeVisibility: "archived" });
+
+    expect(projectPage.totalCount).toBe(2);
+    expect([...projectPage.items, ...nextProjectPage.items].map((item) => item.id).sort()).toEqual(["goal-note", "project-note"]);
+    expect(goalPage.items.map((item) => item.id)).toEqual(["goal-note"]);
+    expect(archivedPage.items.map((item) => item.id)).toEqual(["archived-note"]);
+  });
+
+  it("odczytuje starszy snapshot i zachowuje rozszerzenia Wiedzy podczas migracji", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    const state = structuredClone(emptyState);
+    state.areas = [{ id: "library", name: "Czytelnia", preset: "reading", visibility: "active", createdAt: "now", updatedAt: "now" }];
+    state.knowledge = [{ id: "book", type: "resource", title: "Książka", detail: "Opis", resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" }];
+    localStorage.setItem("command-center-local-workspace-v2", JSON.stringify({ version: 5, savedAt: "now", state }));
+
+    await expect(repository.load()).resolves.toMatchObject({ areas: [{ id: "library", preset: "reading" }], knowledge: [{ id: "book", resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "reading" }] });
+    await repository.save((await repository.load())!);
+    expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2") ?? "{}")).toMatchObject({ version: 6 });
   });
 
   it("zapisuje ustawienia Przeglądu AI lokalnie i uzupełnia starszy stan wartościami domyślnymi", async () => {

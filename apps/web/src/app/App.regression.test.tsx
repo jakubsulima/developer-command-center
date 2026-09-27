@@ -310,7 +310,7 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/knowledge");
     const search = await screen.findByRole("searchbox", { name: "Szukaj w wiedzy" });
     await user.type(search, "nieistniejący-obiekt");
-    expect(screen.getByRole("heading", { name: "Brak pasujących obiektów" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Brak pasujących obiektów" })).toBeInTheDocument();
   });
 
   it("otwiera mobilny arkusz filtrów Celów i ujawnia ich stan programowo", async () => {
@@ -341,7 +341,9 @@ describe("regresje nowego modelu Celów", () => {
     await screen.findByRole("heading", { name: "Wiedza" });
     await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj do Biblioteki" });
-    await user.type(within(dialog).getByLabelText("Tytuł notatki"), "Decyzja o modelu danych");
+    await user.type(within(dialog).getByLabelText("Treść notatki"), "Uzgodniony kierunek modelu danych.");
+    await user.click(within(dialog).getByText("Więcej", { exact: true }));
+    await user.type(within(dialog).getByLabelText("Tytuł opcjonalnie"), "Decyzja o modelu danych");
     const goals = within(dialog).getByRole("combobox", { name: "Powiązane Cele" });
     await user.click(goals);
     await user.click(within(within(dialog).getByRole("listbox", { name: "Powiązane Cele" })).getAllByRole("option")[0]!);

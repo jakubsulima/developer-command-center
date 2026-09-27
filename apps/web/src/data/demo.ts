@@ -3,9 +3,9 @@ import { DEFAULT_AI_REVIEW_SETTINGS } from "../domain/aiReviewSettings";
 
 export const demoState: AppState = {
   aiReviewSettings: { ...DEFAULT_AI_REVIEW_SETTINGS },
-  projectCategories: [{ id: "category-work", name: "Praca", color: "#60a5fa" }, { id: "category-learning", name: "Nauka", color: "#a78bfa" }, { id: "category-personal", name: "Projekty osobiste", color: "#34d399" }, { id: "category-ai", name: "AI", color: "#fbbf24" }],
+  projectCategories: [{ id: "category-work", name: "Praca", color: "#60a5fa" }, { id: "category-learning", name: "Nauka", color: "#a78bfa" }, { id: "category-personal", name: "Projekty osobiste", color: "#34d399" }, { id: "category-ai", name: "AI", color: "#fbbf24" }, { id: "category-reading", name: "Czytanie", color: "#f472b6", defaultPreset: "reading" }],
   workspaceTimezone: "Europe/Warsaw",
-  areas: [{ id: "area-finanse", name: "Finanse", description: "Budżet, rachunki i decyzje finansowe", color: "#60a5fa", visibility: "active", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: "2026-07-01T08:00:00.000Z" }],
+  areas: [{ id: "area-finanse", name: "Finanse", description: "Budżet, rachunki i decyzje finansowe", color: "#60a5fa", visibility: "active", createdAt: "2026-07-01T08:00:00.000Z", updatedAt: "2026-07-01T08:00:00.000Z" }, { id: "area-reading", categoryIds: ["category-reading"], preset: "reading", name: "Czytelnia: architektura", description: "Książki o projektowaniu systemów i pracy z danymi", color: "#f472b6", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }],
   goalTemplates: [],
   goals: [{ id: "goal-budget", title: "Zbudować spokojny budżet domowy", outcome: "Co miesiąc wiem, ile mogę bezpiecznie wydać i odłożyć", kind: "personal", status: "active", visibility: "active", priority: "normal", areaId: "area-finanse", createdAt: "2026-07-15T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }],
   goalCriteria: [{ id: "criterion-budget", goalId: "goal-budget", title: "Budżet obejmuje stałe koszty i oszczędności", completed: false }],
@@ -16,7 +16,12 @@ export const demoState: AppState = {
   ],
   progressEntries: [{ id: "progress-budget-1", goalId: "goal-budget", kind: "decision", content: "Budżet prowadzę miesięcznie, bez dziennych limitów.", createdAt: "2026-08-01T18:00:00.000Z" }],
   recurringActionTemplates: [{ id: "series-budget", title: "Przegląd budżetu", detail: "Sprawdź wydatki i zaplanuj przelewy", goalId: "goal-budget", areaId: "area-finanse", timezone: "Europe/Warsaw", startsOn: "2026-08-04", rule: { unit: "week", interval: 1, weekdays: [2] }, missedPolicy: "skip_missed", status: "active", checklist: [{ title: "Sprawdź saldo" }, { title: "Zapisz jedną decyzję" }], skippedOccurrenceCount: 0, createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }],
-  knowledgeLinks: [{ id: "link-budget-knowledge", knowledgeItemId: "know-3", goalId: "goal-budget", meaning: "material", createdAt: "2026-08-01T08:00:00.000Z" }],
+  knowledgeLinks: [
+    { id: "link-budget-knowledge", knowledgeItemId: "know-3", goalId: "goal-budget", meaning: "material", createdAt: "2026-08-01T08:00:00.000Z" },
+    { id: "link-reading-book-project", knowledgeItemId: "know-book", areaId: "area-reading", meaning: "material", createdAt: "2026-08-01T08:00:00.000Z" },
+    { id: "link-reading-note-book", knowledgeItemId: "know-book-note", targetKnowledgeItemId: "know-book", meaning: "source", createdAt: "2026-08-01T08:00:00.000Z" },
+    { id: "link-reading-note-project", knowledgeItemId: "know-book-note", areaId: "area-reading", meaning: "reference", createdAt: "2026-08-01T08:00:00.000Z" }
+  ],
   projects: [
     {
       id: "fintrack-api",
@@ -132,6 +137,8 @@ export const demoState: AppState = {
     { id: "know-1", type: "artifact", title: "Diagram ERD — Transactions v1", detail: "FinTrack API • zaktualizowano wczoraj" },
     { id: "know-2", type: "decision", title: "Typ danych dla kwot pieniężnych", detail: "DECIMAL(18,2) zamiast float • 2 źródła" },
     { id: "know-3", type: "resource", title: "PostgreSQL: constraints and normalization", detail: "Dokumentacja źródłowa • użyte w 2 projektach" },
+    { id: "know-book", type: "resource", title: "Designing Data-Intensive Applications", detail: "Notatki i zastosowania z książki", resourceFormat: "book", resourceAuthor: "Martin Kleppmann", readingStatus: "reading" },
+    { id: "know-book-note", type: "note", title: "Replikacja a dostępność", detail: "Replikacja zwiększa dostępność odczytu, ale wymaga jawnej decyzji o spójności i tolerancji opóźnień." },
     { id: "know-4", type: "note", title: "Wzorce modelowania transakcji", detail: "Notatka robocza • 4 powiązania" }
   ],
   reviews: [],

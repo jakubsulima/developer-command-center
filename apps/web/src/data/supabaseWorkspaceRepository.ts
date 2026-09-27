@@ -84,6 +84,7 @@ function decodePage<T>(payload: unknown, label: string): Page<T> {
   const cursor = root.nextCursor;
   return {
     items: arrayPayload<T>(root.items, `${label}.items`),
+    totalCount: typeof root.totalCount === "number" && Number.isFinite(root.totalCount) ? root.totalCount : undefined,
     nextCursor: cursor && typeof cursor === "object" ? {
       sortValue: stringPayload((cursor as Record<string, unknown>).sortValue, `${label}.nextCursor.sortValue`),
       id: stringPayload((cursor as Record<string, unknown>).id, `${label}.nextCursor.id`)
@@ -126,6 +127,16 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`WorkspaceCore: ${error.message}`);
       const core = decodeWorkspaceCore(data);
       if (!core.workspaceId) return core;
+      const [projectFields, categoryFields] = await Promise.all([
+        getSupabase().from("areas").select("id,preset").eq("workspace_id", core.workspaceId),
+        getSupabase().from("project_categories").select("id,default_preset").eq("workspace_id", core.workspaceId)
+      ]);
+      if (projectFields.error && projectFields.error.code !== "42703") throw new Error(`ProjectPresets: ${projectFields.error.message}`);
+      if (categoryFields.error && categoryFields.error.code !== "42703") throw new Error(`CategoryPresets: ${categoryFields.error.message}`);
+      const projectPresetById = new Map<string, "standard" | "reading">((projectFields.data ?? []).map((row) => [row.id, row.preset === "reading" ? "reading" : "standard"]));
+      const categoryPresetById = new Map((categoryFields.data ?? []).map((row) => [row.id, row.default_preset === "reading" || row.default_preset === "standard" ? row.default_preset : undefined]));
+      core.areas = core.areas.map((area) => ({ ...area, preset: projectPresetById.get(area.id) ?? "standard" }));
+      core.projectCategories = (core.projectCategories ?? []).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) }));
       const settingsResult = await getSupabase().from("workspaces")
         .select("ai_review_window_days,ai_review_cache_hours")
         .eq("id", core.workspaceId)
@@ -171,9 +182,19 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
           target_goal_id: query.actionFilter?.goalId ?? null,
           target_today: query.actionFilter?.today ?? null
         } : {}),
+        ...(query.collection === "knowledge" && (query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim() || query.projectId || query.knowledgeGoalId || query.knowledgeVisibility) ? {
+          target_resource_format: query.resourceFormat ?? null,
+          target_reading_status: query.readingStatus ?? null,
+          target_knowledge_kind: query.knowledgeKind ?? null,
+          target_search_text: query.searchText ?? null,
+          target_project_id: query.projectId ?? null,
+          target_goal_id: query.knowledgeGoalId ?? null,
+          target_visibility: query.knowledgeVisibility ?? null
+        } : {}),
         page_size: query.pageSize,
         ...cursorParams(query.cursor)
       });
+      if (error?.code === "PGRST202" && query.collection === "knowledge") throw new Error("Filtry Wiedzy wymagają aktualizacji bazy danych. Zastosuj migrację knowledge_filtered_page.");
       if (error) throw new Error(`WorkspacePage: ${error.message}`);
       const page = decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
       if (query.collection === "actions") return { ...page, items: await withActionReviewDates(page.items as GoalAction[]) };
@@ -183,6 +204,12 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       const { data, error } = await getSupabase().rpc("get_knowledge_item", { target_item_id: id });
       if (error) throw new Error(`KnowledgeItem: ${error.message}`);
       return (data ?? undefined) as KnowledgeItem | undefined;
+    },
+    async loadKnowledgeItems(ids): Promise<KnowledgeItem[]> {
+      if (!ids.length) return [];
+      const { data, error } = await getSupabase().rpc("get_knowledge_items", { target_item_ids: ids });
+      if (error) throw new Error(`KnowledgeItems: ${error.message}`);
+      return arrayPayload<KnowledgeItem>(data, "KnowledgeItems");
     },
     async loadAction(id): Promise<GoalAction | undefined> {
       const { data, error } = await getSupabase().rpc("get_action_item", { target_action_id: id });

@@ -6,7 +6,9 @@ export type FocusEndReason = "paused" | "work_item_completed" | "stopped" | "int
 export type InboxKind = "text" | "link" | "file" | "voice";
 export type InboxStatus = "unprocessed" | "snoozed" | "resolved" | "discarded";
 export type KnowledgeKind = "note" | "resource" | "decision" | "artifact" | "investigation";
-export type KnowledgeRelationMeaning = "material" | "result" | "decision" | "reference";
+export type KnowledgeRelationMeaning = "material" | "result" | "decision" | "reference" | "source";
+export type ProjectPreset = "standard" | "reading";
+export type ReadingStatus = "to_read" | "reading" | "read" | "paused" | "abandoned";
 export type GoalKind = "project" | "learning" | "personal" | "maintenance" | "custom";
 export type GoalStatus = "active" | "paused" | "achieved" | "abandoned";
 export type Visibility = "active" | "archived" | "trashed";
@@ -17,11 +19,12 @@ export type RecurrenceUnit = "day" | "week" | "month";
 export type MissedOccurrencePolicy = "skip_missed" | "carry_one";
 import type { AIReviewSettings } from "./aiReviewSettings";
 
-export interface ProjectCategory { id: string; name: string; color: string }
+export interface ProjectCategory { id: string; name: string; color: string; defaultPreset?: ProjectPreset }
 
 export interface Area {
   categoryIds?: string[];
   parentProjectId?: string | null;
+  preset?: ProjectPreset;
   id: string;
   name: string;
   description?: string;
@@ -38,6 +41,7 @@ export interface Area {
 export interface Project {
   categoryIds?: string[];
   parentProjectId?: string | null;
+  preset?: ProjectPreset;
   id: string;
   name: string;
   description?: string;
@@ -194,12 +198,17 @@ export interface KnowledgeRelationInput {
 }
 
 export interface CreateKnowledgeInput {
+  /** Stable client-generated identity for retrying an uncertain create. */
+  idempotencyKey?: string;
   kind: KnowledgeKind;
   title: string;
   detail: string;
   sourceUrl?: string;
   projectId?: string;
   sourceInboxItemId?: string;
+  resourceFormat?: "book";
+  resourceAuthor?: string;
+  readingStatus?: ReadingStatus;
   relations?: KnowledgeRelationInput[];
 }
 
@@ -324,6 +333,9 @@ export interface KnowledgeItem {
   sourceInboxItemId?: string;
   sourceSessionId?: string;
   sourceUrl?: string;
+  resourceFormat?: "book";
+  resourceAuthor?: string;
+  readingStatus?: ReadingStatus;
   projectId?: string;
   status?: "draft" | "shaped" | "concluded" | "abandoned";
   question?: string;

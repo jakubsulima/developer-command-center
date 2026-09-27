@@ -1,7 +1,8 @@
-import type { AppState, GoalAction, KnowledgeItem, Project, RecurringActionTemplate } from "./types";
+import type { AppState, GoalAction, Project } from "./types";
 import { isActionInTodayProjection, isVisibleWorkspaceAction, localDateForTimeZone } from "./activity";
 import { isOpenAction } from "./weeklyReview";
 import { actionStatusLabels } from "./labels";
+import { normalizeProjectPreset, projectPresets } from "./projectPresets";
 
 export type ProjectSignalKind = "blocked" | "overdue" | "today" | "next" | "available" | "testing" | "scheduled" | "empty";
 
@@ -118,9 +119,21 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
   const scheduled = actions.find((action) => Boolean(action.scheduledFor && action.scheduledFor > today));
   if (scheduled) return signal("scheduled", scheduled, `Najbliższy termin ${formatSignalDate(scheduled.scheduledFor!)}`, `${statusDescription(scheduled)} · zaplanowane na ${formatSignalDate(scheduled.scheduledFor!)}.`);
 
+  if (normalizeProjectPreset(project.preset) === "reading") {
+    const emptyState = projectPresets.reading.emptyState;
+    return {
+      kind: "empty",
+      title: emptyState.title,
+      description: emptyState.description,
+      label: "Bez zaplanowanej pracy",
+      counts
+    };
+  }
+
+  const emptyState = projectPresets.standard.emptyState;
   return signal("empty", undefined, currentGoals.length ? "Brak następnego kroku" : "Brak pierwszego Celu", currentGoals.length
     ? `Masz ${currentGoals.length} ${currentGoals.length === 1 ? "bieżący Cel" : "bieżące Cele"}, ale żaden nie ma otwartego Działania.`
-    : "Projekt potrzebuje pierwszego konkretnego rezultatu.");
+    : emptyState.description);
 }
 
 function activeRelatedActions(state: AppState, projectId: string) {
@@ -134,13 +147,8 @@ function activeRelatedRecurringActions(state: AppState, projectId: string) {
   return state.recurringActionTemplates.filter((template) => template.areaId === projectId || (template.goalId !== undefined && goals.has(template.goalId)));
 }
 
-function relatedKnowledge(state: AppState, projectId: string, actions: GoalAction[], recurring: RecurringActionTemplate[]) {
-  const goals = new Set(state.goals.filter((goal) => goal.areaId === projectId).map((goal) => goal.id));
-  const actionIds = new Set(actions.map((action) => action.id));
-  const recurringIds = new Set(recurring.map((template) => template.id));
-  const knowledgeIds = new Set(state.knowledgeLinks
-    .filter((link) => link.areaId === projectId || (link.goalId !== undefined && goals.has(link.goalId)) || (link.actionId !== undefined && actionIds.has(link.actionId)) || (link.recurringTemplateId !== undefined && recurringIds.has(link.recurringTemplateId)))
-    .map((link) => link.knowledgeItemId));
+function relatedKnowledge(state: AppState, projectId: string) {
+  const knowledgeIds = projectKnowledgeIds(state, projectId);
   return state.knowledge
     .filter((item) => knowledgeIds.has(item.id))
     .sort((left, right) => (right.updatedAt ?? right.createdAt ?? "").localeCompare(left.updatedAt ?? left.createdAt ?? "") || left.id.localeCompare(right.id));
@@ -158,7 +166,7 @@ export function projectProjection(state: AppState, projectId: string): Project |
     goals,
     actions,
     recurringActionTemplates,
-    knowledge: relatedKnowledge(state, projectId, actions, recurringActionTemplates)
+    knowledge: relatedKnowledge(state, projectId)
   };
 }
 
@@ -172,5 +180,19 @@ export function projectProjections(state: AppState, visibility?: Project["visibi
 }
 
 export function projectKnowledgeIds(state: AppState, projectId: string) {
-  return new Set(projectProjection(state, projectId)?.knowledge.map((item: KnowledgeItem) => item.id) ?? []);
+  const goals = new Set(state.goals.filter((goal) => goal.areaId === projectId).map((goal) => goal.id));
+  const actions = new Set(state.actions.filter((action) => action.areaId === projectId || Boolean(action.goalId && goals.has(action.goalId))).map((action) => action.id));
+  const recurring = new Set(state.recurringActionTemplates.filter((template) => template.areaId === projectId || Boolean(template.goalId && goals.has(template.goalId))).map((template) => template.id));
+  const contextualKnowledgeIds = new Set(state.knowledgeLinks
+    .filter((link) => link.areaId === projectId || Boolean(link.goalId && goals.has(link.goalId)) || Boolean(link.actionId && actions.has(link.actionId)) || Boolean(link.recurringTemplateId && recurring.has(link.recurringTemplateId)))
+    .map((link) => link.knowledgeItemId));
+  const knowledgeIds = new Set(contextualKnowledgeIds);
+  // A source note carries the Project context to its referenced material once;
+  // the material itself does not recursively propagate other contexts.
+  for (const link of state.knowledgeLinks) {
+    if (link.meaning === "source" && link.targetKnowledgeItemId && contextualKnowledgeIds.has(link.knowledgeItemId)) {
+      knowledgeIds.add(link.targetKnowledgeItemId);
+    }
+  }
+  return knowledgeIds;
 }
