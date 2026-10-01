@@ -37,7 +37,7 @@ export function SettingsPage() {
   };
 
   return <AppShell>
-    <PageHeading title="Ustawienia" eyebrow="Preferencje Workspace" />
+    <PageHeading title="Ustawienia" eyebrow="Preferencje przestrzeni pracy" />
     <p className="page-lead">Zdecyduj, jaki okres danych obejmuje Przegląd Celów z AI i jak długo można ponownie użyć zapisanego wyniku.</p>
     <Panel className="ai-review-settings-panel">
       <div className="section-heading"><div><span className="section-kicker">Przegląd Celów z AI</span><h2>Zakres i ponowne użycie wyniku</h2></div></div>

@@ -2,6 +2,7 @@ import { executeDomainCommand, type DomainCommand } from "../domain/commands";
 import { migrateLegacyWorkspaceState } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
+import { isVisibleWorkspaceAction, isVisibleWorkspaceKnowledge, isVisibleWorkspaceProgress, withinDateRange, zonedStartOfDay } from "../domain/activity";
 import { createDemoAIGoalReview } from "../domain/demoAIGoalReview";
 import { createDemoAIInboxTriageProposal } from "../domain/demoAIInboxTriage";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
@@ -10,7 +11,7 @@ import { emptyState } from "./empty";
 import { createKnowledgeFilter } from "../domain/knowledgeFilters";
 import { decodeAIReviewSettings, type AIReviewSettings } from "../domain/aiReviewSettings";
 import type { AIGoalReview, AIGoalReviewFreshness } from "../domain/aiGoalReview";
-import { pageByCursor, type SearchResult, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
+import { pageByCursor, type SearchResult, type WeeklyActivityDetail, type WorkspaceCore, type WorkspacePageItem, type WorkspacePageQuery, type WorkspaceRepository as CoreWorkspaceRepository } from "./workspaceRepository";
 
 const DATABASE_NAME = "developer-command-center";
 const STORE_NAME = "workspace";
@@ -100,12 +101,56 @@ function pageItems(state: AppState, collection: WorkspacePageQuery["collection"]
 }
 
 function pageSortValue(item: WorkspacePageItem, collection: WorkspacePageQuery["collection"]) {
+  if (collection === "weekly-activity") return (item as WeeklyActivityDetail).occurredAt;
   if (collection === "knowledge") return (item as AppState["knowledge"][number]).updatedAt ?? (item as AppState["knowledge"][number]).createdAt ?? "";
   if (collection === "actions") return actionListSortValue(item as AppState["actions"][number], "open");
   if (collection === "completed-actions") return (item as AppState["actions"][number]).completedAt ?? (item as AppState["actions"][number]).updatedAt ?? "";
   if (collection === "reviews") return (item as AppState["reviews"][number]).completedAt;
   if (collection === "goal-progress") return (item as AppState["progressEntries"][number]).createdAt;
   return (item as AppState["inbox"][number] | AppState["knowledge"][number]).createdAt ?? (item as AppState["knowledge"][number]).updatedAt ?? "";
+}
+
+function localWeeklyActivityItems(state: AppState, query: WorkspacePageQuery): WeeklyActivityDetail[] {
+  const { activityKind, periodStart, periodEndExclusive, periodTimeZone } = query;
+  if (!activityKind || !periodStart || !periodEndExclusive || !periodTimeZone) return [];
+  const start = zonedStartOfDay(periodStart, periodTimeZone);
+  const end = zonedStartOfDay(periodEndExclusive, periodTimeZone);
+  const items: WeeklyActivityDetail[] = [];
+  if (activityKind === "actions") {
+    for (const action of state.actions) {
+      const goal = action.goalId ? state.goals.find((candidate) => candidate.id === action.goalId) : undefined;
+      const projectId = action.areaId ?? goal?.areaId;
+      if (action.status !== "completed" || !isVisibleWorkspaceAction(state, action) || !withinDateRange(action.completedAt, start, end)) continue;
+      if (query.activityGoalId && action.goalId !== query.activityGoalId) continue;
+      if (query.activityProjectId && projectId !== query.activityProjectId) continue;
+      items.push({ id: action.id, kind: activityKind, title: action.title, detail: action.detail, occurredAt: action.completedAt!, goalId: action.goalId, projectId });
+    }
+  } else if (activityKind === "knowledge") {
+    for (const knowledge of state.knowledge) {
+      const link = state.knowledgeLinks.find((candidate) => candidate.knowledgeItemId === knowledge.id);
+      const goalId = link?.goalId;
+      const goal = goalId ? state.goals.find((candidate) => candidate.id === goalId) : undefined;
+      const projectId = knowledge.projectId ?? goal?.areaId;
+      if (!isVisibleWorkspaceKnowledge(state, knowledge) || !withinDateRange(knowledge.createdAt, start, end)) continue;
+      if (query.activityGoalId && goalId !== query.activityGoalId) continue;
+      if (query.activityProjectId && projectId !== query.activityProjectId) continue;
+      items.push({ id: knowledge.id, kind: activityKind, title: knowledge.title, detail: knowledge.detail, occurredAt: knowledge.createdAt!, goalId, projectId });
+    }
+  } else {
+    for (const entry of state.progressEntries) {
+      const goal = state.goals.find((candidate) => candidate.id === entry.goalId);
+      if (!isVisibleWorkspaceProgress(state, entry) || !withinDateRange(entry.createdAt, start, end)) continue;
+      if (query.activityGoalId && entry.goalId !== query.activityGoalId) continue;
+      if (query.activityProjectId && goal?.areaId !== query.activityProjectId) continue;
+      items.push({ id: entry.id, kind: activityKind, title: goal?.title ?? "Aktualizacja postępu", detail: entry.content, occurredAt: entry.createdAt, goalId: entry.goalId, projectId: goal?.areaId });
+    }
+  }
+  return items;
+}
+
+export function pageLocalWeeklyActivity(state: AppState, query: WorkspacePageQuery) {
+  const items = localWeeklyActivityItems(state, query);
+  return { ...pageByCursor(items, query.pageSize, query.cursor, (item) => item.occurredAt), totalCount: items.length };
 }
 
 function openDatabase(factory: IDBFactory) {
@@ -221,6 +266,9 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
     },
     async loadPage(query: WorkspacePageQuery) {
       const state = await load() ?? structuredClone(emptyState);
+      if (query.collection === "weekly-activity") {
+        return pageLocalWeeklyActivity(state, query);
+      }
       let items = pageItems(state, query.collection, query.goalId, query.actionFilter);
       let totalCount: number | undefined;
       if (query.collection === "knowledge") {

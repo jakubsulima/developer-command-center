@@ -36,7 +36,7 @@ export type AppShellAddAction = {
   quickAdd?: AppShellQuickAddRequest;
 };
 
-export function AppShell({ children, aside, addAction, appearance }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail" }) {
+export function AppShell({ children, aside, addAction, appearance, loadingView = false }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail"; loadingView?: boolean }) {
   const { state, mode, loading, resetDemo, exportData, reload, syncState, dataFreshness } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
@@ -65,18 +65,30 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
-  const moreActive = ["/goals", "/knowledge", "/routines", "/review"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const moreActive = ["/goals", "/knowledge", "/routines", "/review", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
+    if (loadingView) return;
     beginPerformanceTiming("quick-add");
     setQuickAddRequest(request);
     setQuickAddOpen(true);
-  }, []);
+  }, [loadingView]);
   useEffect(() => {
-    const handleRequest = (event: Event) => openQuickAdd((event as CustomEvent<AppShellQuickAddRequest | undefined>).detail);
+    const handleRequest = (event: Event) => {
+      if (loadingView) return;
+      openQuickAdd((event as CustomEvent<AppShellQuickAddRequest | undefined>).detail);
+    };
     window.addEventListener("app-shell:quick-add", handleRequest);
     return () => window.removeEventListener("app-shell:quick-add", handleRequest);
-  }, [openQuickAdd]);
+  }, [loadingView, openQuickAdd]);
+  useEffect(() => {
+    if (!loadingView) return;
+    setQuickAddOpen(false);
+    setMobileSearchOpen(false);
+    setProfileCenterOpen(false);
+    setProfileMenuOpen(false);
+  }, [loadingView]);
   const triggerAdd = useCallback(() => {
+    if (loadingView) return;
     // Keyboard shortcuts must not open a second editor over an active dialog.
     if (document.querySelector('[aria-modal="true"]')) return;
     const contextualAction = addActionRef.current;
@@ -89,7 +101,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
       return;
     }
     openQuickAdd(contextualAction?.quickAdd);
-  }, [openQuickAdd]);
+  }, [loadingView, openQuickAdd]);
 
   const downloadExport = async () => {
     if (exportState === "loading") return;
@@ -113,6 +125,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
   };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (loadingView) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (document.querySelector('[aria-modal="true"]')) return;
@@ -126,7 +139,7 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [triggerAdd]);
+  }, [loadingView, triggerAdd]);
   useEffect(() => {
     if (!profileMenuOpen) return;
     const closeOutside = (event: PointerEvent) => {
@@ -167,16 +180,16 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
             {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
             {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
           </div> : null}
-          <button className="profile-row" type="button" aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
+          <button className="profile-row" type="button" disabled={loadingView} aria-disabled={loadingView || undefined} aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
         </div>
       </aside>
 
       <header className="topbar">
         <span className="mobile-brand" aria-hidden="true"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></span>
-        <div className="desktop-global-search"><GlobalSearch /></div>
-        <button className="icon-button mobile-search-trigger" aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
+        <div className="desktop-global-search"><GlobalSearch disabled={loadingView} /></div>
+        <button className="icon-button mobile-search-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
@@ -187,9 +200,9 @@ export function AppShell({ children, aside, addAction, appearance }: { children:
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab${addIsOpen ? " active" : ""}`} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
+        <button className={`capture-fab${addIsOpen ? " active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
         <NavLink to="/actions"><CheckSquare /><span>Działania</span></NavLink>
-      <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
+      <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>

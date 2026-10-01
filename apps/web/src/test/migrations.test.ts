@@ -51,11 +51,15 @@ describe("migracje Supabase", () => {
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918060424_add_action_testing_status.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260918114425_fix_action_status_activity_audit.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260922135433_expand_action_status_filters.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260923131024_weekly_plan_and_blocker_review.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260924175159_ai_openai_budget.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260925100000_ai_goal_review_settings_and_claims.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260926150321_project_presets_and_reading_library.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927054544_lock_knowledge_page_search_path.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927093322_knowledge_filtered_page.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927195000_weekly_review_snapshots.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927200000_weekly_activity_detail_pages.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20261001090000_undo_action_completion_checked.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
@@ -353,6 +357,54 @@ describe("migracje Supabase", () => {
     await database.exec("reset role");
   });
 
+  it("cofa ukończenie atomowo, odtwarza następny krok i ponawia bez ponownej zmiany", async () => {
+    const user = "d9200000-0000-0000-0000-000000000001";
+    const goal = "d9200000-0000-0000-0000-000000000010";
+    const action = "d9200000-0000-0000-0000-000000000011";
+    const completeCommand = "d9200000-0000-0000-0000-000000000012";
+    const undoCommand = "d9200000-0000-0000-0000-000000000013";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Undo completion"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Cel', 'Rezultat')", [goal, workspace]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title, is_next) values ($1, $2, $3, 'Następny krok', true)", [action, workspace, goal]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    await database.query("select public.set_action_status_checked($1, 1, 'completed', null, $2)", [action, completeCommand]);
+    await database.query("select public.undo_action_completion_checked($1, $2, 2, 'ready', null, null, true, $3)", [action, goal, undoCommand]);
+    await database.query("select public.undo_action_completion_checked($1, $2, 2, 'ready', null, null, true, $3)", [action, goal, undoCommand]);
+
+    await database.exec("reset role");
+    expect(await database.query("select status, version, is_next from public.actions where id = $1", [action])).toMatchObject({ rows: [{ status: "ready", version: 3, is_next: true }] });
+    expect(await scalar<number>("select count(*)::int from public.activity_events where correlation_id = $1", [undoCommand])).toBe(1);
+    await database.exec("reset role");
+  });
+
+  it("zachowuje nowo wybrany krok i odrzuca cofnięcie po późniejszej edycji", async () => {
+    const user = "d9300000-0000-0000-0000-000000000001";
+    const goal = "d9300000-0000-0000-0000-000000000010";
+    const actionA = "d9300000-0000-0000-0000-000000000011";
+    const actionB = "d9300000-0000-0000-0000-000000000012";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Keep next action"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Cel', 'Rezultat')", [goal, workspace]);
+    await database.query("insert into public.actions (id, workspace_id, goal_id, title, is_next) values ($1, $3, $2, 'Krok A', true), ($4, $3, $2, 'Krok B', false)", [actionA, goal, workspace, actionB]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    await database.query("select public.set_action_status_checked($1, 1, 'completed', null, $2)", [actionA, "d9300000-0000-0000-0000-000000000013"]);
+    await database.query("select public.set_next_action_checked($1, $2, $3)", [goal, actionB, "d9300000-0000-0000-0000-000000000014"]);
+    await database.query("select public.undo_action_completion_checked($1, $2, 2, 'ready', null, null, true, $3)", [actionA, goal, "d9300000-0000-0000-0000-000000000015"]);
+    expect(await scalar<string>("select id::text from public.actions where goal_id = $1 and is_next", [goal])).toBe(actionB);
+
+    await database.query("select public.set_action_status_checked($1, 3, 'completed', null, $2)", [actionA, "d9300000-0000-0000-0000-000000000016"]);
+    await database.query("select public.update_action_checked($1, 4, '{\"title\":\"Edytowane później\"}'::jsonb, $2)", [actionA, "d9300000-0000-0000-0000-000000000017"]);
+    await expect(database.query("select public.undo_action_completion_checked($1, $2, 4, 'ready', null, null, true, $3)", [actionA, goal, "d9300000-0000-0000-0000-000000000018"])).rejects.toThrow("action_version_conflict");
+    expect(await database.query("select title, status, is_next from public.actions where id = $1", [actionA])).toMatchObject({ rows: [{ title: "Edytowane później", status: "completed", is_next: false }] });
+    expect(await scalar<string>("select id::text from public.actions where goal_id = $1 and is_next", [goal])).toBe(actionB);
+    await database.exec("reset role");
+  });
+
   it("zapisuje status testowania przez zabezpieczoną granicę audytu", async () => {
     const user = "d9100000-0000-0000-0000-000000000001";
     const action = "d9100000-0000-0000-0000-000000000010";
@@ -475,6 +527,127 @@ describe("migracje Supabase", () => {
     expect(retriedEvidenceId).toBe(evidenceId);
     expect(await scalar<number>("select count(*)::int from public.learning_evidence where learning_goal_id = $1", [goalId])).toBe(1);
     expect(await scalar<number>("select count(*)::int from public.activity_events where workspace_id = $1", [workspace])).toBe(3);
+    await database.exec("reset role");
+  });
+
+  it("zapisuje wersjonowane snapshoty tygodnia i zachowuje idempotencję oraz historię", async () => {
+    const user = "d1100000-0000-0000-0000-000000000001";
+    const goalId = "d1000000-0000-0000-0000-000000000010";
+    const firstReviewId = "d1000000-0000-0000-0000-000000000011";
+    const secondReviewId = "d1000000-0000-0000-0000-000000000012";
+    const actionId = "d1000000-0000-0000-0000-000000000020";
+    const periodStart = "2026-09-28";
+    const periodEnd = "2026-10-05";
+    const nextWeekStart = "2026-10-05";
+    const nextWeekEnd = "2026-10-12";
+    const timezone = "Europe/Warsaw";
+    const selectedGoals = [goalId];
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Review snapshots"}']);
+    const workspaceId = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("update public.workspaces set timezone = $1 where id = $2", [timezone, workspaceId]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1, $2, 'Cel historyczny', 'Rezultat')", [goalId, workspaceId]);
+
+    const snapshot = (title: string, summary: string) => ({
+      version: 1,
+      period: { startDate: periodStart, endDateExclusive: periodEnd, timeZone: timezone },
+      metrics: { completedActions: 4, knowledgeAdded: 2, progressUpdates: 1 },
+      summary,
+      note: "Najpierw odblokowuję budżet.",
+      plan: {
+        startDate: nextWeekStart,
+        endDateExclusive: nextWeekEnd,
+        selectedGoals: [{ id: goalId, title }],
+        includeStandalone: false,
+        actions: [{ id: actionId, title: "Utrwalony krok", goalId, scheduledFor: "2026-10-06", status: "ready", version: 4 }]
+      }
+    });
+    const save = (reviewId: string, summary: string, data: ReturnType<typeof snapshot>) => database.query(
+      "select public.complete_weekly_review_v3($1,$2,$3,$4::jsonb,$5::uuid[],$6::date,$7::date,$8,$9::jsonb,$2)",
+      [workspaceId, reviewId, summary, JSON.stringify({ selectedGoalIds: selectedGoals }), selectedGoals, periodStart, periodEnd, timezone, JSON.stringify(data)]
+    );
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await save(firstReviewId, "Pierwsza decyzja", snapshot("Cel historyczny", "Pierwsze podsumowanie"));
+    await save(firstReviewId, "Tekst z ponowienia", snapshot("Nowsza nazwa", "Nie może nadpisać snapshotu"));
+    type SavedReview = { id: string; revision: number; summary: string; snapshot: { plan: { selectedGoals: { title: string }[] } } };
+    let first = await scalar<SavedReview>(
+      "select jsonb_build_object('id', id, 'revision', revision, 'summary', summary, 'snapshot', snapshot) from public.reviews where workspace_id = $1 and idempotency_key = $2",
+      [workspaceId, firstReviewId]
+    );
+    expect(first).toMatchObject({ id: firstReviewId, revision: 1, summary: "Pierwsza decyzja", snapshot: { plan: { selectedGoals: [{ title: "Cel historyczny" }] } } });
+
+    await database.exec("reset role");
+    await database.query("update public.goals set title = 'Cel po zmianie' where id = $1", [goalId]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await save(secondReviewId, "Druga decyzja", snapshot("Cel po zmianie", "Drugie podsumowanie"));
+    expect(await scalar<number>("select revision from public.reviews where id = $1", [secondReviewId])).toBe(2);
+    await database.exec("reset role");
+    await database.query("delete from public.goals where id = $1", [goalId]);
+    first = await scalar<SavedReview>("select jsonb_build_object('id', id, 'revision', revision, 'summary', summary, 'snapshot', snapshot) from public.reviews where id = $1", [firstReviewId]);
+    expect(first.snapshot.plan.selectedGoals[0]?.title).toBe("Cel historyczny");
+
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await save(firstReviewId, "Powtórzenie po usunięciu celu", snapshot("Cel niedostępny", "Nie może nadpisać historii"));
+    const page = await scalar<{ items: Array<{ id: string; periodStart: string; periodEndExclusive: string; workspaceTimezone: string; revision: number; snapshot: unknown }> }>(
+      "select public.get_reviews_page($1, 20, null, null)", [workspaceId]
+    );
+    expect(page.items).toHaveLength(2);
+    expect(page.items.find((item) => item.id === firstReviewId)).toMatchObject({
+      periodStart, periodEndExclusive: periodEnd, workspaceTimezone: timezone, revision: 1,
+      snapshot: { plan: { selectedGoals: [{ id: goalId, title: "Cel historyczny" }] } }
+    });
+    expect(await scalar<number>("select count(*)::int from public.reviews where workspace_id = $1 and period_start = $2", [workspaceId, periodStart])).toBe(2);
+    await database.exec("reset role");
+  });
+
+  it("stronicuje szczegóły metryk tygodnia według okresu, strefy i filtrów Cel/Projekt", async () => {
+    const user = "d1200000-0000-0000-0000-000000000001";
+    const goalId = "d1200000-0000-0000-0000-000000000010";
+    const outsideGoal = "d1200000-0000-0000-0000-000000000011";
+    const actionOne = "d1200000-0000-0000-0000-000000000020";
+    const actionTwo = "d1200000-0000-0000-0000-000000000021";
+    const actionOutside = "d1200000-0000-0000-0000-000000000022";
+    const knowledgeOne = "d1200000-0000-0000-0000-000000000030";
+    const knowledgeTwo = "d1200000-0000-0000-0000-000000000031";
+    const progressOne = "d1200000-0000-0000-0000-000000000040";
+    const progressTwo = "d1200000-0000-0000-0000-000000000041";
+    const periodStart = "2026-09-28";
+    const periodEnd = "2026-10-05";
+    const timezone = "Europe/Warsaw";
+    await database.query("insert into auth.users (id, raw_user_meta_data) values ($1, $2::jsonb)", [user, '{"workspace_name":"Weekly detail"}']);
+    const workspace = await scalar<string>("select workspace_id::text from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.goals (id, workspace_id, title, outcome) values ($1,$3,'Cel A','Rezultat A'),($2,$3,'Cel B','Rezultat B')", [goalId, outsideGoal, workspace]);
+    await database.query(`insert into public.actions (id, workspace_id, goal_id, title, status, completed_at) values
+      ($1,$4,$5,'Zadanie pierwsze','completed','2026-09-27T22:30:00Z'),
+      ($2,$4,$5,'Zadanie drugie','completed','2026-10-04T21:59:00Z'),
+      ($3,$4,$6,'Poza okresem','completed','2026-10-04T22:30:00Z')`, [actionOne, actionTwo, actionOutside, workspace, goalId, outsideGoal]);
+    await database.query("insert into public.entities (id,workspace_id,type,title) values ($1,$3,'note','Notatka A'),($2,$3,'note','Notatka B')", [knowledgeOne, knowledgeTwo, workspace]);
+    await database.query(`insert into public.knowledge_items (entity_id,workspace_id,detail,created_at) values
+      ($1,$3,'Treść A','2026-09-27T22:30:00Z'),($2,$3,'Treść B','2026-10-04T22:30:00Z')`, [knowledgeOne, knowledgeTwo, workspace]);
+    await database.query(`insert into public.progress_entries (id,workspace_id,goal_id,kind,content,created_at) values
+      ($1,$3,$4,'note','Postęp A','2026-09-27T22:30:00Z'),($2,$3,$4,'result','Postęp B','2026-10-04T21:59:00Z')`, [progressOne, progressTwo, workspace, goalId]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    const readPage = (kind: "actions" | "knowledge" | "progress", cursor?: { sortValue: string; id: string }, projectId: string | null = null, targetGoalId: string | null = null) => scalar<{
+      items: Array<{ id: string; title: string; occurredAt: string }>;
+      totalCount: number;
+      nextCursor: { sortValue: string; id: string } | null;
+    }>("select public.get_weekly_activity_page($1,$2,$3,$4,$5,1,$6,$7,$8,$9)", [workspace, kind, periodStart, periodEnd, timezone, cursor?.sortValue ?? null, cursor?.id ?? null, projectId, targetGoalId]);
+
+    const firstActions = await readPage("actions");
+    expect(firstActions.totalCount).toBe(2);
+    expect(firstActions.items).toHaveLength(1);
+    expect(firstActions.nextCursor).not.toBeNull();
+    const secondActions = await readPage("actions", firstActions.nextCursor!);
+    expect(secondActions.items[0]?.id).toBe(actionTwo);
+    expect(secondActions.totalCount).toBe(2);
+    expect((await readPage("actions", undefined, null, outsideGoal)).totalCount).toBe(0);
+    expect((await readPage("knowledge")).totalCount).toBe(1);
+    expect((await readPage("progress", undefined, null, goalId)).totalCount).toBe(2);
     await database.exec("reset role");
   });
 

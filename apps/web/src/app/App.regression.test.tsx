@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { demoState } from "../data/demo";
+import type { ReviewRecord, WeeklyReviewSnapshot } from "../domain/types";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
@@ -468,22 +469,87 @@ describe("regresje nowego modelu Celów", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
   });
 
-  it("pokazuje jedną sugestię systemową i zamknięcie tygodnia tylko w kontekście Tygodnia i Planu", async () => {
+  it("pokazuje kolejkę decyzji i zapis tygodnia tylko w kontekście Tygodnia i Planu", async () => {
     const user = userEvent.setup();
     renderApp("/review");
     expect(await screen.findByRole("heading", { name: "Podsumowanie tygodnia" })).toBeInTheDocument();
     expect(screen.getAllByText("Podsumowanie systemowe").length).toBeGreaterThan(0);
-    expect(screen.getByRole("region", { name: "Sugestia systemowa na ten tydzień" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Wymaga decyzji" })).toBeInTheDocument();
+    expect(screen.getByText(/Zobacz wszystkie sprawy/)).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Sugestie" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Zamknij tydzień" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Zapisz podsumowanie" })).toBeEnabled();
+    await user.click(screen.getByText("Podgląd zapisu"));
     expect(screen.getByText(/Treść analizy AI nie jest dopisywana do historii zamknięć/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "AI" }));
-    expect(screen.queryByRole("button", { name: "Zamknij tydzień" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Zapisz podsumowanie" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Historia" }));
     expect(screen.getByRole("heading", { name: "Historia tygodni" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Stan na teraz" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Zamknij tydzień" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Stan na teraz" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Zapisz podsumowanie" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Tydzień" }));
+    expect(screen.getByText("Stan przestrzeni na teraz")).toBeInTheDocument();
+  });
+
+  it("wybiera zapisany tydzień i jego konkretną rewizję z niezmienioną migawką", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const snapshot = (summary: string, note: string, metric: number, actionId: string): WeeklyReviewSnapshot => ({
+      version: 1,
+      period: { startDate: "2026-09-21", endDateExclusive: "2026-09-28", timeZone: "Europe/Warsaw" },
+      metrics: { completedActions: metric, knowledgeAdded: 0, progressUpdates: 0 },
+      summary,
+      note,
+      plan: { startDate: "2026-09-28", endDateExclusive: "2026-10-05", selectedGoals: [], includeStandalone: false, actions: [{ id: actionId, title: `Krok z rewizji ${metric}`, status: "ready", version: 1 }] }
+    });
+    const review = (id: string, revision: number, completedAt: string, summary: string, note: string, metric: number): ReviewRecord => ({
+      id, type: "weekly", templateVersion: 2, answers: {}, summary, completedAt,
+      periodStart: "2026-09-21", periodEndExclusive: "2026-09-28", workspaceTimezone: "Europe/Warsaw", revision,
+      snapshot: snapshot(summary, note, metric, `action-${revision}`)
+    });
+    state.reviews = [
+      review("review-1", 1, "2026-09-27T10:00:00.000Z", "Pierwsza rewizja", "Zachować pierwszy kierunek", 1),
+      review("review-2", 2, "2026-09-27T11:00:00.000Z", "Druga rewizja", "Zmienić kolejność kroków", 2)
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp("/review?tab=history");
+    await screen.findByRole("heading", { name: "Historia tygodni" });
+    expect(await screen.findByText("Druga rewizja")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Wybierz tydzień historii" })).toHaveValue("2026-09-21/2026-09-28/Europe/Warsaw");
+    expect(screen.getByRole("heading", { name: "Trendy tygodniowe" })).toBeInTheDocument();
+    const trendRange = screen.getByRole("combobox", { name: "Zakres trendów tygodniowych" });
+    await user.selectOptions(trendRange, "12");
+    expect(screen.getAllByRole("row")).toHaveLength(13);
+    await user.selectOptions(trendRange, "4");
+    const revision = screen.getByRole("combobox", { name: "Wybierz rewizję podsumowania" });
+    await user.selectOptions(revision, "review-1");
+    expect(screen.getByText("Pierwsza rewizja")).toBeInTheDocument();
+    expect(screen.getByText(/1 ukończonych Działań/)).toBeInTheDocument();
+    expect(screen.getByText("Zachować pierwszy kierunek")).toBeInTheDocument();
+    await user.click(screen.getByText("Zapisany Plan (1)"));
+    expect(screen.getByText(/Krok z rewizji 1/)).toBeInTheDocument();
+    const exportDisclosure = screen.getByText("Eksportuj tę rewizję do Markdown");
+    await user.click(exportDisclosure);
+    expect(screen.getByRole("checkbox", { name: "Dołącz zapisany Plan" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Dołącz prywatną decyzję" })).not.toBeChecked();
+    expect(screen.getByText(/Analiza AI nie jest częścią migawki/)).toBeInTheDocument();
+    await user.selectOptions(revision, "review-2");
+    expect(screen.getByText("Druga rewizja")).toBeInTheDocument();
+    expect(screen.getByText("Zmienić kolejność kroków")).toBeInTheDocument();
+    await user.click(screen.getByText("Zapisany Plan (1)"));
+    expect(screen.getByText(/Krok z rewizji 2 · bez terminu/)).toBeInTheDocument();
+  });
+
+  it("otwiera szczegóły metryki z tym samym tygodniowym licznikiem i pokazuje brak planu uczciwie", async () => {
+    const user = userEvent.setup();
+    renderApp("/review");
+    await screen.findByRole("heading", { name: "Podsumowanie tygodnia" });
+    expect(screen.getByText("Brak zapisanego Planu na ten tydzień — nie ma podstaw do porównania.")).toBeInTheDocument();
+    const completedMetric = screen.getByRole("group", { name: /ukończonych Działań/ });
+    const displayedCount = Number(completedMetric.getAttribute("aria-label")?.match(/^\d+/)?.[0] ?? 0);
+    await user.click(within(completedMetric).getByRole("button"));
+    expect(await screen.findByRole("region", { name: "Szczegóły: ukończone Działania" })).toBeInTheDocument();
+    expect((await screen.findByRole("region", { name: "Szczegóły: ukończone Działania" })).textContent).toContain(`Wyświetlono ${displayedCount} z ${displayedCount} wpisów`);
   });
 
   it("zachowuje notatkę i wybór Celów, gdy użytkownik przechodzi z Planu do zamknięcia", async () => {
@@ -497,10 +563,10 @@ describe("regresje nowego modelu Celów", () => {
     const note = screen.getByLabelText(/Najważniejsza decyzja/);
     await user.type(note, "Najpierw zamknę najważniejszy krok.");
     await user.click(screen.getByRole("tab", { name: "Plan" }));
-    await user.click(screen.getByText("Wybierz zakres planu"));
     await user.click(screen.getByRole("checkbox", { name: goal!.title }));
     await user.click(screen.getByRole("link", { name: "Przejdź do zamknięcia tygodnia" }));
     expect(screen.getByLabelText(/Najważniejsza decyzja/)).toHaveValue("Najpierw zamknę najważniejszy krok.");
+    await user.click(screen.getByText("Podgląd zapisu"));
     const preview = screen.getByRole("region", { name: "Co zapisze zamknięcie" });
     expect(preview).toHaveTextContent(goal!.title);
     expect(preview).toHaveTextContent("Najpierw zamknę najważniejszy krok.");
@@ -517,7 +583,6 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/review");
     await user.click(await screen.findByRole("tab", { name: "Plan" }));
     await screen.findByRole("heading", { name: "Rozłóż kroki na kolejny tydzień" });
-    await user.click(screen.getByText("Wybierz zakres planu"));
     await user.click(screen.getByRole("checkbox", { name: goal!.title }));
     const day = screen.getByRole("combobox", { name: `Dzień dla Działania: ${action!.title}` });
     const nextDate = within(day).getAllByRole("option").find((option) => option.getAttribute("value")?.startsWith("20"))?.getAttribute("value");
@@ -525,9 +590,30 @@ describe("regresje nowego modelu Celów", () => {
     await user.selectOptions(day, nextDate!);
     await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Zapisz terminy" })).not.toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "Zamknij tydzień" }));
+    await user.click(screen.getByRole("button", { name: "Zapisz podsumowanie" }));
     await user.click(screen.getByRole("tab", { name: "Historia" }));
     expect(await screen.findByText(`Kierunek: ${goal!.title}`)).toBeInTheDocument();
+  });
+
+  it("zachowuje przygotowaną zmianę terminu po usunięciu Celu z priorytetów", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const goal = state.goals.find((candidate) => candidate.status === "active" && candidate.visibility === "active" && state.actions.some((action) => action.goalId === candidate.id && action.status === "ready" && !action.scheduledFor));
+    const action = state.actions.find((candidate) => candidate.goalId === goal?.id && candidate.status === "ready" && !candidate.scheduledFor);
+    expect(goal).toBeDefined();
+    expect(action).toBeDefined();
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp("/review?tab=plan");
+    await screen.findByRole("heading", { name: "Rozłóż kroki na kolejny tydzień" });
+    const goalCheckbox = screen.getByRole("checkbox", { name: goal!.title });
+    await user.click(goalCheckbox);
+    const day = screen.getByRole("combobox", { name: `Dzień dla Działania: ${action!.title}` });
+    const nextDate = within(day).getAllByRole("option").find((option) => option.getAttribute("value")?.startsWith("20"))?.getAttribute("value");
+    expect(nextDate).toBeTruthy();
+    await user.selectOptions(day, nextDate!);
+    await user.click(screen.getByRole("checkbox", { name: goal!.title }));
+    expect(screen.getByText(new RegExp(action!.title))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zapisz terminy" })).toBeEnabled();
   });
 
   it("edytuje Działanie, zmienia stan Celu i wiąże materiał z Działaniem", async () => {

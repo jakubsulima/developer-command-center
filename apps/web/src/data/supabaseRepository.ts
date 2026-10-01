@@ -1,4 +1,4 @@
-import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectPreset, ProjectStatus, RecurringActionTemplate } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectPreset, ProjectStatus, RecurringActionTemplate, WeeklyReviewSnapshot } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
 import { migrateLegacyWorkspaceState } from "../domain/goals";
@@ -387,12 +387,34 @@ export async function decideAIProposalRemote(proposalId: string, status: AppStat
   dataOrThrow(await getSupabase().rpc("reject_ai_proposal", { target_proposal_id: proposalId, command_idempotency_key: crypto.randomUUID() }), "Odrzucenie AI Proposal");
 }
 
-export async function completeReviewRemote(workspaceId: string, summary: string, answers: Record<string, string | string[]> = {}, templateVersion = 1) {
+export async function completeReviewRemote(
+  workspaceId: string,
+  summary: string,
+  answers: Record<string, string | string[]> = {},
+  templateVersion = 1,
+  idempotencyKey?: string,
+  metadata?: { periodStart: string; periodEndExclusive: string; workspaceTimezone: string; snapshot: WeeklyReviewSnapshot }
+) {
+  if (templateVersion >= 3) {
+    if (!idempotencyKey || !metadata) throw new Error("weekly_review_contract_required");
+    return dataOrThrow(await getSupabase().rpc("complete_weekly_review_v3", {
+      target_workspace_id: workspaceId,
+      target_review_id: idempotencyKey,
+      review_summary: summary,
+      review_answers: answers,
+      selected_goal_ids: Array.isArray(answers.selectedGoalIds) ? answers.selectedGoalIds : [],
+      period_start: metadata.periodStart,
+      period_end_exclusive: metadata.periodEndExclusive,
+      review_timezone: metadata.workspaceTimezone,
+      review_snapshot: metadata.snapshot,
+      command_idempotency_key: idempotencyKey
+    }), "Zapis Review");
+  }
   if (templateVersion === 1) {
     dataOrThrow(await getSupabase().rpc("complete_weekly_review", {
       target_workspace_id: workspaceId,
       review_summary: summary,
-      command_idempotency_key: crypto.randomUUID()
+      command_idempotency_key: idempotencyKey ?? crypto.randomUUID()
     }), "Zapis Review");
     return;
   }
@@ -401,7 +423,7 @@ export async function completeReviewRemote(workspaceId: string, summary: string,
     review_summary: summary,
     review_answers: answers,
     selected_goal_ids: Array.isArray(answers.selectedGoalIds) ? answers.selectedGoalIds : [],
-    command_idempotency_key: crypto.randomUUID()
+    command_idempotency_key: idempotencyKey ?? crypto.randomUUID()
   }), "Zapis Review");
 }
 
@@ -483,6 +505,28 @@ export async function setActionStatusRemote(actionId: string, expectedVersion: n
     target_blocker: blocker?.trim() ?? null,
     command_idempotency_key: crypto.randomUUID()
   }), "Zmiana stanu Działania");
+}
+
+export async function undoActionCompletionRemote(input: {
+  actionId: string;
+  goalId?: string;
+  expectedVersion: number;
+  restoreStatus: ActionStatus;
+  restoreBlocker?: string;
+  restoreReviewOn?: string | null;
+  restoreIsNext: boolean;
+  commandId: string;
+}) {
+  dataOrThrow(await getSupabase().rpc("undo_action_completion_checked", {
+    target_action_id: input.actionId,
+    target_goal_id: input.goalId ?? null,
+    expected_version: input.expectedVersion,
+    restore_status: input.restoreStatus,
+    restore_blocker: input.restoreBlocker?.trim() ?? null,
+    restore_review_on: input.restoreReviewOn ?? null,
+    restore_is_next: input.restoreIsNext,
+    command_idempotency_key: input.commandId
+  }), "Cofnięcie ukończenia Działania");
 }
 
 export async function setNextActionRemote(goalId: string, actionId: string) {

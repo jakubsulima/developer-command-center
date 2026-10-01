@@ -33,6 +33,7 @@ describe("goal-centric workspace", () => {
     localStorage.setItem("command-center-state-v1", JSON.stringify(emptyState));
     const user = userEvent.setup();
     renderApp("/knowledge");
+    await screen.findByRole("heading", { name: "Wiedza" });
     const navigation = await screen.findByRole("navigation", { name: "Nawigacja mobilna" });
     await user.click(within(navigation).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog");
@@ -87,6 +88,7 @@ describe("goal-centric workspace", () => {
   it("tworzy stały Projekt jako osobny kontener", async () => {
     const user = userEvent.setup();
     renderApp("/projects");
+    await screen.findByRole("heading", { name: "Projekty" });
     await user.click(within(await screen.findByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Projekt" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy projekt" });
     await user.type(within(dialog).getByLabelText("Nazwa Projektu"), "Zdrowie");

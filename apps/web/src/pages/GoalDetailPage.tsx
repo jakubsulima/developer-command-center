@@ -4,7 +4,8 @@ import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, Fol
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell } from "../components/AppShell";
-import { ActionOverflowButton } from "../components/ActionPrimaryControls";
+import { ActionOverflowButton, ActionPrimaryControls } from "../components/ActionPrimaryControls";
+import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionSignals } from "../components/ActionSignals";
 import { ActionEditDialog, type ActionEditValue } from "../components/ActionEditDialog";
@@ -40,7 +41,7 @@ function ActionChecklist({ action, busy, onToggle }: { action: GoalAction; busy:
 }
 
 export function GoalDetailPage() {
-  const { state, createAction, updateAction, setActionStatus, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
+  const { state, createAction, updateAction, setActionStatus, undoActionCompletion, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
   const { notifyUndo } = useActionFeedback();
   const actionMutation = useKeyedMutation();
   const { goalId } = useParams();
@@ -122,6 +123,14 @@ export function GoalDetailPage() {
     await setActionStatus(action.id, status, blocker, action.version, reviewOn);
     notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
   });
+  const completeGoalAction = (action: GoalAction) => actionMutation.run(`goal-action-status:${action.id}`, () => completeActionWithUndo({
+    action,
+    setActionStatus,
+    undoActionCompletion,
+    notifyUndo,
+    hasResult: state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result"),
+    onAddResult: () => setResultActionId(action.id),
+  }));
   const openActionEditor = (action: typeof actions[number]) => setEditActionId(action.id);
   const saveActionEdit = (action: GoalAction, value: ActionEditValue, expectedVersion?: number) => actionMutation.run(`goal-action-edit:${action.id}`, () => updateAction(action.id, { title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion));
   const runDialog = async (operation: () => Promise<void>, close: () => void) => {
@@ -173,11 +182,12 @@ export function GoalDetailPage() {
 
   const renderAction = (action: typeof actions[number], featured = false) => featured ? <><div className={`goal-featured-action ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
     <div className="action-copy"><NavigationLink to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="compact" disabled={actionMutation.isBusy(`goal-action-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} /></div>
-    <div className="action-row-controls"><ActionOverflowButton action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => setActionMenuId(action.id)} /></div>
+    <div className="action-row-controls">{!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={actionMutation.isBusy(`goal-action-status:${action.id}`)} onToggleComplete={() => void completeGoalAction(action)} /> : null}<ActionOverflowButton action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => setActionMenuId(action.id)} /></div>
     <NavigationLink className="featured-action-open" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}>Otwórz Działanie<ChevronDown /></NavigationLink>
 
   </div></> : <div className={`goal-action ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
     <div className="action-copy"><div className="action-title-row"><NavigationLink to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="compact" disabled={actionMutation.isBusy(`goal-action-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} />{action.detail ? <small>{action.detail}</small> : null}{action.checklist.length ? <ActionChecklist action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onToggle={(entryId) => void actionMutation.run(`goal-action:${action.id}`, () => updateAction(action.id, { checklist: action.checklist.map((candidate) => candidate.id === entryId ? { ...candidate, completed: !candidate.completed } : candidate) }))} /> : null}{actionMutation.error(`goal-action:${action.id}`) || actionMutation.error(`goal-action-status:${action.id}`) ? <p className="inline-mutation-error" role="alert">{actionMutation.error(`goal-action:${action.id}`) ?? actionMutation.error(`goal-action-status:${action.id}`)} <button type="button" onClick={() => void (actionMutation.retry(`goal-action:${action.id}`) ?? actionMutation.retry(`goal-action-status:${action.id}`))?.()}>Spróbuj ponownie</button></p> : null}</div>
+    {!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={actionMutation.isBusy(`goal-action-status:${action.id}`)} onToggleComplete={() => void completeGoalAction(action)} /> : null}
     <div className="action-row-controls"><ActionOverflowButton action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => setActionMenuId(action.id)} /></div>
     <div className="action-menu">
       <Button variant="ghost" aria-label={`Edytuj: ${action.title}`} onClick={() => openActionEditor(action)}><Pencil /></Button>
@@ -204,7 +214,7 @@ export function GoalDetailPage() {
   };
 
   return <AppShell appearance="focus-detail" addAction={{ label: "Nowe Działanie", shortLabel: "Działanie", ariaLabel: `Dodaj Działanie do Celu ${goal.title}`, quickAdd: { mode: "action", goalId: goal.id, areaId: goal.areaId, pinnedToToday: false, draftKey: `goal-${goal.id}` } }}>
-    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
+    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} showBack /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
       <div className="goal-menu-context"><span>{goalKindLabels[goal.kind]}</span><strong>{project?.name ?? "Bez Projektu"}</strong><small>{priorityLabel} · {goal.targetDate ? `Termin ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${goal.targetDate}T12:00:00Z`))}` : "Bez daty docelowej"}</small></div>
       <label className="goal-menu-field" htmlFor="goal-status"><span>Stan Celu</span><select id="goal-status" value={goal.status} disabled={goalStatusSaving} aria-busy={goalStatusSaving} onChange={(event) => { const status = event.target.value as typeof goal.status; closeGoalMenu(event.currentTarget); if (status === "achieved" || status === "abandoned") { setGoalStatusError(""); setPendingGoalStatus(status); } else void changeGoalStatus(status); }}><option value="active">Aktywny</option><option value="paused">Wstrzymany</option><option value="achieved">Osiągnięty</option><option value="abandoned">Porzucony</option></select></label>
       <Button onClick={(event) => { closeGoalMenu(event.currentTarget); openGoalEditor(); }}><Pencil />Edytuj Cel</Button>

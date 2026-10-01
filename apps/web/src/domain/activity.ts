@@ -92,7 +92,7 @@ export function isVisibleWorkspaceKnowledge(state: AppState, item: KnowledgeItem
 export function selectWorkspaceActivity(state: AppState, now = new Date()): WorkspaceActivityCounts {
   const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
   return {
-    completedActions: state.actions.filter((action) => action.status === "completed" && isVisibleWorkspaceAction(state, action) && withinDateRange(action.completedAt ?? action.updatedAt, start, end)).length,
+    completedActions: state.actions.filter((action) => action.status === "completed" && isVisibleWorkspaceAction(state, action) && withinDateRange(action.completedAt, start, end)).length,
     progressUpdates: state.progressEntries.filter((entry: ProgressEntry) => isVisibleWorkspaceProgress(state, entry) && withinDateRange(entry.createdAt, start, end)).length,
     knowledgeAdded: state.knowledge.filter((item: KnowledgeItem) => isVisibleWorkspaceKnowledge(state, item) && withinDateRange(item.createdAt, start, end)).length,
     periodStart: startDate,

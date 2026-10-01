@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickAdd } from "./QuickAdd";
@@ -48,6 +48,9 @@ describe("Dodaj — formularze i kontekst", () => {
   it("komenda /cel dziedziczy Projekt i zachowuje opis", async () => {
     const user = userEvent.setup();
     render(<QuickAdd open request={{ mode: "action", goalId: "goal" }} onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Co chcesz zrobić?")).toBeVisible();
+    expect(screen.getByLabelText("Opis")).not.toBeVisible();
+    await user.click(screen.getByText("Dodaj opis").closest("summary")!);
     await user.type(screen.getByLabelText(/Opis/), "Opis rezultatu");
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "/cel Nowy wynik");
     expect(screen.getByLabelText(/Projekt opcjonalnie/)).toHaveValue("area:project");
@@ -79,6 +82,47 @@ describe("Dodaj — formularze i kontekst", () => {
       idempotencyKey: expect.any(String)
     }));
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("utrzymuje otwarte i aktywne pole opisu po usunięciu ostatniego znaku", async () => {
+    const user = userEvent.setup();
+    render(<QuickAdd open request={{ mode: "goal" }} onClose={vi.fn()} />);
+    const disclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
+    await user.click(within(disclosure).getByText("Dodaj opis"));
+    const detail = screen.getByLabelText("Rezultat");
+    await user.type(detail, "Opis do skasowania");
+    await user.clear(detail);
+
+    expect(disclosure.open).toBe(true);
+    expect(detail).toBeVisible();
+    expect(detail).toHaveFocus();
+    await user.type(detail, "Nowy opis");
+    expect(detail).toHaveValue("Nowy opis");
+    expect(detail).toHaveFocus();
+  });
+
+  it("otwiera odtworzony opis, pozwala go ręcznie zwinąć i zachowuje go po zmianie typu", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    const first = render(<QuickAdd open request={{ mode: "project", draftKey: "project-description" }} onClose={close} />);
+    const disclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
+    await user.click(within(disclosure).getByText("Dodaj opis"));
+    await user.type(screen.getByLabelText("Opis"), "Kontekst Projektu");
+    await user.click(screen.getByRole("button", { name: "Zamknij okno" }));
+    expect(close).toHaveBeenCalledOnce();
+    first.unmount();
+
+    render(<QuickAdd open request={{ mode: "project", draftKey: "project-description" }} onClose={vi.fn()} />);
+    const restoredDisclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
+    expect(screen.getByLabelText("Opis")).toBeVisible();
+    expect(screen.getByLabelText("Opis")).toHaveValue("Kontekst Projektu");
+    await user.click(within(restoredDisclosure).getByText("Dodaj opis"));
+    expect(screen.getByLabelText("Opis")).not.toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Zmień typ wpisu" }));
+    await user.click(screen.getByRole("button", { name: "Działanie" }));
+    expect(screen.getByLabelText("Co chcesz zrobić?")).toBeInTheDocument();
+    expect(screen.getByLabelText("Opis")).toHaveValue("Kontekst Projektu");
   });
 
   it("powrót przez Projekt zachowuje Cel, termin i niezależne przypięcie", async () => {

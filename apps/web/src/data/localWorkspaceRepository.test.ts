@@ -50,6 +50,35 @@ describe("lokalne repozytorium Workspace", () => {
     expect(third.nextCursor).toBeUndefined();
   });
 
+  it("stronicuje szczegóły tygodnia w strefie Workspace z dokładnym pełnym licznikiem", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    const state = structuredClone(emptyState);
+    state.workspaceTimezone = "Europe/Warsaw";
+    state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: "", updatedAt: "" }];
+    state.goals = [{ id: "goal", title: "Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project" }];
+    state.actions = [
+      { id: "action-1", version: 1, goalId: "goal", areaId: "project", title: "Krok 1", detail: "", status: "completed", position: 0, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-09-27T22:30:00.000Z" },
+      { id: "action-2", version: 1, goalId: "goal", areaId: "project", title: "Krok 2", detail: "", status: "completed", position: 1, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-10-04T21:59:00.000Z" },
+      { id: "action-outside", version: 1, goalId: "goal", areaId: "project", title: "Poza tygodniem", detail: "", status: "completed", position: 2, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-10-04T22:30:00.000Z" }
+    ];
+    state.knowledge = [{ id: "knowledge-1", type: "note", title: "Notatka", detail: "Treść", createdAt: "2026-09-27T22:30:00.000Z" }];
+    state.progressEntries = [
+      { id: "progress-1", goalId: "goal", kind: "note", content: "Wniosek 1", createdAt: "2026-09-27T22:30:00.000Z" },
+      { id: "progress-2", goalId: "goal", kind: "result", content: "Wniosek 2", createdAt: "2026-10-04T21:59:00.000Z" }
+    ];
+    await repository.save(state);
+    const common = { periodStart: "2026-09-28", periodEndExclusive: "2026-10-05", periodTimeZone: "Europe/Warsaw" };
+    const first = await repository.loadPage({ workspaceId: "demo", collection: "weekly-activity", pageSize: 1, activityKind: "actions", activityProjectId: "project", activityGoalId: "goal", ...common });
+    const second = await repository.loadPage({ workspaceId: "demo", collection: "weekly-activity", pageSize: 1, activityKind: "actions", activityProjectId: "project", activityGoalId: "goal", ...common, cursor: first.nextCursor });
+    const knowledge = await repository.loadPage({ workspaceId: "demo", collection: "weekly-activity", pageSize: 10, activityKind: "knowledge", ...common });
+    const progress = await repository.loadPage({ workspaceId: "demo", collection: "weekly-activity", pageSize: 10, activityKind: "progress", ...common });
+
+    expect(first.totalCount).toBe(2);
+    expect([first.items[0]?.id, second.items[0]?.id]).toEqual(["action-1", "action-2"]);
+    expect(knowledge.items.map((item) => item.id)).toEqual(["knowledge-1"]);
+    expect(progress.items.map((item) => item.id)).toEqual(["progress-1", "progress-2"]);
+  });
+
   it("filtruje książki po statusie i autorze przed paginacją", async () => {
     const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
     const state = structuredClone(emptyState);

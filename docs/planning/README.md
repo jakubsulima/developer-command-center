@@ -1,5 +1,21 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Poprawki po review mobilnego UI i UX z 30 września 2026
+
+[Plan poprawek po review zmian Luny](./2026-09-30-mobile-ui-ux-review-fixes-plan.md)
+obejmuje cofanie ukończenia i przywracanie następnego kroku, bezpieczny ekran
+ładowania, stabilną edycję opisu w Quick Add oraz kompletne oznaczenie filtrów.
+Zawiera kolejność prac, mapę kodu, testy regresji i kryteria odbioru.
+Status: zaplanowane, bez wdrożenia poprawek.
+
+## Mobilne UI i UX — plan z 30 września 2026
+
+[Plan poprawy mobilnego UI i UX](./2026-09-30-mobile-ui-ux-plan.md)
+obejmuje cały produkt, ze szczególnym naciskiem na prostotę codziennych czynności.
+Zawiera obserwacje lokalnego demo, priorytety, kierunek wyglądu, specyfikację
+animacji, sześć etapów wdrożenia i kryteria odbioru. Uwzględnia istniejące lokalne
+zmiany oraz wcześniejsze plany. Status: propozycja; bez zmian implementacji.
+
 ## Wiedza i krótkie notatki — plan z 27 września 2026
 
 [Plan wykonawczy Wiedzy i krótkich notatek](./2026-09-27-knowledge-short-notes-implementation.md)

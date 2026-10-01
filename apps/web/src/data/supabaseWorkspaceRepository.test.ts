@@ -38,6 +38,33 @@ describe("adapter listy Działań Supabase", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "get_action_item", { target_action_id: "action-1" });
   });
 
+  it("przekazuje jawny okres, strefę i filtry do stronicowanych szczegółów tygodnia", async () => {
+    const rpc = vi.fn(async () => ({ data: { items: [{ id: "entry-1", kind: "actions", title: "Krok", detail: "", occurredAt: "2026-09-30T12:00:00Z" }], totalCount: 3, nextCursor: null }, error: null }));
+    getClient.mockReturnValue({ rpc });
+    const page = await createSupabaseWorkspaceRepository().loadPage({
+      workspaceId: "10000000-0000-4000-8000-000000000001",
+      collection: "weekly-activity",
+      pageSize: 25,
+      activityKind: "actions",
+      periodStart: "2026-09-28",
+      periodEndExclusive: "2026-10-05",
+      periodTimeZone: "Europe/Warsaw",
+      activityProjectId: "10000000-0000-4000-8000-000000000010",
+      activityGoalId: "10000000-0000-4000-8000-000000000011"
+    });
+
+    expect(page).toMatchObject({ totalCount: 3, items: [{ id: "entry-1", title: "Krok" }] });
+    expect(rpc).toHaveBeenCalledWith("get_weekly_activity_page", expect.objectContaining({
+      target_activity_kind: "actions",
+      period_start: "2026-09-28",
+      period_end_exclusive: "2026-10-05",
+      period_timezone: "Europe/Warsaw",
+      target_project_id: "10000000-0000-4000-8000-000000000010",
+      target_goal_id: "10000000-0000-4000-8000-000000000011",
+      page_size: 25
+    }));
+  });
+
   it("nie wysyła uszkodzonych identyfikatorów filtrów do Supabase", async () => {
     const rpc = vi.fn();
     getClient.mockReturnValue({ rpc });

@@ -26,4 +26,12 @@ describe("weekly plan", () => {
     expect(selectedReviewGoalIds({ selectedGoalIds: ["a", "b"] })).toEqual(["a", "b"]);
     expect(selectedReviewGoalIds({ selectedGoalIds: "invalid" })).toEqual([]);
   });
+
+  it("keeps every already scheduled action visible even when its Goal is not a selected priority", () => {
+    const state = structuredClone(emptyState);
+    state.goals = [{ id: "goal-1", title: "Cel poza priorytetami", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active" }];
+    state.actions = [{ id: "scheduled", version: 1, title: "Zaplanowane", detail: "", goalId: "goal-1", status: "ready", position: 0, isNext: false, pinnedToToday: false, scheduledFor: "2026-08-11", checklist: [] }];
+    expect(weeklyPlanActions(state, [], false, ["2026-08-10", "2026-08-11", "2026-08-12"])).toEqual(state.actions);
+    expect(weeklyPlanActions(state, [], false, ["2026-08-03", "2026-08-09"])).toEqual([]);
+  });
 });

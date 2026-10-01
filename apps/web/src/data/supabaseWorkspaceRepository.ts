@@ -114,7 +114,8 @@ const pageRpc: Record<WorkspacePageQuery["collection"], string> = {
   "goal-progress": "get_goal_progress_page",
   "completed-actions": "get_completed_actions_page",
   actions: "get_actions_page",
-  reviews: "get_reviews_page"
+  reviews: "get_reviews_page",
+  "weekly-activity": "get_weekly_activity_page"
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -181,6 +182,14 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
           target_project_id: query.actionFilter?.projectId ?? null,
           target_goal_id: query.actionFilter?.goalId ?? null,
           target_today: query.actionFilter?.today ?? null
+        } : {}),
+        ...(query.collection === "weekly-activity" ? {
+          target_activity_kind: query.activityKind,
+          period_start: query.periodStart,
+          period_end_exclusive: query.periodEndExclusive,
+          period_timezone: query.periodTimeZone,
+          target_project_id: query.activityProjectId ?? null,
+          target_goal_id: query.activityGoalId ?? null
         } : {}),
         ...(query.collection === "knowledge" && (query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim() || query.projectId || query.knowledgeGoalId || query.knowledgeVisibility) ? {
           target_resource_format: query.resourceFormat ?? null,

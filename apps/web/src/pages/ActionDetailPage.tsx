@@ -11,6 +11,7 @@ import { actionStatusLabels } from "../domain/labels";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { resolveActionContext } from "../domain/actionContext";
 import { ActionResultDialog } from "../components/ActionResultDialog";
+import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, readNavigationState, type NavigationBreadcrumb } from "../domain/navigation";
@@ -24,7 +25,7 @@ import { resolveRoutineTitle } from "../domain/actionPresentation";
 export function ActionDetailPage() {
   const { actionId } = useParams();
   const location = useLocation();
-  const { state, mode, loading, updateAction, setActionStatus } = useStore();
+  const { state, mode, loading, updateAction, setActionStatus, undoActionCompletion } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [resultOpen, setResultOpen] = useState(false);
@@ -46,10 +47,15 @@ export function ActionDetailPage() {
     });
   };
   const complete = async () => {
-    const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     await mutation.run(`action-detail:${action.id}`, async () => {
-      await setActionStatus(action.id, "completed");
-      if (!state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result")) notifyUndo({ message: "Działanie ukończone.", undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: { label: "Dodaj rezultat", onClick: () => setResultOpen(true) } });
+      await completeActionWithUndo({
+        action,
+        setActionStatus,
+        undoActionCompletion,
+        notifyUndo,
+        hasResult: state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result"),
+        onAddResult: () => setResultOpen(true),
+      });
     });
   };
   const key = `action-detail:${action.id}`;
@@ -79,7 +85,7 @@ export function ActionDetailPage() {
   const parentLabel = context.kind === "goal" ? "Cel" : context.kind === "project" ? "Projekt" : undefined;
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
-    <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} />
+    <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} showBack />
     <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div>
       {parentLabel && context.name ? <NavigationLink className="action-parent-link" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><span className="action-parent-icon">{parentIcon}</span><span>{parentLabel}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
       <div className="action-status-row"><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="detail" disabled={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusView("statuses")} /></div>

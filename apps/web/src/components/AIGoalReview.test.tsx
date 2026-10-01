@@ -57,12 +57,32 @@ describe("AIGoalReview", () => {
     await user.click(await screen.findByRole("tab", { name: "AI" }));
     await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje Cele" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
-    const add = await screen.findAllByRole("button", { name: "Dodaj Działanie" });
+    const add = await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" });
     await user.click(add[0]!);
-    const dialog = screen.getByRole("dialog", { name: "Sprawdź propozycję Działania" });
+    const dialog = screen.getByRole("dialog", { name: "Zatwierdź krok AI w Planie" });
     expect(within(dialog).getByText(/zapis nastąpi dopiero/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Dzień w Planie" })).toHaveValue("");
     await user.click(within(dialog).getByRole("button", { name: "Anuluj" }));
-    expect(screen.queryByRole("dialog", { name: "Sprawdź propozycję Działania" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Zatwierdź krok AI w Planie" })).not.toBeInTheDocument();
+  });
+
+  it("dodaje zalecenie AI do Planu wyłącznie po akceptacji i zapisuje wybrany dzień", async () => {
+    const user = userEvent.setup();
+    renderReview();
+    await user.click(await screen.findByRole("tab", { name: "AI" }));
+    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje Cele" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" }))[0]!);
+    const dialog = screen.getByRole("dialog", { name: "Zatwierdź krok AI w Planie" });
+    const title = (within(dialog).getByLabelText("Nazwa") as HTMLInputElement).value;
+    const day = within(dialog).getByRole("combobox", { name: "Dzień w Planie" });
+    const nextWeekDate = within(day).getAllByRole("option").find((option) => option.getAttribute("value")?.startsWith("20"))?.getAttribute("value");
+    expect(nextWeekDate).toBeTruthy();
+    await user.selectOptions(day, nextWeekDate!);
+    await user.click(within(dialog).getByRole("button", { name: "Zatwierdź i dodaj do Planu" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Działanie dodane do Planu.");
+    await user.click(screen.getByRole("tab", { name: "Plan" }));
+    expect(await screen.findByRole("link", { name: title })).toBeInTheDocument();
   });
 
   it("uruchamia analizę na Starcie dopiero po zgodzie i pokazuje jeden następny krok", async () => {

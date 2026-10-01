@@ -32,7 +32,7 @@ export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturn
 
   const goBack = () => navigate(returnTo, navigation ? { state: { navigationRestore: { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY }, breadcrumbs: navigation.breadcrumbs } } : undefined);
 
-  return <nav className="context-navigation" aria-label="Ścieżka kontekstu">
+  return <nav className={`context-navigation${showBack ? " context-navigation-with-back" : ""}`} aria-label="Ścieżka kontekstu">
     {showBack ? <button className="back-link context-navigation-back" type="button" onClick={goBack} aria-label={returnLabel}><ArrowLeft /><span>{returnLabel}</span></button> : null}
     <ol className="context-breadcrumbs">
       {visible.map((breadcrumb, index) => {

@@ -61,6 +61,19 @@ describe("usePersistentDraft", () => {
     expect(failed.result.current.status).toBe("saved");
   });
 
+  it("przenosi dawną notatkę z klucza bez tygodnia do szkicu konkretnego tygodnia", async () => {
+    const oldKey = draftStorageKey("user-a", "workspace-a", "weekly-review-note");
+    const weekKey = draftStorageKey("user-a", "workspace-a", "weekly-review-note", "2026-09-28");
+    localStorage.setItem(oldKey, JSON.stringify({ version: 2, savedAt: "2026-09-27T10:00:00.000Z", value: { note: "Decyzja przeniesiona" } }));
+    const migrated = renderHook(() => usePersistentDraft("weekly-review-note", { note: "" }, 0, { targetId: "2026-09-28", migrateFrom: { kind: "weekly-review-note" } }), { wrapper: wrapperFor("workspace-a") });
+    expect(migrated.result.current.value).toEqual({ note: "Decyzja przeniesiona" });
+    expect(migrated.result.current.restored).toBe(true);
+    act(() => migrated.result.current.setValue({ note: "Zapis tygodnia" }));
+    await waitFor(() => expect(migrated.result.current.status).toBe("saved"));
+    expect(localStorage.getItem(oldKey)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(weekKey) ?? "null").value).toEqual({ note: "Zapis tygodnia" });
+  });
+
   it("nie podmienia wpisanego tekstu, gdy rekord dociera później", () => {
     const hook = renderHook(({ text }) => usePersistentDraft("late-record", { text }, 60_000, { targetId: "goal-1" }), {
       initialProps: { text: "" },

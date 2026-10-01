@@ -10,5 +10,5 @@ export function Sheet({ open, title, onOpenChange, children, className = "" }: {
   children: ReactNode;
   className?: string;
 }) {
-  return <Modal open={open} title={title} onClose={() => onOpenChange(false)} className={`${mobileSheetVariants({ side: "bottom" })} sheet-content ${className}`} backdropClassName="sheet-backdrop">{children}</Modal>;
+  return <Modal open={open} title={title} exitDurationMs={180} onClose={() => onOpenChange(false)} className={`${mobileSheetVariants({ side: "bottom" })} sheet-content ${className}`} backdropClassName="sheet-backdrop">{children}</Modal>;
 }

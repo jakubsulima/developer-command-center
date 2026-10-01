@@ -93,7 +93,19 @@ export interface Page<T> {
   totalCount?: number;
 }
 
-export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "actions" | "reviews";
+export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "actions" | "reviews" | "weekly-activity";
+
+export type WeeklyActivityKind = "actions" | "knowledge" | "progress";
+
+export interface WeeklyActivityDetail {
+  id: string;
+  kind: WeeklyActivityKind;
+  title: string;
+  detail: string;
+  occurredAt: string;
+  goalId?: string;
+  projectId?: string;
+}
 
 export interface WorkspacePageQuery {
   workspaceId: string;
@@ -108,11 +120,17 @@ export interface WorkspacePageQuery {
   projectId?: string;
   knowledgeGoalId?: string;
   knowledgeVisibility?: KnowledgeVisibilityFilter;
+  activityKind?: WeeklyActivityKind;
+  periodStart?: string;
+  periodEndExclusive?: string;
+  periodTimeZone?: string;
+  activityProjectId?: string;
+  activityGoalId?: string;
   cursor?: PageCursor;
 }
 
 export type GoalProgressPageItem = AppState["progressEntries"][number];
-export type WorkspacePageItem = InboxItem | KnowledgeItem | GoalProgressPageItem | GoalAction | ReviewRecord;
+export type WorkspacePageItem = InboxItem | KnowledgeItem | GoalProgressPageItem | GoalAction | ReviewRecord | WeeklyActivityDetail;
 
 export interface WorkspaceCore {
   workspaceId?: string;

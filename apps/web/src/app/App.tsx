@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
-import { AppLoading } from "../auth/AuthRoot";
+import { AppRouteLoading } from "../components/AppRouteLoading";
 import { StartPage } from "../pages/StartPage";
 import { ActionFeedbackProvider } from "../components/ActionFeedback";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -64,7 +64,7 @@ export function App() {
   return (
     <ActionFeedbackProvider>
       <ScrollToTop />
-      <Suspense fallback={<AppLoading label="Ładowanie widoku…" />}><Routes>
+      <Suspense fallback={<AppRouteLoading />}><Routes>
         <Route path="/" element={<StartPage />} />
         <Route path="/routines" element={<RoutinesPage />} />
         <Route path="/focus" element={<Navigate to="/" replace />} />

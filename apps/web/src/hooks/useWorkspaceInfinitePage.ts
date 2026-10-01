@@ -1,9 +1,9 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useStore } from "../app/useStore";
-import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
+import { createLocalWorkspaceRepository, pageLocalWeeklyActivity } from "../data/localWorkspaceRepository";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
-import { pageByCursor, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem } from "../data/workspaceRepository";
+import { pageByCursor, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem, type WeeklyActivityKind } from "../data/workspaceRepository";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import type { AppState, KnowledgeKind } from "../domain/types";
 import type { ReadingStatus } from "../domain/types";
@@ -15,13 +15,15 @@ const defaultPageSize: Record<WorkspacePageCollection, number> = {
   knowledge: 50,
   "goal-progress": 25,
   "completed-actions": 50,
+  "weekly-activity": 25,
   actions: 30,
   reviews: 20
 };
 
-export interface WorkspacePageOptions { goalId?: string; actionFilter?: ActionListFilter; resourceFormat?: "book"; readingStatus?: ReadingStatus; knowledgeKind?: KnowledgeKind; searchText?: string; projectId?: string; knowledgeGoalId?: string; knowledgeVisibility?: KnowledgeVisibilityFilter }
+export interface WorkspacePageOptions { goalId?: string; actionFilter?: ActionListFilter; resourceFormat?: "book"; readingStatus?: ReadingStatus; knowledgeKind?: KnowledgeKind; searchText?: string; projectId?: string; knowledgeGoalId?: string; knowledgeVisibility?: KnowledgeVisibilityFilter; activityKind?: WeeklyActivityKind; periodStart?: string; periodEndExclusive?: string; periodTimeZone?: string; activityProjectId?: string; activityGoalId?: string }
 
 const localKnowledgeRevisions = new WeakMap<AppState, string>();
+const localWeeklyActivityRevisions = new WeakMap<AppState, string>();
 
 function localKnowledgeRevision(state: AppState) {
   const cached = localKnowledgeRevisions.get(state);
@@ -38,24 +40,44 @@ function localKnowledgeRevision(state: AppState) {
   return revision;
 }
 
+function localWeeklyActivityRevision(state: AppState) {
+  const cached = localWeeklyActivityRevisions.get(state);
+  if (cached) return cached;
+  const revision = JSON.stringify([
+    state.actions.map((item) => [item.id, item.status, item.completedAt, item.scheduledFor, item.goalId, item.areaId]),
+    state.progressEntries.map((item) => [item.id, item.createdAt, item.goalId, item.content]),
+    state.knowledge.map((item) => [item.id, item.createdAt, item.archivedAt, item.trashedAt]),
+    state.areas.map((item) => [item.id, item.visibility]),
+    state.goals.map((item) => [item.id, item.visibility, item.areaId]),
+    state.knowledgeLinks
+  ]);
+  localWeeklyActivityRevisions.set(state, revision);
+  return revision;
+}
+
 export function workspacePageQueryKey(collection: WorkspacePageCollection, mode: string, workspaceId: string | undefined, options: WorkspacePageOptions = {}) {
-  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today, options.resourceFormat, options.readingStatus, options.knowledgeKind, options.searchText, options.projectId, options.knowledgeGoalId, options.knowledgeVisibility] as const;
+  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today, options.resourceFormat, options.readingStatus, options.knowledgeKind, options.searchText, options.projectId, options.knowledgeGoalId, options.knowledgeVisibility, options.activityKind, options.periodStart, options.periodEndExclusive, options.periodTimeZone, options.activityProjectId, options.activityGoalId] as const;
 }
 
 export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection: WorkspacePageCollection, pageSize = defaultPageSize[collection], options: WorkspacePageOptions = {}) {
   const { mode, state, loading } = useStore();
   const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
-  const localRevision = collection === "knowledge" && mode === "demo" ? localKnowledgeRevision(state) : undefined;
+  const localRevision = mode !== "demo" ? undefined : collection === "knowledge"
+    ? localKnowledgeRevision(state)
+    : collection === "weekly-activity" ? localWeeklyActivityRevision(state) : undefined;
   return useInfiniteQuery({
     queryKey: localRevision === undefined
       ? workspacePageQueryKey(collection, mode, state.workspaceId, options)
       : [...workspacePageQueryKey(collection, mode, state.workspaceId, options), localRevision],
-    enabled: !loading,
+    enabled: !loading && (collection !== "weekly-activity" || Boolean(options.activityKind && options.periodStart && options.periodEndExclusive && options.periodTimeZone)),
     initialPageParam: undefined as PageCursor | undefined,
     queryFn: async ({ pageParam }) => {
       if (mode === "demo" && collection === "actions" && options.actionFilter) {
         const actions = state.actions.filter((action) => matchesActionListFilter(state, action, options.actionFilter!));
         return pageByCursor(actions, pageSize, pageParam, (action) => actionListSortValue(action, options.actionFilter!.view), actionListSortDirection(options.actionFilter.view));
+      }
+      if (mode === "demo" && collection === "weekly-activity") {
+        return pageLocalWeeklyActivity(state, { workspaceId: state.workspaceId ?? "demo", collection, pageSize, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
       }
       if (mode === "demo" && collection === "knowledge") {
         const filter = createKnowledgeFilter(state, {
@@ -74,7 +96,7 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
         };
       }
       const repository = mode === "demo" ? localRepository : createSupabaseWorkspaceRepository();
-      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, cursor: pageParam });
+      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     select: (data) => ({
@@ -96,5 +118,6 @@ export function pageItemsFromState(collection: WorkspacePageCollection, state: A
   if (collection === "knowledge") return state.knowledge;
   if (collection === "goal-progress") return state.progressEntries;
   if (collection === "completed-actions") return state.actions.filter((action) => action.status === "completed");
+  if (collection === "weekly-activity") return [];
   return state.reviews;
 }

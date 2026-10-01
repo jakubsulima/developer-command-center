@@ -49,6 +49,25 @@ describe("automatyczne podsumowanie tygodnia", () => {
     expect(deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z")).suggestions[0]).toMatchObject({ id: "blocked", to: "/actions?view=blocked&highlight=blocked" });
   });
 
+  it("udostępnia wszystkie kategorie i wszystkie Cele bez następnego kroku", () => {
+    const state: AppState = {
+      ...emptyState,
+      workspaceTimezone: "Europe/Warsaw",
+      goals: Array.from({ length: 4 }, (_, index) => ({ id: `g-${index}`, title: `Cel ${index}`, outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const })),
+      actions: [
+        { id: "blocked", version: 1, title: "Blokada", detail: "", status: "blocked", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
+        { id: "overdue", version: 1, title: "Zaległe", detail: "", status: "ready", position: 1, isNext: false, pinnedToToday: false, checklist: [], scheduledFor: "2026-08-01" }
+      ],
+      inbox: [{ id: "i-1", kind: "text", content: "Do przejrzenia", createdAt: "2026-08-07T10:00:00.000Z", status: "unprocessed" }]
+    };
+
+    const result = deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z"));
+    expect(result.suggestions.map((suggestion) => suggestion.id)).toEqual(["blocked", "next-actions", "overdue", "inbox"]);
+    expect(result.suggestions.find((suggestion) => suggestion.id === "next-actions")?.items).toHaveLength(4);
+    expect(result.generatedSummary).toContain("sygnałów w 4 kategoriach");
+    expect(result.generatedSummary).toContain("tego samego Działania");
+  });
+
   it("odrzuca aktywność i blokady należące do archiwalnych rodziców", () => {
     const state: AppState = {
       ...emptyState,

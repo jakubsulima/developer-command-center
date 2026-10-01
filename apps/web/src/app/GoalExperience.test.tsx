@@ -13,6 +13,17 @@ function renderApp(path: string) {
 }
 
 describe("goal-centric experience", () => {
+  it("completes the featured Action in one touch and can undo it", async () => {
+    const user = userEvent.setup();
+    renderApp("/goals/fintrack-api");
+    const complete = await screen.findByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" });
+
+    await user.click(complete);
+    expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
+  });
+
   it("completes a Goal Action without Focus", async () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");

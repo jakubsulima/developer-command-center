@@ -21,6 +21,7 @@ interface DraftRead<T> {
 
 export interface PersistentDraftOptions<T> {
   targetId?: string;
+  migrateFrom?: { kind: string; targetId?: string };
   baseVersion?: DraftBaseVersion;
   enabled?: boolean;
   validate?: (value: unknown) => value is T;
@@ -48,11 +49,17 @@ function defaultValidate(value: unknown): value is object | string {
   return value !== null && (typeof value === "object" || typeof value === "string");
 }
 
-function readDraft<T>(key: string | undefined, legacyKey: string | undefined, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined): DraftRead<T> {
+function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | undefined>, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined): DraftRead<T> {
   if (!key || typeof localStorage === "undefined") return { value: initialValue, restored: false };
   try {
     let raw = localStorage.getItem(key);
-    if (!raw && legacyKey) raw = localStorage.getItem(legacyKey);
+    if (!raw) {
+      for (const fallbackKey of fallbackKeys) {
+        if (!fallbackKey) continue;
+        raw = localStorage.getItem(fallbackKey);
+        if (raw) break;
+      }
+    }
     if (!raw) return { value: initialValue, restored: false };
     const parsed = JSON.parse(raw) as Partial<DraftEnvelope<T>>;
     if (parsed.version !== 1 && parsed.version !== 2) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
@@ -73,11 +80,15 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   const targetId = options.targetId;
   const key = useMemo(() => ready && userId && workspaceId ? draftStorageKey(userId, workspaceId, kind, targetId) : undefined, [kind, ready, targetId, userId, workspaceId]);
   const legacyKey = useMemo(() => ready && userId && workspaceId ? legacyDraftStorageKey(userId, workspaceId, kind) : undefined, [kind, ready, userId, workspaceId]);
+  const migrationKey = useMemo(() => ready && userId && workspaceId && options.migrateFrom
+    ? draftStorageKey(userId, workspaceId, options.migrateFrom.kind, options.migrateFrom.targetId)
+    : undefined, [options.migrateFrom, ready, userId, workspaceId]);
+  const fallbackKeys = useMemo(() => [migrationKey, legacyKey], [legacyKey, migrationKey]);
   const validate = options.validate ?? defaultValidate as (value: unknown) => value is T;
   // The initial value is intentionally read only when the scoped key changes;
   // the following effect handles late server hydration without resetting edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const loaded = useMemo(() => readDraft(key, legacyKey, initialValue, validate, options.migrate), [key, legacyKey, options.migrate, validate]);
+  const loaded = useMemo(() => readDraft(key, fallbackKeys, initialValue, validate, options.migrate), [fallbackKeys, key, options.migrate, validate]);
   const [value, setValueState] = useState<T>(loaded.value);
   const [status, setStatus] = useState<DraftSaveStatus>(loaded.error ? "error" : loaded.restored ? "saved" : "idle");
   const [dirty, setDirty] = useState(loaded.restored);
@@ -98,6 +109,8 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
     initializedKeyRef.current = key;
     initialValueRef.current = initialValue;
     baseVersionRef.current = loaded.baseVersion ?? options.baseVersion;
+    valueRef.current = loaded.value;
+    dirtyRef.current = loaded.restored;
     setValueState(loaded.value);
     setStatus(loaded.error ? "error" : loaded.restored ? "saved" : "idle");
     setDirty(loaded.restored);
@@ -126,7 +139,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       try {
         const envelope: DraftEnvelope<T> = { version: 2, savedAt: new Date().toISOString(), value: valueRef.current, baseVersion: baseVersionRef.current };
         localStorage.setItem(key, JSON.stringify(envelope));
-        if (legacyKey) localStorage.removeItem(legacyKey);
+        for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
         setErrorMessage(undefined);
         setStatus("saved");
       } catch (caught) {
@@ -135,14 +148,14 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       }
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [delay, dirty, key, legacyKey, ready, status, value]);
+  }, [delay, dirty, fallbackKeys, key, ready, status, value]);
 
   const persistNow = useCallback(() => {
     if (!ready || !key || !dirtyRef.current) return true;
     try {
       const envelope: DraftEnvelope<T> = { version: 2, savedAt: new Date().toISOString(), value: valueRef.current, baseVersion: baseVersionRef.current };
       localStorage.setItem(key, JSON.stringify(envelope));
-      if (legacyKey) localStorage.removeItem(legacyKey);
+      for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
       setErrorMessage(undefined);
       setStatus("saved");
       return true;
@@ -151,7 +164,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       setStatus("error");
       return false;
     }
-  }, [key, legacyKey, ready]);
+  }, [fallbackKeys, key, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -171,11 +184,9 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   }, [persistNow, ready]);
 
   const setValue = (next: SetStateAction<T>) => {
-    setValueState((current) => {
-      const resolved = typeof next === "function" ? (next as (value: T) => T)(current) : next;
-      valueRef.current = resolved;
-      return resolved;
-    });
+    const resolved = typeof next === "function" ? (next as (value: T) => T)(valueRef.current) : next;
+    valueRef.current = resolved;
+    setValueState(resolved);
     setDirty(true);
     dirtyRef.current = true;
     setRestored(false);
@@ -186,7 +197,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   const clear = useCallback((nextValue?: T) => {
     try {
       if (key) localStorage.removeItem(key);
-      if (legacyKey) localStorage.removeItem(legacyKey);
+      for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
       const resetValue = nextValue ?? initialValueRef.current;
       if (nextValue !== undefined) initialValueRef.current = nextValue;
       setValueState(resetValue);
@@ -202,7 +213,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       setStatus("error");
       return false;
     }
-  }, [key, legacyKey]);
+  }, [fallbackKeys, key]);
 
   return { value, setValue, status, dirty, restored, errorMessage, baseVersion: baseVersionRef.current, flush: persistNow, retry: persistNow, clear, discard: () => clear(), storageKey: key };
 }

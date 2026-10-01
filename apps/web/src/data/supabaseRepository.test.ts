@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   captureRemote, completeReviewRemote, createGoalRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
   decideAIProposalRemote, endFocusRemote, exportWorkspaceRemote, loadSupabaseState,
-  recordLearningEvidenceRemote, resolveInboxRemote, setActionStatusRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
+  recordLearningEvidenceRemote, resolveInboxRemote, setActionStatusRemote, undoActionCompletionRemote, setCommitmentStatusRemote, setEntityVisibilityRemote,
   setGoalVisibilityRemote, setInboxStatusRemote, setLearningGoalStatusRemote, setNextActionRemote, setRecurringStatusRemote,
   startFocusRemote, updateRecurringTemplateRemote, updateScratchpadRemote
 } from "./supabaseRepository";
@@ -136,12 +136,25 @@ describe("repozytorium Supabase", () => {
     await decideAIProposalRemote("proposal", "approved");
     await decideAIProposalRemote("proposal", "rejected");
     await completeReviewRemote(workspaceId, "Decyzja");
+    const reviewKey = "10000000-0000-0000-0000-000000000090";
+    const reviewSnapshot = {
+      version: 1 as const,
+      period: { startDate: "2026-09-21", endDateExclusive: "2026-09-28", timeZone: "Europe/Warsaw" },
+      metrics: { completedActions: 1, knowledgeAdded: 0, progressUpdates: 0 },
+      summary: "Decyzja tygodnia",
+      note: "Najpierw testy.",
+      plan: { startDate: "2026-09-28", endDateExclusive: "2026-10-05", selectedGoals: [], includeStandalone: false, actions: [] }
+    };
+    await completeReviewRemote(workspaceId, "Decyzja tygodnia", { selectedGoalIds: [] }, 3, reviewKey, {
+      periodStart: "2026-09-21", periodEndExclusive: "2026-09-28", workspaceTimezone: "Europe/Warsaw", snapshot: reviewSnapshot
+    });
     await setEntityVisibilityRemote(projectId, "archived");
     await setInboxStatusRemote("captured", "snoozed", "2026-08-02T08:00:00Z");
     await setCommitmentStatusRemote(projectId, "released");
     await setLearningGoalStatusRemote("goal", "abandoned", "Zmiana kierunku");
     await createActionRemote(workspaceId, "action", { title: "Krok", goalId: "goal" });
     await setActionStatusRemote("action", 1, "completed");
+    await undoActionCompletionRemote({ actionId: "action", goalId: "goal", expectedVersion: 2, restoreStatus: "ready", restoreIsNext: true, commandId: "undo-command" });
     await setNextActionRemote("goal", "action");
     await setGoalVisibilityRemote("goal", "archived");
     await createRecurringTemplateRemote(workspaceId, { id: "series", title: "Przegląd", detail: "", timezone: "Europe/Warsaw", startsOn: "2026-08-05", rule: { unit: "week", interval: 1 }, missedPolicy: "skip_missed", status: "active", checklist: [], skippedOccurrenceCount: 0, createdAt: "2026-08-05T00:00:00Z", updatedAt: "2026-08-05T00:00:00Z" });
@@ -152,11 +165,24 @@ describe("repozytorium Supabase", () => {
 
     expect(client.calls.filter((call) => call.kind === "rpc").map((call) => call.name)).toEqual(expect.arrayContaining([
       "capture_item", "start_focus_session", "end_focus_session", "record_learning_evidence", "resolve_inbox_item",
-      "approve_ai_proposal", "reject_ai_proposal", "complete_weekly_review", "create_shaped_project", "create_learning_goal",
+      "approve_ai_proposal", "reject_ai_proposal", "complete_weekly_review", "complete_weekly_review_v3", "create_shaped_project", "create_learning_goal",
       "set_entity_visibility", "set_inbox_item_status", "set_commitment_status", "set_learning_goal_status",
       "create_action_item", "set_next_action_checked", "set_goal_visibility_checked", "create_recurring_action_template",
-      "update_recurring_action_template", "set_recurring_action_template_status", "set_action_status_checked"
+      "update_recurring_action_template", "set_recurring_action_template_status", "set_action_status_checked", "undo_action_completion_checked"
     ]));
+    expect(client.rpc).toHaveBeenCalledWith("undo_action_completion_checked", expect.objectContaining({
+      target_action_id: "action", target_goal_id: "goal", expected_version: 2, restore_status: "ready",
+      restore_is_next: true, command_idempotency_key: "undo-command"
+    }));
+    expect(client.rpc).toHaveBeenCalledWith("complete_weekly_review_v3", expect.objectContaining({
+      target_workspace_id: workspaceId,
+      target_review_id: reviewKey,
+      command_idempotency_key: reviewKey,
+      period_start: "2026-09-21",
+      period_end_exclusive: "2026-09-28",
+      review_timezone: "Europe/Warsaw",
+      review_snapshot: reviewSnapshot
+    }));
   });
 
   it("eksportuje wszystkie tabele Workspace w wersjonowanej kopercie", async () => {
