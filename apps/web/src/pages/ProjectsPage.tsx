@@ -1,5 +1,6 @@
 import { ProjectCategoryManager } from "../components/ProjectCategoryManager";
 import { ProjectCategoryPicker } from "../components/ProjectCategoryPicker";
+import { ProjectPresetPicker } from "../components/ProjectPresetPicker";
 import { useMemo, useState, type FormEvent } from "react";
 import { Archive, ArrowRight, Beaker, CalendarDays, ChevronDown, CircleAlert, CircleCheck, Clock3, FolderKanban, ListChecks, MoreHorizontal, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { NavigationLink } from "../components/ContextNavigation";
@@ -11,6 +12,8 @@ import { entityCardVariants } from "../components/ui-variants";
 import { locationAddress } from "../domain/navigation";
 import { useLocation } from "react-router-dom";
 import { projectProjections, projectSignal, type ProjectSignal } from "../domain/projectModule";
+import { categoryPresetSuggestion } from "../domain/projectPresets";
+import type { ProjectPreset } from "../domain/types";
 
 const colors = ["violet", "orange", "amber"] as const;
 
@@ -41,7 +44,7 @@ export function ProjectsPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", description: "", categoryIds: [] as string[] });
+  const [form, setForm] = useState({ name: "", description: "", categoryIds: [] as string[], preset: "standard" as ProjectPreset, presetManuallyChosen: false });
   const projects = projectProjections(state, view);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [grouped, setGrouped] = useState(true);
@@ -49,7 +52,11 @@ export function ProjectsPage() {
   const categories = state.projectCategories ?? [];
   const filteredProjects = projects.filter((project) => !categoryFilter || (categoryFilter === "uncategorized" ? !project.categoryIds?.length : project.categoryIds?.includes(categoryFilter)));
   const groups = grouped ? [...categories.filter((category) => !categoryFilter || category.id === categoryFilter).map((category) => ({ ...category, projects: filteredProjects.filter((project) => project.categoryIds?.includes(category.id)) })), ...(!categoryFilter || categoryFilter === "uncategorized" ? [{ id: "uncategorized", name: "Bez kategorii", color: "#94a3b8", projects: filteredProjects.filter((project) => !project.categoryIds?.length) }] : [])].filter((group) => group.projects.length).sort((left, right) => right.projects.length - left.projects.length) : [{ id: "all", name: "", color: "", projects: filteredProjects }];
-  const openCreate = () => { setForm({ name: "", description: "", categoryIds: categoryFilter && categoryFilter !== "uncategorized" ? [categoryFilter] : [] }); setError(""); setOpen(true); };
+  const openCreate = () => {
+    const categoryIds = categoryFilter && categoryFilter !== "uncategorized" ? [categoryFilter] : [];
+    setForm({ name: "", description: "", categoryIds, preset: categoryPresetSuggestion(categories, categoryIds).preset, presetManuallyChosen: false });
+    setError(""); setOpen(true);
+  };
   const closeCategoryMenu = (element: HTMLElement) => { element.closest("details")?.removeAttribute("open"); };
   const viewLabel = view === "active" ? "Aktywne" : view === "archived" ? "Archiwum" : "Kosz";
   const selectedCategory = categoryFilter === "uncategorized" ? "Bez kategorii" : categories.find((category) => category.id === categoryFilter)?.name;
@@ -67,8 +74,8 @@ export function ProjectsPage() {
     setSaving(true);
     setError("");
     try {
-      await createArea(form.name, form.description, undefined, form.categoryIds);
-      setForm({ name: "", description: "", categoryIds: [] as string[] });
+      await createArea(form.name, form.description, undefined, form.categoryIds, form.preset);
+      setForm({ name: "", description: "", categoryIds: [], preset: "standard", presetManuallyChosen: false });
       setOpen(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Nie udało się utworzyć Projektu.");
@@ -128,12 +135,13 @@ export function ProjectsPage() {
 
     <Modal open={open} closeDisabled={saving} title="Nowy projekt" className="project-create-modal" onClose={() => setOpen(false)}>
       <form className="project-create-form" onSubmit={submit}>
-        <p className="modal-intro">Nadaj projektowi nazwę i wybierz kategorie. Możesz zmienić je w dowolnym momencie.</p>
+        <p className="modal-intro">Nadaj projektowi nazwę, wybierz szablon i kategorie. Szablon zapisze się na Projekcie.</p>
         <label className="field-label" htmlFor="project-name">Nazwa Projektu</label>
         <input id="project-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Np. Finanse osobiste" required />
         <label className="field-label" htmlFor="project-description" aria-label="Krótki kontekst opcjonalnie">Opis <span className="optional-label">opcjonalnie</span></label>
         <textarea id="project-description" rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Co należy do tego Projektu?" />
-        <ProjectCategoryPicker value={form.categoryIds} onChange={(categoryIds) => setForm((current) => ({ ...current, categoryIds }))} />
+        <ProjectPresetPicker value={form.preset} categories={categories} categoryIds={form.categoryIds} onChange={(preset) => setForm((current) => ({ ...current, preset, presetManuallyChosen: true }))} />
+        <ProjectCategoryPicker value={form.categoryIds} onChange={(categoryIds) => setForm((current) => ({ ...current, categoryIds, preset: current.presetManuallyChosen ? current.preset : categoryPresetSuggestion(categories, categoryIds).preset }))} />
         {error ? <p className="auth-message error" role="alert">{error}</p> : null}
         <div className="modal-actions"><Button type="button" onClick={() => setOpen(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.name.trim()}><Plus />Utwórz Projekt</Button></div>
       </form>

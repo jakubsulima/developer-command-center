@@ -42,6 +42,7 @@ export function knowledgeTargetToFields(target: KnowledgeTarget) {
 
 export function validateKnowledgeTarget(state: AppState, sourceId: string, sourceType: KnowledgeKind, target: KnowledgeTarget, meaning: KnowledgeRelationMeaning) {
   if (target.kind === "knowledge" && target.id === sourceId) throw new Error("knowledge_self_link_not_allowed");
+  if (target.kind === "knowledge" && state.knowledge.find((item) => item.id === target.id)?.trashedAt) throw new Error("knowledge_target_trashed");
   const exists = target.kind === "project" ? state.areas.some((item) => item.id === target.id)
     : target.kind === "goal" ? state.goals.some((item) => item.id === target.id)
       : target.kind === "action" ? state.actions.some((item) => item.id === target.id)
@@ -50,6 +51,11 @@ export function validateKnowledgeTarget(state: AppState, sourceId: string, sourc
   if (!exists) throw new Error(target.kind === "project" ? "area_not_found" : target.kind === "goal" ? "goal_not_found" : target.kind === "action" ? "action_not_found" : target.kind === "recurring-action" ? "recurring_template_not_found" : "knowledge_target_not_found");
   if (meaning === "result" && sourceType !== "artifact") throw new Error("knowledge_result_requires_artifact");
   if (meaning === "decision" && sourceType !== "decision") throw new Error("knowledge_decision_requires_decision");
+  if (meaning === "source") {
+    if (sourceType !== "note" || target.kind !== "knowledge") throw new Error("knowledge_source_requires_note_and_material");
+    const sourceMaterial = state.knowledge.find((item) => item.id === target.id);
+    if (sourceMaterial?.type !== "resource") throw new Error("knowledge_source_requires_note_and_material");
+  }
   const fields = knowledgeTargetToFields(target);
   if (state.knowledgeLinks.some((link) => link.knowledgeItemId === sourceId && link.meaning === meaning
     && link.targetKnowledgeItemId === fields.targetKnowledgeItemId && link.areaId === fields.areaId

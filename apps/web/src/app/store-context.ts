@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, RecurrenceRule } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -22,6 +22,7 @@ export interface NewGoalInput {
   areaId?: string;
   templateId?: string;
   criteria?: string[];
+  materialKnowledgeIds?: string[];
 }
 
 export interface NewActionInput {
@@ -31,6 +32,7 @@ export interface NewActionInput {
   areaId?: string;
   scheduledFor?: string;
   pinnedToToday?: boolean;
+  materialKnowledgeIds?: string[];
 }
 
 export interface NewRecurringActionInput {
@@ -48,7 +50,7 @@ export interface NewRecurringActionInput {
 export type NewInboxTriageIntent =
   | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
   | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
-  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string };
+  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
 
 export interface AppStore {
   state: AppState;
@@ -77,10 +79,10 @@ export interface AppStore {
   setActionStatus: (actionId: string, status: ActionStatus, blocker?: string, expectedVersion?: number, reviewOn?: string | null) => Promise<void>;
   setNextAction: (goalId: string, actionId: string) => Promise<void>;
   addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string, idempotencyKey?: string) => Promise<void>;
-  saveProjectCategory: (id: string | undefined, name: string, color: string) => Promise<string>;
+  saveProjectCategory: (id: string | undefined, name: string, color: string, defaultPreset?: ProjectPreset) => Promise<string>;
   deleteProjectCategory: (id: string) => Promise<void>;
-  createArea: (name: string, description?: string, parentProjectId?: string, categoryIds?: string[]) => Promise<string>;
-  updateArea: (areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[] }) => Promise<void>;
+  createArea: (name: string, description?: string, parentProjectId?: string, categoryIds?: string[], preset?: ProjectPreset) => Promise<string>;
+  updateArea: (areaId: string, changes: { name?: string; description?: string; parentProjectId?: string | null; categoryIds?: string[]; preset?: ProjectPreset }) => Promise<void>;
   createGoalTemplate: (name: string, kind: GoalKind, defaultActions?: Array<{ title: string; detail?: string }>) => Promise<string>;
   updateGoalTemplate: (templateId: string, changes: { name?: string; kind?: GoalKind; defaultActions?: Array<{ title: string; detail?: string }> }) => Promise<void>;
   setGoalStatus: (goalId: string, status: "active" | "paused" | "achieved" | "abandoned", reason?: string) => Promise<void>;
@@ -106,7 +108,7 @@ export interface AppStore {
   releaseDueInbox: (now?: Date) => Promise<void>;
   createKnowledge: (input: CreateKnowledgeInput) => Promise<string>;
   recordActionResult: (actionId: string, result: ActionResultInput) => Promise<string>;
-  updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
+  updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: ReadingStatus | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
   setAIProposal: (status: AppState["aiProposal"]) => Promise<void>;
   completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string | string[]>, templateVersion?: number) => Promise<boolean>;

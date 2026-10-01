@@ -183,22 +183,26 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
     setStatus("saving");
   };
 
-  const clear = useCallback(() => {
+  const clear = useCallback((nextValue?: T) => {
     try {
       if (key) localStorage.removeItem(key);
       if (legacyKey) localStorage.removeItem(legacyKey);
-      setValueState(initialValueRef.current);
-      valueRef.current = initialValueRef.current;
+      const resetValue = nextValue ?? initialValueRef.current;
+      if (nextValue !== undefined) initialValueRef.current = nextValue;
+      setValueState(resetValue);
+      valueRef.current = resetValue;
       setDirty(false);
       dirtyRef.current = false;
       setRestored(false);
       setErrorMessage(undefined);
       setStatus("idle");
+      return true;
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Nie udało się odrzucić szkicu.");
       setStatus("error");
+      return false;
     }
   }, [key, legacyKey]);
 
-  return { value, setValue, status, dirty, restored, errorMessage, baseVersion: baseVersionRef.current, flush: persistNow, retry: persistNow, clear, discard: clear, storageKey: key };
+  return { value, setValue, status, dirty, restored, errorMessage, baseVersion: baseVersionRef.current, flush: persistNow, retry: persistNow, clear, discard: () => clear(), storageKey: key };
 }

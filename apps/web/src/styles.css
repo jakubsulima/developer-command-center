@@ -2783,6 +2783,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .knowledge-row-content { @apply [min-width:0]; }
 .knowledge-row-content strong { @apply [font-size:14px]; @apply [line-height:20px]; }
 .knowledge-row-content > small { @apply [margin-top:3px]; @apply [font-size:12px]; @apply [line-height:18px]; }
+.knowledge-row-source { display:block; max-width:100%; margin-top:4px; color:var(--ring); font-size:11px; line-height:16px; text-decoration:none; overflow-wrap:anywhere; }
+.knowledge-row-source:hover { text-decoration:underline; }
+.knowledge-row-note-details { margin-top:4px; color:var(--muted-foreground); font-size:12px; line-height:18px; overflow-wrap:anywhere; }
+.knowledge-row-note-details > summary { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; cursor:pointer; }
+.knowledge-row-note-details > summary span { color:var(--ring); white-space:nowrap; }
+.knowledge-row-note-details[open] > summary { display:block; }
+.knowledge-row-note-details p { margin:6px 0 0; color:var(--muted-foreground); white-space:pre-wrap; overflow-wrap:anywhere; }
 .knowledge-row-meta { @apply [display:flex]; @apply [flex-wrap:wrap]; @apply [gap:4px_14px]; @apply [margin-top:7px]; }
 .knowledge-row-meta small { @apply [margin:0]; @apply [color:#75869e]; @apply [font-size:11px]; }
 .knowledge-actions { @apply [display:block]; }

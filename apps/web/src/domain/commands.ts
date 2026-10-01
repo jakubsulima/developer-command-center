@@ -1,5 +1,5 @@
 import { validateProjectParent } from "./projectHierarchy";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 import { validateKnowledgeTarget } from "./knowledge";
 import { validateReviewOn } from "./blockerReview";
@@ -7,9 +7,9 @@ import { validateReviewOn } from "./blockerReview";
 export type InboxTriageIntent =
   | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
   | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
-  | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string };
+  | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
 
-export type DomainCommand = { type: "save_project_category"; id: string; name: string; color: string } | { type: "delete_project_category"; id: string } | {
+export type DomainCommand = { type: "save_project_category"; id: string; name: string; color: string; defaultPreset?: ProjectPreset } | { type: "delete_project_category"; id: string } | {
   type: "triage_inbox_intent";
   inboxItemId: string;
   intent: InboxTriageIntent;
@@ -27,6 +27,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   templateId?: string;
   targetDate?: string;
   criteria?: Array<{ id: string; title: string; completed: boolean }>;
+  materialKnowledgeLinks?: Array<{ id: string; knowledgeItemId: string }>;
   createdAt: string;
 } | {
   type: "update_goal";
@@ -47,6 +48,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   areaId?: string;
   scheduledFor?: string;
   pinnedToToday?: boolean;
+  materialKnowledgeLinks?: Array<{ id: string; knowledgeItemId: string }>;
   createdAt: string;
 } | {
   type: "set_action_status";
@@ -85,6 +87,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
 } | {
   type: "create_area";
   categoryIds?: string[];
+  preset?: ProjectPreset;
   parentProjectId?: string;
   id: string;
   name: string;
@@ -94,6 +97,7 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
 } | {
   type: "update_area";
   categoryIds?: string[];
+  preset?: ProjectPreset;
   parentProjectId?: string | null;
   areaId: string;
   name?: string;
@@ -254,6 +258,9 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   projectId?: string;
   sourceUrl?: string;
   sourceInboxItemId?: string;
+  resourceFormat?: "book";
+  resourceAuthor?: string;
+  readingStatus?: ReadingStatus;
 } | {
   type: "update_knowledge";
   knowledgeId: string;
@@ -261,6 +268,9 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   title?: string;
   detail?: string;
   sourceUrl?: string | null;
+  resourceFormat?: "book" | null;
+  resourceAuthor?: string | null;
+  readingStatus?: ReadingStatus | null;
   goalLinks?: Array<{ id: string; goalId: string }>;
   changedAt: string;
 } | {
@@ -311,6 +321,7 @@ export function validateKnowledgeRelation(knowledgeType: KnowledgeKind, meaning:
   if (relationTargetCount(target) !== 1) throw new Error("knowledge_link_target_required");
   if (meaning === "result" && knowledgeType !== "artifact") throw new Error("knowledge_result_requires_artifact");
   if (meaning === "decision" && knowledgeType !== "decision") throw new Error("knowledge_decision_requires_decision");
+  if (meaning === "source" && (knowledgeType !== "note" || !target.targetKnowledgeItemId)) throw new Error("knowledge_source_requires_note_and_material");
 }
 
 function validateExistingKnowledgeRelations(state: AppState, knowledgeId: string, nextType: KnowledgeKind) {
@@ -329,7 +340,8 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!name || name.length > 100) throw new Error("Nazwa kategorii musi mieć od 1 do 100 znaków.");
     if (!/^#[0-9a-fA-F]{6}$/.test(command.color)) throw new Error("Wybierz poprawny kolor kategorii.");
     if ((state.projectCategories ?? []).some((category) => category.id !== command.id && category.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("Kategoria o tej nazwie już istnieje.");
-    return { ...state, projectCategories: [...(state.projectCategories ?? []).filter((category) => category.id !== command.id), { id: command.id, name, color: command.color }] };
+    if (command.defaultPreset !== undefined && !["standard", "reading"].includes(command.defaultPreset)) throw new Error("project_preset_invalid");
+    return { ...state, projectCategories: [...(state.projectCategories ?? []).filter((category) => category.id !== command.id), { id: command.id, name, color: command.color, defaultPreset: command.defaultPreset }] };
   }
   if (command.type === "delete_project_category") return { ...state, projectCategories: (state.projectCategories ?? []).filter((category) => category.id !== command.id), areas: state.areas.map((area) => ({ ...area, categoryIds: area.categoryIds?.filter((id) => id !== command.id) })) };
   if ((command.type === "create_area" || command.type === "update_area") && command.categoryIds?.some((id) => !(state.projectCategories ?? []).some((category) => category.id === id))) throw new Error("Wybrana kategoria jest niedostępna.");
@@ -375,7 +387,8 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!area) throw new Error("area_not_found");
     if (command.parentProjectId !== undefined) validateProjectParent(state.areas, area.id, command.parentProjectId);
     if (command.name !== undefined && !command.name.trim()) throw new Error("area_name_required");
-    return { ...state, areas: state.areas.map((item) => item.id === area.id ? { ...item, categoryIds: command.categoryIds ?? item.categoryIds, parentProjectId: command.parentProjectId === undefined ? item.parentProjectId : command.parentProjectId || undefined, name: command.name?.trim() ?? item.name, description: command.description?.trim() ?? item.description, updatedAt: command.changedAt } : item) };
+    if (command.preset !== undefined && !["standard", "reading"].includes(command.preset)) throw new Error("project_preset_invalid");
+    return { ...state, areas: state.areas.map((item) => item.id === area.id ? { ...item, preset: command.preset ?? item.preset ?? "standard", categoryIds: command.categoryIds ?? item.categoryIds, parentProjectId: command.parentProjectId === undefined ? item.parentProjectId : command.parentProjectId || undefined, name: command.name?.trim() ?? item.name, description: command.description?.trim() ?? item.description, updatedAt: command.changedAt } : item) };
   }
 
   if (command.type === "update_goal_template") {
@@ -412,6 +425,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       next = executeDomainCommand(next, {
         type: "create_knowledge", id: command.intent.knowledgeId, kind: command.intent.knowledgeKind,
         title: command.intent.title, detail: command.intent.detail, sourceUrl: command.intent.sourceUrl, projectId: command.intent.projectId,
+        resourceFormat: command.intent.resourceFormat, resourceAuthor: command.intent.resourceAuthor, readingStatus: command.intent.readingStatus,
         sourceInboxItemId: source.id,
         createdAt: command.decidedAt
       });
@@ -545,6 +559,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!name) throw new Error("area_name_required");
     if (state.areas.some((area) => area.id === command.id)) return state;
     validateProjectParent(state.areas, command.id, command.parentProjectId);
+    if (command.preset !== undefined && !["standard", "reading"].includes(command.preset)) throw new Error("project_preset_invalid");
     return { ...state, areas: [...state.areas, {
       id: command.id,
       name,
@@ -552,6 +567,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       color: command.color,
       parentProjectId: command.parentProjectId,
       categoryIds: command.categoryIds ?? [],
+      preset: command.preset ?? "standard",
       visibility: "active",
       createdAt: command.createdAt,
       updatedAt: command.createdAt
@@ -637,6 +653,11 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const title = command.title.trim();
     if (!title) throw new Error("action_title_required");
     if (command.goalId && !state.goals.some((goal) => goal.id === command.goalId)) throw new Error("goal_not_found");
+    if (command.goalId && command.areaId && state.goals.find((goal) => goal.id === command.goalId)?.areaId !== command.areaId) throw new Error("goal_project_mismatch");
+    for (const relation of command.materialKnowledgeLinks ?? []) {
+      const item = state.knowledge.find((candidate) => candidate.id === relation.knowledgeItemId);
+      if (!item || item.archivedAt || item.trashedAt) throw new Error("knowledge_not_found");
+    }
     if (state.actions.some((action) => action.id === command.id)) return state;
     const position = state.actions.filter((action) => action.goalId === command.goalId).length;
     return { ...state, actions: [...state.actions, {
@@ -654,7 +675,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       checklist: [],
       createdAt: command.createdAt,
       updatedAt: command.createdAt
-    }] };
+    }], knowledgeLinks: [...state.knowledgeLinks, ...(command.materialKnowledgeLinks ?? []).map((relation) => ({
+      id: relation.id, knowledgeItemId: relation.knowledgeItemId, actionId: command.id, meaning: "material" as const, createdAt: command.createdAt
+    }))] };
   }
 
   if (command.type === "create_goal") {
@@ -670,6 +693,10 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       throw new Error("goal_id_conflict");
     }
     if (command.actionId && state.actions.some((action) => action.id === command.actionId)) throw new Error("action_id_conflict");
+    for (const relation of command.materialKnowledgeLinks ?? []) {
+      const item = state.knowledge.find((candidate) => candidate.id === relation.knowledgeItemId);
+      if (!item || item.archivedAt || item.trashedAt) throw new Error("knowledge_not_found");
+    }
 
     return {
       ...state,
@@ -702,7 +729,10 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         checklist: [],
         createdAt: command.createdAt,
         updatedAt: command.createdAt
-      }] : state.actions
+      }] : state.actions,
+      knowledgeLinks: [...state.knowledgeLinks, ...(command.materialKnowledgeLinks ?? []).map((relation) => ({
+        id: relation.id, knowledgeItemId: relation.knowledgeItemId, goalId: command.goalId, meaning: "material" as const, createdAt: command.createdAt
+      }))]
     };
   }
 
@@ -740,6 +770,8 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (state.knowledge.some((item) => item.id === command.id)) return state;
     const title = command.title.trim();
     if (!title) throw new Error("knowledge_title_required");
+    if (command.resourceFormat && command.kind !== "resource") throw new Error("book_requires_resource");
+    if (!command.resourceFormat && (command.resourceAuthor || command.readingStatus)) throw new Error("book_fields_require_format");
     const sourceUrl = normalizeHttpUrl(command.sourceUrl);
     return {
       ...state,
@@ -750,6 +782,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         detail: command.detail.trim(),
         projectId: command.projectId,
         sourceUrl,
+        resourceFormat: command.resourceFormat,
+        resourceAuthor: command.resourceFormat ? command.resourceAuthor?.trim() || undefined : undefined,
+        readingStatus: command.resourceFormat ? command.readingStatus ?? "to_read" : undefined,
         sourceInboxItemId: command.sourceInboxItemId,
         status: command.kind === "investigation" ? "shaped" : undefined,
         question: command.kind === "investigation" ? title : undefined,
@@ -764,6 +799,13 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!item) throw new Error("knowledge_not_found");
     if (command.title !== undefined && !command.title.trim()) throw new Error("knowledge_title_required");
     const nextType = command.kind ?? item.type;
+    const nextFormat = nextType !== "resource" || command.resourceFormat === null ? undefined : command.resourceFormat ?? item.resourceFormat;
+    const nextStatus = nextFormat ? command.readingStatus === null ? undefined : command.readingStatus ?? item.readingStatus : nextType === "resource" ? item.readingStatus : undefined;
+    const nextAuthor = nextFormat ? command.resourceAuthor === null ? undefined : command.resourceAuthor !== undefined ? command.resourceAuthor.trim() || undefined : item.resourceAuthor : nextType === "resource" ? item.resourceAuthor : undefined;
+    if (nextFormat && nextType !== "resource") throw new Error("book_requires_resource");
+    if (nextStatus && !["to_read", "reading", "read", "paused", "abandoned"].includes(nextStatus)) throw new Error("reading_status_invalid");
+    if (!nextFormat && (command.readingStatus && command.readingStatus !== null || command.resourceAuthor && command.resourceAuthor !== null)) throw new Error("book_fields_require_format");
+    if (nextType !== "resource" && state.knowledgeLinks.some((link) => link.targetKnowledgeItemId === item.id && link.meaning === "source")) throw new Error("knowledge_source_target_must_be_resource");
     validateExistingKnowledgeRelations(state, item.id, nextType);
     const knowledge = state.knowledge.map((candidate) => candidate.id === command.knowledgeId ? {
       ...candidate,
@@ -772,6 +814,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       title: command.title?.trim() ?? candidate.title,
       detail: command.detail?.trim() ?? candidate.detail,
       sourceUrl: command.sourceUrl === null ? undefined : command.sourceUrl !== undefined ? normalizeHttpUrl(command.sourceUrl) : candidate.sourceUrl,
+      resourceFormat: nextFormat,
+      resourceAuthor: nextAuthor,
+      readingStatus: nextFormat ? nextStatus ?? "to_read" : nextStatus,
       updatedAt: command.changedAt
     } : candidate);
     const knowledgeLinks = command.goalLinks === undefined ? state.knowledgeLinks : [

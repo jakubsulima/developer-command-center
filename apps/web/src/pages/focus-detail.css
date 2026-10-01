@@ -99,6 +99,24 @@
 .focus-detail .knowledge-detail-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .focus-detail .knowledge-detail-meta .button { min-height: 44px; padding: 0 6px; border: 0; background: transparent; font-size: 14px; font-weight: 400; }
 .focus-detail .knowledge-detail-head p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.focus-detail .book-reading-status-control { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--muted-foreground); font-size: 13px; }
+.focus-detail .book-reading-status-control select { width: auto; min-width: 150px; min-height: 40px; }
+.focus-detail .book-reading-notes { display: grid; gap: 14px; min-width: 0; padding: 16px; }
+.focus-detail .book-reading-notes > .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.focus-detail .book-reading-notes > .section-heading h2 { margin: 0; font-size: 18px; }
+.focus-detail .book-reading-notes > .section-heading span { color: var(--muted-foreground); font-size: 12px; }
+.focus-detail .book-note-search { width: 100%; }
+.focus-detail .book-note-card { min-width: 0; padding: 14px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.focus-detail .book-note-card > a { color: var(--foreground); font-weight: 600; text-decoration: none; }
+.focus-detail .book-note-card > a:hover { color: var(--ring); }
+.focus-detail .book-note-card p { margin: 8px 0 0; color: var(--foreground); font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.focus-detail .book-note-card details > summary { margin-top: 8px; color: var(--ring); cursor: pointer; font-size: 13px; }
+.focus-detail .book-note-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted-foreground); }
+.focus-detail .book-note-composer { display: grid; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--secondary); }
+.focus-detail .book-note-composer .button-row { justify-content: flex-end; flex-wrap: wrap; }
+.focus-detail .book-source-note-connect { display: grid; gap: 10px; }
+.focus-detail .book-source-note-connect h2 { margin: 0; }
+.focus-detail .book-source-note-connect .inline-link { min-width: 0; }
 .focus-detail .goal-detail-grid { display: grid; grid-template-columns: 1fr; gap: 28px; }
 .focus-detail .detail-main, .focus-detail .detail-aside { min-width: 0; gap: 20px; }
 .focus-detail .goal-detail-grid .detail-main > .panel:not(:has(form)) { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }

@@ -3,6 +3,14 @@ import { emptyState } from "../data/empty";
 import { executeDomainCommand } from "./commands";
 
 describe("komendy domenowe Workspace", () => {
+  it("zapisuje preset na Projekcie i nie wylicza go ponownie po zmianie kategorii", () => {
+    const state = { ...structuredClone(emptyState), projectCategories: [{ id: "reading", name: "Książki", color: "#000000", defaultPreset: "reading" as const }] };
+    const created = executeDomainCommand(state, { type: "create_area", id: "library", name: "Czytelnia", categoryIds: ["reading"], preset: "reading", createdAt: "now" });
+    const recategorized = executeDomainCommand(created, { type: "update_area", areaId: "library", categoryIds: [], name: "Moja biblioteka", changedAt: "later" });
+    const categoryDeleted = executeDomainCommand(recategorized, { type: "delete_project_category", id: "reading" });
+    expect(categoryDeleted.areas[0]).toMatchObject({ name: "Moja biblioteka", preset: "reading", categoryIds: [] });
+  });
+
   it("pozwala przekroczyć limit WIP wyłącznie ze świadomym uzasadnieniem", () => {
     const atLimit = {
       ...structuredClone(emptyState),
@@ -262,6 +270,60 @@ describe("komendy domenowe Workspace", () => {
       meaning: "material",
       createdAt: "2026-08-20T12:00:00.000Z"
     })).toThrow("knowledge_self_link_not_allowed");
+  });
+
+  it("zachowuje autora i stan czytania po zmianie formatu w obie strony", () => {
+    const state = { ...structuredClone(emptyState), knowledge: [{ id: "book", type: "resource" as const, title: "Book", detail: "", resourceFormat: "book" as const, resourceAuthor: "Autor", readingStatus: "read" as const }] };
+    const plain = executeDomainCommand(state, { type: "update_knowledge", knowledgeId: "book", resourceFormat: null, changedAt: "now" });
+    expect(plain.knowledge[0]).toMatchObject({ resourceAuthor: "Autor", readingStatus: "read" });
+    expect(plain.knowledge[0].resourceFormat).toBeUndefined();
+    const restored = executeDomainCommand(plain, { type: "update_knowledge", knowledgeId: "book", resourceFormat: "book", changedAt: "later" });
+    expect(restored.knowledge[0]).toMatchObject({ resourceFormat: "book", resourceAuthor: "Autor", readingStatus: "read" });
+  });
+
+  it("łączy notatkę ze źródłową książką i odrzuca nowe linki do materiału w Koszu", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      knowledge: [
+        { id: "book", type: "resource" as const, title: "Książka", detail: "", resourceFormat: "book" as const, readingStatus: "reading" as const },
+        { id: "trashed-book", type: "resource" as const, title: "Usunięta książka", detail: "", resourceFormat: "book" as const, trashedAt: "2026-08-20T12:00:00.000Z" },
+        { id: "note", type: "note" as const, title: "Notatka", detail: "Wniosek z rozdziału." }
+      ]
+    };
+    const linked = executeDomainCommand(state, {
+      type: "link_knowledge", id: "source-link", knowledgeItemId: "note", targetKnowledgeItemId: "book", meaning: "source", createdAt: "now"
+    });
+    const retried = executeDomainCommand(linked, {
+      type: "link_knowledge", id: "source-link-retry", knowledgeItemId: "note", targetKnowledgeItemId: "book", meaning: "source", createdAt: "later"
+    });
+
+    expect(linked.knowledgeLinks).toEqual([expect.objectContaining({ knowledgeItemId: "note", targetKnowledgeItemId: "book", meaning: "source" })]);
+    expect(retried.knowledgeLinks).toHaveLength(1);
+    expect(() => executeDomainCommand(state, {
+      type: "link_knowledge", id: "trashed-source-link", knowledgeItemId: "note", targetKnowledgeItemId: "trashed-book", meaning: "source", createdAt: "now"
+    })).toThrow("knowledge_target_trashed");
+  });
+
+  it("tworzy Goal i Action z materialnym linkiem do aktywnej książki", () => {
+    const state = {
+      ...structuredClone(emptyState),
+      areas: [{ id: "reading-project", name: "Czytelnia", preset: "reading" as const, visibility: "active" as const, createdAt: "now", updatedAt: "now" }],
+      knowledge: [{ id: "book", type: "resource" as const, title: "Książka", detail: "", resourceFormat: "book" as const, readingStatus: "reading" as const }]
+    };
+    const withGoal = executeDomainCommand(state, {
+      type: "create_goal", goalId: "goal", title: "Zastosować trzy techniki", outcome: "Trzy techniki wykorzystane", kind: "custom",
+      areaId: "reading-project", materialKnowledgeLinks: [{ id: "goal-book", knowledgeItemId: "book" }], createdAt: "now"
+    });
+    const withAction = executeDomainCommand(withGoal, {
+      type: "create_action", id: "action", title: "Przeczytać rozdział 4", goalId: "goal", areaId: "reading-project",
+      materialKnowledgeLinks: [{ id: "action-book", knowledgeItemId: "book" }], createdAt: "now"
+    });
+
+    expect(withAction.knowledgeLinks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ knowledgeItemId: "book", goalId: "goal", meaning: "material" }),
+      expect.objectContaining({ knowledgeItemId: "book", actionId: "action", meaning: "material" })
+    ]));
+    expect(withAction.actions[0]).toMatchObject({ id: "action", status: "ready", areaId: "reading-project" });
   });
 
   it("archiwizuje, przenosi do Trash i przywraca bez zmiany stanu domenowego", () => {
