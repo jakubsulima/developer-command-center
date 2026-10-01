@@ -14,6 +14,8 @@ import { routeForEntity } from "../domain/routes";
 import { describeActionContext, describeCompactActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
+import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
+import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
@@ -24,11 +26,12 @@ import { AIStartGuidance } from "../components/AIStartGuidance";
 import { formatActionDate, resolveRoutineTitle } from "../domain/actionPresentation";
 
 const shiftDate = (value: string, amount: number) => { const result = new Date(`${value}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + amount); return result.toISOString().slice(0, 10); };
-function StartActionRow({ action, context, relationSummary, openStatus, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
+function StartActionRow({ action, context, relationSummary, openStatus, onComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
   action: GoalAction;
   context: ActionContext;
   relationSummary: string[];
   openStatus: (actionId: string) => void;
+  onComplete: (action: GoalAction) => void;
   busy: boolean;
   error?: string;
   retry?: () => Promise<boolean>;
@@ -40,13 +43,14 @@ function StartActionRow({ action, context, relationSummary, openStatus, busy, er
 }) {
   const compactContext = describeCompactActionContext(context);
   return <div className={`today-action ${action.status}`} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
+    <div className="today-action-complete">{action.status !== "completed" && action.status !== "cancelled" && action.status !== "skipped" && action.status !== "blocked" ? <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => onComplete(action)} /> : null}</div>
     <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={timeZone} today={today} routineTitle={routineTitle} density="compact" disabled={busy} onOpenStatus={() => openStatus(action.id)} /><small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </div>;
 }
 
 export function StartPage() {
-  const { state, createAction, setActionStatus, materializeRecurring } = useStore();
+  const { state, createAction, setActionStatus, undoActionCompletion, materializeRecurring } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [searchParams] = useSearchParams();
@@ -78,10 +82,18 @@ export function StartPage() {
     await setActionStatus(action.id, status, blocker, action.version, reviewOn);
     notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
   });
+  const completeAction = (action: GoalAction) => mutation.run(`start-status:${action.id}`, () => completeActionWithUndo({
+    action,
+    setActionStatus,
+    undoActionCompletion,
+    notifyUndo,
+    hasResult: state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result"),
+    onAddResult: () => setResultActionId(action.id),
+  }));
   const contextFor = (action: GoalAction) => resolveActionContext(action, state);
   const startBreadcrumbs = [{ label: "Start", to: "/" }];
   const startAddress = locationAddress(location);
-  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} /></div>; };
+  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} onComplete={(item) => void completeAction(item)} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} /></div>; };
 
   const submitAction = async (event: FormEvent) => {
     event.preventDefault();

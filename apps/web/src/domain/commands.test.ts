@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
+import { demoState } from "../data/demo";
 import { executeDomainCommand } from "./commands";
 
 describe("komendy domenowe Workspace", () => {
@@ -9,6 +10,69 @@ describe("komendy domenowe Workspace", () => {
     const recategorized = executeDomainCommand(created, { type: "update_area", areaId: "library", categoryIds: [], name: "Moja biblioteka", changedAt: "later" });
     const categoryDeleted = executeDomainCommand(recategorized, { type: "delete_project_category", id: "reading" });
     expect(categoryDeleted.areas[0]).toMatchObject({ name: "Moja biblioteka", preset: "reading", categoryIds: [] });
+  });
+
+  it("cofa ukończenie w jednej komendzie, przywraca pełny stan i obsługuje ponowienie", () => {
+    const initial = structuredClone(demoState);
+    const action = initial.actions.find((item) => item.id === "action-budget-today")!;
+    const completed = executeDomainCommand(initial, {
+      type: "set_action_status", actionId: action.id, status: "completed", expectedVersion: action.version, changedAt: "complete"
+    });
+    const undoCommand = {
+      type: "undo_action_completion" as const,
+      actionId: action.id,
+      goalId: action.goalId,
+      expectedVersion: action.version + 1,
+      restoreStatus: action.status,
+      restoreBlocker: action.blocker,
+      restoreReviewOn: action.reviewOn ?? null,
+      restoreIsNext: action.isNext,
+      commandId: "undo-budget-action",
+      changedAt: "undo"
+    };
+    const restored = executeDomainCommand(completed, undoCommand);
+    expect(restored.actions.find((item) => item.id === action.id)).toMatchObject({ status: "ready", isNext: true, version: action.version + 2 });
+    expect(executeDomainCommand(restored, undoCommand)).toBe(restored);
+  });
+
+  it("zachowuje inne wybrane następne Działanie i nie nadpisuje późniejszej edycji", () => {
+    const initial = structuredClone(demoState);
+    const action = initial.actions.find((item) => item.id === "action-budget-today")!;
+    const other = initial.actions.find((item) => item.id === "action-budget-overdue")!;
+    const completed = executeDomainCommand(initial, {
+      type: "set_action_status", actionId: action.id, status: "completed", expectedVersion: action.version, changedAt: "complete"
+    });
+    const otherSelected = executeDomainCommand(completed, { type: "set_next_action", goalId: action.goalId!, actionId: other.id });
+    const undoCommand = {
+      type: "undo_action_completion" as const, actionId: action.id, goalId: action.goalId,
+      expectedVersion: action.version + 1, restoreStatus: action.status, restoreIsNext: true,
+      commandId: "undo-with-other-selected", changedAt: "undo"
+    };
+    const restored = executeDomainCommand(otherSelected, undoCommand);
+    expect(restored.actions.find((item) => item.id === action.id)).toMatchObject({ status: "ready", isNext: false });
+    expect(restored.actions.find((item) => item.id === other.id)).toMatchObject({ isNext: true });
+
+    const edited = executeDomainCommand(completed, {
+      type: "update_action", actionId: action.id, expectedVersion: action.version + 1, title: "Edytowane po ukończeniu", changedAt: "edit"
+    });
+    expect(() => executeDomainCommand(edited, undoCommand)).toThrow("action_version_conflict");
+    expect(edited.actions.find((item) => item.id === action.id)).toMatchObject({ status: "completed", title: "Edytowane po ukończeniu" });
+  });
+
+  it("przywraca poprzednią blokadę i datę jej sprawdzenia", () => {
+    const initial = structuredClone(demoState);
+    const base = initial.actions.find((item) => item.id === "action-budget-overdue")!;
+    const blocked = { ...base, status: "blocked" as const, blocker: "Czekam na dokument", reviewOn: "2026-10-08", isNext: false };
+    const state = { ...initial, actions: initial.actions.map((item) => item.id === base.id ? blocked : item) };
+    const completed = executeDomainCommand(state, {
+      type: "set_action_status", actionId: base.id, status: "completed", expectedVersion: base.version, changedAt: "complete"
+    });
+    const restored = executeDomainCommand(completed, {
+      type: "undo_action_completion", actionId: base.id, goalId: base.goalId, expectedVersion: base.version + 1,
+      restoreStatus: "blocked", restoreBlocker: "Czekam na dokument", restoreReviewOn: "2026-10-08", restoreIsNext: false,
+      commandId: "undo-blocked-action", changedAt: "undo"
+    });
+    expect(restored.actions.find((item) => item.id === base.id)).toMatchObject({ status: "blocked", blocker: "Czekam na dokument", reviewOn: "2026-10-08", isNext: false });
   });
 
   it("pozwala przekroczyć limit WIP wyłącznie ze świadomym uzasadnieniem", () => {

@@ -59,13 +59,14 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(await screen.findByRole("heading", { name: "Wiedza Nawigacji" })).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: /Projekt Nawigacji.*przez Działanie/ }));
     expect(await screen.findByRole("heading", { name: "Projekt Nawigacji" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).not.toHaveTextContent("Wiedza Nawigacji");
+    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" }).querySelector(".context-breadcrumbs")).not.toHaveTextContent("Wiedza Nawigacji");
+    expect(screen.getByRole("button", { name: "Wiedza: Wiedza Nawigacji" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Wiedza" }));
     await user.click(screen.getByRole("link", { name: "Otwórz Wiedzę: Wiedza Nawigacji" }));
     const trail = screen.getByRole("navigation", { name: "Ścieżka kontekstu" });
     expect(within(trail).getAllByRole("link", { name: "Projekt Nawigacji" })).toHaveLength(1);
-    expect(trail).not.toHaveTextContent("Wiedza Nawigacji");
+    expect(trail.querySelector(".context-breadcrumbs")).not.toHaveTextContent("Wiedza Nawigacji");
   });
 
   it("przekierowuje stary adres Działania przez replace do nowej trasy", async () => {

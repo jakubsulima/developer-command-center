@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule, WeeklyReviewSnapshot } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -47,6 +47,13 @@ export interface NewRecurringActionInput {
   checklist?: string[];
 }
 
+export interface WeeklyReviewSaveMetadata {
+  periodStart: string;
+  periodEndExclusive: string;
+  workspaceTimezone: string;
+  snapshot: WeeklyReviewSnapshot;
+}
+
 export type NewInboxTriageIntent =
   | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
   | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
@@ -74,9 +81,10 @@ export interface AppStore {
   search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
   updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
-  createAction: (input: NewActionInput) => Promise<string>;
+  createAction: (input: NewActionInput, idempotencyKey?: string) => Promise<string>;
   updateAction: (actionId: string, changes: { title?: string; detail?: string; scheduledFor?: string | null; pinnedToToday?: boolean; goalId?: string | null; areaId?: string | null; position?: number; checklist?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
   setActionStatus: (actionId: string, status: ActionStatus, blocker?: string, expectedVersion?: number, reviewOn?: string | null) => Promise<void>;
+  undoActionCompletion: (input: { actionId: string; goalId?: string; expectedVersion: number; restoreStatus: ActionStatus; restoreBlocker?: string; restoreReviewOn?: string | null; restoreIsNext: boolean; commandId: string }) => Promise<void>;
   setNextAction: (goalId: string, actionId: string) => Promise<void>;
   addProgress: (goalId: string, kind: "note" | "decision" | "result" | "evidence" | "blocker", content: string, actionId?: string, knowledgeItemId?: string, idempotencyKey?: string) => Promise<void>;
   saveProjectCategory: (id: string | undefined, name: string, color: string, defaultPreset?: ProjectPreset) => Promise<string>;
@@ -111,7 +119,7 @@ export interface AppStore {
   updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: ReadingStatus | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
   setAIProposal: (status: AppState["aiProposal"]) => Promise<void>;
-  completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string | string[]>, templateVersion?: number) => Promise<boolean>;
+  completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string | string[]>, templateVersion?: number, idempotencyKey?: string, metadata?: WeeklyReviewSaveMetadata) => Promise<boolean>;
   exportData: () => Promise<unknown>;
   reload: () => Promise<void>;
   resetDemo: () => void;

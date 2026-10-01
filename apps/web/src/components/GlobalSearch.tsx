@@ -15,7 +15,7 @@ type SearchState = { query: string; search: ReturnType<typeof useStore>["search"
   | { status: "success"; results: SearchResult[] }
 );
 
-export function GlobalSearch({ id = "global-search", onNavigate, visible = true }: { id?: string; onNavigate?: () => void; visible?: boolean }) {
+export function GlobalSearch({ id = "global-search", onNavigate, visible = true, disabled = false }: { id?: string; onNavigate?: () => void; visible?: boolean; disabled?: boolean }) {
   const { search } = useStore();
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export function GlobalSearch({ id = "global-search", onNavigate, visible = true 
   const [attempt, setAttempt] = useState(0);
   const retryLocked = useRef(false);
   const normalized = query.trim();
-  const expanded = open && visible && normalized.length > 0;
+  const expanded = open && visible && !disabled && normalized.length > 0;
   const current = state?.query === normalized && state.search === search ? state : null;
   const status = !normalized ? "empty" : normalized.length < 2 ? "short" : current?.status ?? "loading";
   const results = expanded && status === "success" && current?.status === "success" ? current.results : [];
@@ -35,7 +35,7 @@ export function GlobalSearch({ id = "global-search", onNavigate, visible = true 
 
   useEffect(() => { setActive(0); }, [query]);
   useEffect(() => {
-    if (!open || !visible || normalized.length < 2) { setState(null); return; }
+    if (!open || !visible || disabled || normalized.length < 2) { setState(null); return; }
     let activeRequest = true;
     retryLocked.current = true;
     setState({ query: normalized, search, status: "loading" });
@@ -58,7 +58,7 @@ export function GlobalSearch({ id = "global-search", onNavigate, visible = true 
       });
     }, 200);
     return () => { activeRequest = false; window.clearTimeout(timer); };
-  }, [normalized, search, open, visible, attempt]);
+  }, [normalized, search, open, visible, disabled, attempt]);
   useEffect(() => { if (query) sessionStorage.setItem(GLOBAL_SEARCH_STORAGE_KEY, query); else sessionStorage.removeItem(GLOBAL_SEARCH_STORAGE_KEY); }, [query]);
   useEffect(() => {
     if (!open) return;
@@ -69,7 +69,7 @@ export function GlobalSearch({ id = "global-search", onNavigate, visible = true 
 
   let resultIndex = 0;
   return <div ref={rootRef} className="global-search">
-    <div className="search-wrap"><Search /><Input id={id} role="combobox" aria-label="Szukaj w Projektach, Celach, Działaniach i Wiedzy" aria-expanded={expanded} aria-controls={results.length ? resultsId : undefined} aria-describedby={expanded && !results.length ? `${id}-status` : undefined} aria-activedescendant={expanded && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setQuery("")}><X /></button> : null}</div>
+    <div className="search-wrap"><Search /><Input id={id} disabled={disabled} aria-disabled={disabled || undefined} role="combobox" aria-label="Szukaj w Projektach, Celach, Działaniach i Wiedzy" aria-expanded={expanded} aria-controls={results.length ? resultsId : undefined} aria-describedby={expanded && !results.length ? `${id}-status` : undefined} aria-activedescendant={expanded && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" disabled={disabled} onClick={() => setQuery("")}><X /></button> : null}</div>
     {expanded && <div className="search-results">
       {results.length ? <>
         <div className="search-results-summary" role="status"><span>Wyniki</span><strong>{results.length}</strong></div>

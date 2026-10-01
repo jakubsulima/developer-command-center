@@ -1,5 +1,5 @@
 import { validateProjectParent } from "./projectHierarchy";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WorkItemStatus } from "./types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WeeklyReviewSnapshot, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 import { validateKnowledgeTarget } from "./knowledge";
 import { validateReviewOn } from "./blockerReview";
@@ -57,6 +57,17 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   blocker?: string;
   reviewOn?: string | null;
   expectedVersion?: number;
+  changedAt: string;
+} | {
+  type: "undo_action_completion";
+  actionId: string;
+  goalId?: string;
+  expectedVersion: number;
+  restoreStatus: ActionStatus;
+  restoreBlocker?: string;
+  restoreReviewOn?: string | null;
+  restoreIsNext: boolean;
+  commandId: string;
   changedAt: string;
 } | {
   type: "set_next_action";
@@ -236,6 +247,11 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   answers: Record<string, string | string[]>;
   summary: string;
   completedAt: string;
+  periodStart?: string;
+  periodEndExclusive?: string;
+  workspaceTimezone?: string;
+  revision?: number;
+  snapshot?: WeeklyReviewSnapshot;
 } | {
   type: "decide_ai_proposal";
   proposalId: string;
@@ -649,6 +665,52 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     };
   }
 
+  if (command.type === "undo_action_completion") {
+    const action = state.actions.find((item) => item.id === command.actionId);
+    if (!action) throw new Error("action_not_found");
+    if (action.goalId !== command.goalId) throw new Error("action_context_conflict");
+    const restoredBlocker = command.restoreStatus === "blocked" ? command.restoreBlocker?.trim() : undefined;
+    const restoredReviewOn = command.restoreStatus === "blocked" ? validateReviewOn(command.restoreReviewOn) : undefined;
+    if (command.restoreStatus === "blocked" && !restoredBlocker) throw new Error("action_blocker_required");
+
+    // The same undo may be retried after an ambiguous persistence response.
+    // Its version and restored values identify the already-applied result.
+    if (action.version === command.expectedVersion + 1 && action.status === command.restoreStatus
+      && action.blocker === restoredBlocker && action.reviewOn === restoredReviewOn) return state;
+    if (action.version !== command.expectedVersion) throw new Error("action_version_conflict");
+
+    const restoreNext = command.restoreIsNext
+      && ["ready", "in_progress"].includes(command.restoreStatus)
+      && Boolean(action.goalId)
+      && !state.actions.some((item) => item.id !== action.id && item.goalId === action.goalId && item.isNext && ["ready", "in_progress"].includes(item.status));
+    const progressEntries = action.goalId && (action.status === "blocked" || command.restoreStatus === "blocked")
+      ? [{
+          id: command.commandId,
+          goalId: action.goalId,
+          actionId: action.id,
+          kind: "blocker" as const,
+          content: command.restoreStatus === "blocked" ? `Zablokowano: ${restoredBlocker}` : `Odblokowano. Poprzedni powód: ${action.blocker ?? "brak"}`,
+          createdAt: command.changedAt
+        }, ...state.progressEntries]
+      : state.progressEntries;
+    return {
+      ...state,
+      actions: state.actions.map((item) => item.id === command.actionId ? {
+        ...item,
+        status: command.restoreStatus,
+        blocker: restoredBlocker,
+        reviewOn: restoredReviewOn,
+        completedAt: command.restoreStatus === "completed" ? item.completedAt : undefined,
+        skippedAt: command.restoreStatus === "skipped" ? item.skippedAt : undefined,
+        cancelledAt: command.restoreStatus === "cancelled" ? item.cancelledAt : undefined,
+        isNext: restoreNext,
+        version: item.version + 1,
+        updatedAt: command.changedAt
+      } : item),
+      progressEntries
+    };
+  }
+
   if (command.type === "create_action") {
     const title = command.title.trim();
     if (!title) throw new Error("action_title_required");
@@ -872,7 +934,12 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       templateVersion: command.templateVersion,
       answers: structuredClone(command.answers),
       summary: command.summary.trim(),
-      completedAt: command.completedAt
+      completedAt: command.completedAt,
+      ...(command.periodStart ? { periodStart: command.periodStart } : {}),
+      ...(command.periodEndExclusive ? { periodEndExclusive: command.periodEndExclusive } : {}),
+      ...(command.workspaceTimezone ? { workspaceTimezone: command.workspaceTimezone } : {}),
+      ...(command.revision ? { revision: command.revision } : {}),
+      ...(command.snapshot ? { snapshot: structuredClone(command.snapshot) } : {})
     };
     return { ...state, reviews: [...state.reviews, review], reviewCompletedAt: command.completedAt };
   }

@@ -84,12 +84,12 @@ const modes = [
 ] satisfies Array<{ id: QuickAddMode; label: string; command: string; icon: typeof ListPlus }>;
 
 const copy = {
-  action: { label: "Co chcesz zrobić?", placeholder: "Np. Spisać trzy pytania do rozmowy\nSzczegóły dopisz niżej", submit: "Dodaj Działanie", detail: "Działanie zapisze się w bieżącym kontekście" },
-  goal: { label: "Co chcesz osiągnąć?", placeholder: "Np. Zbudować spokojny budżet domowy\nOpisz rezultat niżej", submit: "Utwórz Cel", detail: "Cel zapisze się w bieżącym kontekście" },
-  project: { label: "Jaki Projekt utworzyć?", placeholder: "Np. Finanse osobiste\nDodaj krótki opis, jeśli potrzebujesz", submit: "Utwórz Projekt", detail: "Projekt stanie się stałym miejscem dla pracy" },
-  routine: { label: "Co ma się powtarzać?", placeholder: "Np. Cotygodniowy przegląd\nOpis i szczegóły dopisz niżej", submit: "Utwórz Rutynę", detail: "Domyślnie co tydzień, od dzisiaj" },
+  action: { label: "Co chcesz zrobić?", placeholder: "Np. Spisać trzy pytania do rozmowy", submit: "Dodaj Działanie", detail: "Działanie zapisze się w bieżącym kontekście" },
+  goal: { label: "Co chcesz osiągnąć?", placeholder: "Np. Zbudować spokojny budżet domowy", submit: "Utwórz Cel", detail: "Cel zapisze się w bieżącym kontekście" },
+  project: { label: "Jaki Projekt utworzyć?", placeholder: "Np. Finanse osobiste", submit: "Utwórz Projekt", detail: "Projekt stanie się stałym miejscem dla pracy" },
+  routine: { label: "Co ma się powtarzać?", placeholder: "Np. Cotygodniowy przegląd", submit: "Utwórz Rutynę", detail: "Domyślnie co tydzień, od dzisiaj" },
   inbox: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść\nUporządkujesz później", submit: "Zapisz do Skrzynki", detail: "Surowa treść trafi do Wiedza → Skrzynka" },
-  library: { label: "Co chcesz uporządkować?", placeholder: "Np. Wzorzec repozytorium\nOpisz materiał lub wniosek niżej", submit: "Zapisz w Bibliotece", detail: "Powstanie uporządkowany element Wiedzy" },
+  library: { label: "Co chcesz uporządkować?", placeholder: "Np. Wzorzec repozytorium", submit: "Zapisz w Bibliotece", detail: "Powstanie uporządkowany element Wiedzy" },
   knowledge: { label: "Co chcesz zachować?", placeholder: "Wklej link albo zapisz treść\nUporządkujesz później", submit: "Zapisz do Skrzynki", detail: "Zgodność ze starszą komendą — surowa treść trafi do Skrzynki" }
 } satisfies Record<QuickAddMode, { label: string; placeholder: string; submit: string; detail: string }>;
 
@@ -123,6 +123,10 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const [scheduleChoiceOverride, setScheduleChoiceOverride] = useState<"today" | "tomorrow" | "unscheduled" | "custom">();
   const modeCopy = copy[draft.value.mode] ?? copy.inbox;
   const libraryGuidance = draft.value.mode === "library" ? knowledgeKindGuidance[draft.value.libraryKind] : undefined;
+  const detailRequired = draft.value.mode === "library" && Boolean(libraryGuidance?.detailRequired);
+  const [detailExpanded, setDetailExpanded] = useState(() => detailRequired || Boolean(draft.value.detail.trim()));
+  const detailDisclosureRef = useRef({ draftKind, storageKey: draft.storageKey, mode: draft.value.mode, libraryKind: draft.value.libraryKind, restored: draft.restored, value: draft.value });
+  const pendingDetailDraftKeyRef = useRef<string | undefined>(undefined);
   const shortNote = draft.value.mode === "library" && draft.value.libraryKind === "note";
   const scheduledFor = draft.value.scheduledFor ?? "";
   const tomorrowDate = shiftDate(currentDate, 1);
@@ -143,6 +147,29 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
     return nextOccurrenceDates(preview, currentDate, 3);
   }, [currentDate, draft.value, state.workspaceTimezone]);
   const titleForMode = ({ action: "Nowe Działanie", goal: "Nowy Cel", project: "Nowy Projekt", routine: "Nowa Rutyna", inbox: "Dodaj do Skrzynki", library: "Dodaj do Biblioteki", knowledge: "Dodaj do Skrzynki" } as Record<QuickAddMode, string>)[draft.value.mode] ?? "Dodaj";
+
+  useEffect(() => {
+    const previous = detailDisclosureRef.current;
+    const storageKey = draft.storageKey ?? draftKind;
+    const draftChanged = previous.draftKind !== draftKind || previous.storageKey !== storageKey;
+    const sessionChanged = previous.mode !== draft.value.mode
+      || previous.libraryKind !== draft.value.libraryKind;
+    const restored = draft.restored && (!previous.restored || sessionChanged);
+    if (draftChanged) {
+      pendingDetailDraftKeyRef.current = storageKey;
+      setDetailExpanded(detailRequired);
+      if (draft.value === initialDraft && !draft.restored) pendingDetailDraftKeyRef.current = undefined;
+    } else if (pendingDetailDraftKeyRef.current === storageKey && previous.value !== draft.value) {
+      pendingDetailDraftKeyRef.current = undefined;
+      setDetailExpanded(detailRequired || Boolean(draft.value.detail.trim()));
+    } else if (sessionChanged || restored) setDetailExpanded(detailRequired || Boolean(draft.value.detail.trim()));
+    detailDisclosureRef.current = { draftKind, storageKey, mode: draft.value.mode, libraryKind: draft.value.libraryKind, restored: draft.restored, value: draft.value };
+  }, [detailRequired, draft.restored, draft.storageKey, draft.value, draft.value.libraryKind, draft.value.mode, draftKind, initialDraft]);
+  const wasOpenRef = useRef(open);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) setDetailExpanded(detailRequired || Boolean(draft.value.detail.trim()));
+    wasOpenRef.current = open;
+  }, [detailRequired, draft.value.detail, open]);
 
   // Keep each type's explicit context while sharing the text and preserving
   // date, recurrence and resource settings when the user switches away.
@@ -266,7 +293,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
 
   const contextOptions = <><option value="">Bez powiązania</option>{activeGoals.length ? <optgroup label="Cele">{activeGoals.map((goal) => <option key={goal.id} value={`goal:${goal.id}`}>{goal.title}{goal.areaId ? " · w Projekcie" : ""}</option>)}</optgroup> : null}{activeAreas.length ? <optgroup label="Projekty">{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</optgroup> : null}</>;
 
-  return <Modal open={open} title={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" onClose={close} closeDisabled={saving} headingAction={<button ref={typeSummaryRef} type="button" className="quick-add-change-type" disabled={saving} aria-label="Zmień typ wpisu" aria-expanded={typePickerOpen} aria-controls="quick-add-type-choices" onClick={() => setTypePickerOpen((current) => !current)}>Zmień<ChevronDown /></button>} onEscape={() => { if (!typePickerOpen) return false; setTypePickerOpen(false); typeSummaryRef.current?.focus({ preventScroll: true }); return true; }}>
+  return <Modal open={open} title={titleForMode} className="creation-hub-modal" backdropClassName="quick-add-backdrop" exitDurationMs={180} onClose={close} closeDisabled={saving} headingAction={<button ref={typeSummaryRef} type="button" className="quick-add-change-type" disabled={saving} aria-label="Zmień typ wpisu" aria-expanded={typePickerOpen} aria-controls="quick-add-type-choices" onClick={() => setTypePickerOpen((current) => !current)}>Zmień<ChevronDown /></button>} onEscape={() => { if (!typePickerOpen) return false; setTypePickerOpen(false); typeSummaryRef.current?.focus({ preventScroll: true }); return true; }}>
     <form className="quick-add" noValidate onSubmit={(event) => void submit(event)}>
       <div className="quick-add-body" data-modal-scroll-body>
         {typePickerOpen ? <div className="quick-add-type-picker" id="quick-add-type-choices"><div className="quick-add-modes" role="group" aria-label="Co chcesz dodać?">{modes.map(({ id, label, icon: Icon }) => <button type="button" disabled={saving} aria-label={id === "inbox" ? "Do Skrzynki" : label} aria-pressed={draft.value.mode === id} key={id} onClick={() => setMode(id)}><span><Icon /></span><small>{label}</small></button>)}</div></div> : null}
@@ -278,9 +305,12 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
             <label className="field-label" htmlFor="quick-add-library-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="quick-add-library-project" disabled={saving} value={effectiveAreaId ? `area:${effectiveAreaId}` : ""} onChange={(event) => draft.setValue((current) => ({ ...current, context: event.target.value }))}><option value="">Bez Projektu</option>{activeAreas.map((area) => <option key={area.id} value={`area:${area.id}`}>{area.name}</option>)}</select>
             <span className="field-label">Powiązane Cele <span className="optional-label">opcjonalnie</span></span><MultiCombobox disabled={saving} label="Powiązane Cele" options={activeGoals.map((goal) => ({ id: goal.id, label: goal.title }))} value={normalizedContext.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds, context: effectiveAreaId ? `area:${effectiveAreaId}` : "" }))} />
           </KnowledgeNoteFields> : <div className="quick-add-structured-fields">
-            <label className="quick-add-field" htmlFor="quick-add-title"><span className="field-label">{libraryGuidance?.titleLabel ?? "Nazwa"}</span><input ref={titleRef} id="quick-add-title" required aria-label={libraryGuidance?.titleLabel ?? modeCopy.label} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && !draft.value.title.trim() || undefined} placeholder={libraryGuidance?.titlePlaceholder ?? modeCopy.placeholder.split("\n")[0]} value={draft.value.title} disabled={saving} onChange={(event) => updateTitleField(event.target.value)} /></label>
+            <label className="quick-add-field" htmlFor="quick-add-title"><span className="field-label">{libraryGuidance?.titleLabel ?? modeCopy.label}</span><input ref={titleRef} id="quick-add-title" required aria-label={libraryGuidance?.titleLabel ?? modeCopy.label} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && !draft.value.title.trim() || undefined} placeholder={libraryGuidance?.titlePlaceholder ?? modeCopy.placeholder.split("\n")[0]} value={draft.value.title} disabled={saving} onChange={(event) => updateTitleField(event.target.value)} /></label>
             {draft.value.mode === "library" && draft.value.libraryKind === "resource" ? <label className="quick-add-field" htmlFor="quick-add-library-url"><span className="field-label">Link HTTP/HTTPS <span className="optional-label">opcjonalnie</span></span><input id="quick-add-library-url" type="url" placeholder="https://…" disabled={saving} value={draft.value.sourceUrl} onChange={(event) => draft.setValue((current) => ({ ...current, sourceUrl: event.target.value }))} /></label> : null}
-            <label className="quick-add-field" htmlFor="quick-add-detail"><span className="field-label">{draft.value.mode === "goal" ? "Rezultat" : libraryGuidance?.detailLabel ?? "Opis"} {!(draft.value.mode === "library" && draft.value.libraryKind === "decision") ? <span className="optional-label">opcjonalnie</span> : null}</span><textarea id="quick-add-detail" rows={3} required={draft.value.mode === "library" && draft.value.libraryKind === "decision"} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && draft.value.mode === "library" && draft.value.libraryKind === "decision" && !draft.value.detail.trim() || undefined} placeholder={libraryGuidance?.detailPlaceholder ?? modeCopy.placeholder.split("\n")[1] ?? "Dodaj szczegóły, jeśli są potrzebne"} value={draft.value.detail} disabled={saving} onChange={(event) => updateStructuredField("detail", event.target.value)} /></label>
+            <details className="quick-add-detail-disclosure" open={detailRequired || detailExpanded}>
+              <summary aria-expanded={detailRequired || detailExpanded} onClick={(event) => { event.preventDefault(); if (!detailRequired) setDetailExpanded((expanded) => !expanded); }}><span>{detailRequired ? libraryGuidance?.detailLabel ?? "Uzasadnienie" : "Dodaj opis"}</span>{detailRequired ? <strong>Wymagane</strong> : <small>opcjonalnie</small>}<ChevronDown aria-hidden="true" /></summary>
+              <label className="quick-add-field" htmlFor="quick-add-detail"><span className="field-label">{draft.value.mode === "goal" ? "Rezultat" : libraryGuidance?.detailLabel ?? "Opis"}</span><textarea id="quick-add-detail" rows={3} required={detailRequired} aria-describedby={error ? "quick-add-error" : undefined} aria-invalid={Boolean(error) && detailRequired && !draft.value.detail.trim() || undefined} placeholder={libraryGuidance?.detailPlaceholder ?? "Dodaj szczegóły, jeśli są potrzebne"} value={draft.value.detail} disabled={saving} onChange={(event) => updateStructuredField("detail", event.target.value)} /></label>
+            </details>
           </div>}
           {draft.value.mode === "project" ? <><ProjectPresetPicker value={draft.value.projectPreset ?? "standard"} categories={state.projectCategories ?? []} categoryIds={draft.value.projectCategoryIds ?? []} onChange={(projectPreset) => draft.setValue((current) => ({ ...current, projectPreset, projectPresetManuallyChosen: true }))} disabled={saving} /><ProjectCategoryPicker value={draft.value.projectCategoryIds ?? []} onChange={(projectCategoryIds) => draft.setValue((current) => ({ ...current, projectCategoryIds, projectPreset: current.projectPresetManuallyChosen ? current.projectPreset : categoryPresetSuggestion(state.projectCategories ?? [], projectCategoryIds).preset }))} /></> : null}
           {!shortNote ? <p className={`quick-add-context-summary${normalizedContext.unavailable ? " is-invalid" : ""}`}><strong>Miejsce zapisu:</strong> {draft.value.mode === "inbox" ? "Bez powiązań — uporządkujesz później" : normalizedContext.unavailable ? `${normalizedContext.unavailable.label} — wybierz inne lub odłącz` : draft.value.mode === "library" && normalizedContext.goalIds.length ? `${contextSummary} · Cele: ${normalizedContext.goalIds.map((id) => activeGoals.find((goal) => goal.id === id)?.title).join(", ")}` : contextSummary}</p> : null}

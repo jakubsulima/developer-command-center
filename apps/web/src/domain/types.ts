@@ -354,6 +354,26 @@ export interface ReviewRecord {
   answers: Record<string, string | string[]>;
   summary: string;
   completedAt: string;
+  periodStart?: string;
+  periodEndExclusive?: string;
+  workspaceTimezone?: string;
+  revision?: number;
+  snapshot?: WeeklyReviewSnapshot;
+}
+
+export interface WeeklyReviewSnapshot {
+  version: 1;
+  period: { startDate: string; endDateExclusive: string; timeZone: string };
+  metrics: { completedActions: number; knowledgeAdded: number; progressUpdates: number };
+  summary: string;
+  note: string;
+  plan: {
+    startDate: string;
+    endDateExclusive: string;
+    selectedGoals: Array<{ id: string; title: string; outcome?: string; criteria?: Array<{ id: string; title: string; completed: boolean }> }>;
+    includeStandalone: boolean;
+    actions: Array<{ id: string; title: string; goalId?: string; scheduledFor?: string; status: GoalAction["status"]; version: number }>;
+  };
 }
 
 export interface AIProposalRecord {

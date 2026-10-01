@@ -10,7 +10,7 @@ import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
 import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
-import { StoreContext, type AppStore, type CreatedProjectReference } from "./store-context";
+import { StoreContext, type AppStore, type CreatedProjectReference, type WeeklyReviewSaveMetadata } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspaceDataFreshness";
 import { markStartupPhase, recordStartupTiming } from "../lib/startupMetrics";
@@ -29,6 +29,10 @@ type MutationScope = { collection: keyof AppState; ids: string[] };
 function operationTypeFromMutationKey(key: string) {
   const type = key.split(":", 1)[0]?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
   return type || "workspace";
+}
+
+function actionMutationLane(actionId: string, goalId?: string) {
+  return goalId ? `goal:${goalId}:actions` : `action:${actionId}`;
 }
 
 function restoreMutationScopes(current: AppState, previous: AppState, scopes: MutationScope[]) {
@@ -610,9 +614,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    async createAction(input) {
+    async createAction(input, requestedIdempotencyKey) {
       await hydrateKnowledge(input.materialKnowledgeIds ?? []);
-      const id = crypto.randomUUID();
+      const id = requestedIdempotencyKey ?? crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = stateRef.current;
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
@@ -627,8 +631,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await ensureWorkspaceState();
       let expectedVersion = 1;
       let failed = false;
+      const actionForLane = stateRef.current.actions.find((action) => action.id === actionId);
       await mutationCoordinator.run({
-        key: `action:${actionId}`,
+        key: actionMutationLane(actionId, actionForLane?.goalId),
         apply: () => {
           const previousAction = stateRef.current.actions.find((action) => action.id === actionId);
           expectedVersion = requestedVersion ?? previousAction?.version ?? 1;
@@ -661,8 +666,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let expectedVersion = requestedVersion ?? 1;
       let persistedReviewOn = reviewOn;
       let failed = false;
+      const actionForLane = stateRef.current.actions.find((action) => action.id === actionId);
       await mutationCoordinator.run({
-        key: `action:${actionId}`,
+        key: actionMutationLane(actionId, actionForLane?.goalId),
         apply: () => {
           const previous = stateRef.current;
           const previousAction = previous.actions.find((action) => action.id === actionId);
@@ -700,11 +706,64 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       });
     },
+    async undoActionCompletion(input) {
+      await ensureWorkspaceState();
+      const key = actionMutationLane(input.actionId, input.goalId);
+      const command = {
+        type: "undo_action_completion",
+        ...input,
+        changedAt: new Date().toISOString()
+      } as const;
+      const affectedProgressIds = [input.commandId];
+      let nextState: AppState | undefined;
+      let failedRemote = false;
+      try {
+        await mutationCoordinator.run({
+          key,
+          apply: () => {
+            const previous = stateRef.current;
+            const appliedState = executeDomainCommand(previous, command);
+            nextState = appliedState;
+            return {
+              nextState: appliedState,
+              rollback: (latest) => restoreMutationScopes(latest, previous, [
+                { collection: "actions", ids: [input.actionId] },
+                { collection: "progressEntries", ids: affectedProgressIds }
+              ]),
+              reapply: (fresh) => executeDomainCommand(fresh, command)
+            };
+          },
+          persist: async () => {
+            if (mode === "demo") {
+              await localRepository.save(nextState ?? stateRef.current);
+              return;
+            }
+            try {
+              await runRemote(async () => (await loadRepository()).undoActionCompletionRemote(input), key);
+            } catch (error) {
+              failedRemote = true;
+              throw error;
+            }
+          },
+          reconcile: async () => {
+            if (!failedRemote) return undefined;
+            const refreshed = await remoteQuery.refetch();
+            return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
+          }
+        });
+      } catch (error) {
+        if (mode !== "demo" && !failedRemote && error instanceof Error && /action_(version|context)_conflict/.test(error.message)) {
+          const refreshed = await remoteQuery.refetch();
+          if (refreshed.data) applyRemoteSnapshot(refreshed.data, readMetadataRef.current.get(refreshed.data as object));
+        }
+        throw error;
+      }
+    },
     async setNextAction(goalId, actionId) {
       const command = { type: "set_next_action", goalId, actionId } as const;
       const affected = stateRef.current.actions.filter((action) => action.goalId === goalId && (action.isNext || action.id === actionId)).map((action) => action.id);
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}:next-action`, command, [{ collection: "actions", ids: affected }], async () => {
-        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId), `goal:${goalId}:next-action`);
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}:actions`, command, [{ collection: "actions", ids: affected }], async () => {
+        if (mode !== "demo") await runRemote(async () => (await loadRepository()).setNextActionRemote(goalId, actionId), `goal:${goalId}:actions`);
       });
     },
     async addProgress(goalId, kind, content, actionId, knowledgeItemId, idempotencyKey) {
@@ -1215,11 +1274,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // The coordinator keeps the keyed error visible without leaking a rejected click promise.
       }
     },
-    async completeReview(summary = "", type = "weekly", answers = {}, templateVersion = 1) {
+    async completeReview(summary = "", type = "weekly", answers = {}, templateVersion = 1, idempotencyKey?: string, metadata?: WeeklyReviewSaveMetadata) {
       const completedAt = new Date().toISOString();
-      const reviewId = crypto.randomUUID();
-      const command = { type: "complete_review", reviewId, reviewType: type, templateVersion, answers, summary, completedAt } as const;
+      const reviewId = idempotencyKey ?? crypto.randomUUID();
       const current = await ensureWorkspaceState();
+      const revision = metadata ? Math.max(0, ...current.reviews.filter((review) => review.periodStart === metadata.periodStart).map((review) => review.revision ?? 0)) + 1 : undefined;
+      const command = { type: "complete_review", reviewId, reviewType: type, templateVersion, answers, summary, completedAt, ...metadata, ...(revision ? { revision } : {}) } as const;
+      let remoteReview: unknown;
       try {
         await mutationCoordinator.run({
           key: `review:${reviewId}`,
@@ -1235,7 +1296,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
           },
           persist: async () => {
-            if (mode !== "demo" && current.workspaceId && user) await runRemote(async () => await (await loadRepository()).completeReviewRemote(stateRef.current.workspaceId!, summary, answers, templateVersion), `review:${reviewId}`);
+            if (mode !== "demo" && current.workspaceId && user) await runRemote(async () => {
+              remoteReview = await (await loadRepository()).completeReviewRemote(stateRef.current.workspaceId!, summary, answers, templateVersion, idempotencyKey, metadata);
+            }, `review:${reviewId}`);
+          },
+          reconcile: async () => {
+            if (templateVersion < 3 || !remoteReview || typeof remoteReview !== "object") return undefined;
+            const persisted = remoteReview as { id?: unknown; revision?: unknown; completed_at?: unknown };
+            if (persisted.id !== reviewId || typeof persisted.revision !== "number") return undefined;
+            const currentState = stateRef.current;
+            return {
+              ...currentState,
+              reviews: currentState.reviews.map((review) => review.id === reviewId ? {
+                ...review,
+                revision: persisted.revision as number,
+                ...(typeof persisted.completed_at === "string" ? { completedAt: persisted.completed_at } : {})
+              } : review)
+            };
           }
         });
         return true;
@@ -1265,7 +1342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, dataFreshness, ensureWorkspaceState, hydrateKnowledge, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, applyRemoteSnapshot, dataFreshness, ensureWorkspaceState, hydrateKnowledge, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;

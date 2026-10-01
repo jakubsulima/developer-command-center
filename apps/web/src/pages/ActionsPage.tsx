@@ -6,6 +6,9 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionSignals } from "../components/ActionSignals";
+import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
+import { completeActionWithUndo } from "../components/completeActionWithUndo";
+import { ActionResultDialog } from "../components/ActionResultDialog";
 import { NavigationLink } from "../components/ContextNavigation";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
@@ -22,6 +25,7 @@ import { resolveRoutineTitle } from "../domain/actionPresentation";
 
 const actionStatusViews = ["open", "ready", "in_progress", "testing", "waiting", "blocked", "completed", "cancelled", "skipped"] as const satisfies readonly ActionListView[];
 const actionScheduleViews = ["open", "today", "overdue", "unscheduled"] as const satisfies readonly ActionListView[];
+const actionQuickViews = ["open", "today", "overdue"] as const satisfies readonly ActionScheduleView[];
 type ActionStatusView = typeof actionStatusViews[number];
 type ActionScheduleView = typeof actionScheduleViews[number];
 
@@ -77,13 +81,14 @@ function groupOpenActions(items: GoalAction[], view: ActionListView, today: stri
 }
 
 export function ActionsPage() {
-  const { state, mode, loading, setActionStatus } = useStore();
+  const { state, mode, loading, setActionStatus, undoActionCompletion } = useStore();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [statusActionId, setStatusActionId] = useState<string>();
+  const [resultActionId, setResultActionId] = useState<string>();
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -92,7 +97,7 @@ export function ActionsPage() {
   const view: ActionListView = isActionListView(rawView) ? rawView : "open";
   const statusView: ActionStatusView = actionStatusViews.includes(view as ActionStatusView) ? view as ActionStatusView : "open";
   const scheduleView: ActionScheduleView = isActionScheduleView(view) ? view : "open";
-  const [filtersOpen, setFiltersOpen] = useState(Boolean(params.get("project") || params.get("goal") || scheduleView !== "open"));
+  const [filtersOpen, setFiltersOpen] = useState(Boolean(params.get("project") || params.get("goal") || view !== "open"));
   const projectId = params.get("project") || undefined;
   const goalId = params.get("goal") || undefined;
   const today = localDateForTimeZone(new Date(), state.workspaceTimezone);
@@ -111,8 +116,8 @@ export function ActionsPage() {
     .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
     .map((item) => state.actions.find((current) => current.id === item.id) ?? item)
     .filter((item) => matchesActionListFilter(state, item, actionFilter));
-  const hasFilters = scheduleView !== "open" || Boolean(projectId || goalId);
-  const filterCount = Number(scheduleView !== "open") + Number(Boolean(projectId)) + Number(Boolean(goalId));
+  const hasFilters = view !== "open" || Boolean(projectId || goalId);
+  const filterCount = Number(view !== "open") + Number(Boolean(projectId)) + Number(Boolean(goalId));
   const groupedItems = groupOpenActions(items, view, today);
 
   useEffect(() => {
@@ -169,7 +174,7 @@ export function ActionsPage() {
     const next = new URLSearchParams(params);
     next.delete("project");
     next.delete("goal");
-    if (isActionScheduleView(view)) next.delete("view");
+    next.delete("view");
     setParams(next);
   };
 
@@ -197,6 +202,18 @@ export function ActionsPage() {
       }});
     });
   };
+  const completeAction = (action: GoalAction) => {
+    rememberFocus(action);
+    const key = `actions-status:${action.id}`;
+    return mutation.run(key, () => completeActionWithUndo({
+      action,
+      setActionStatus,
+      undoActionCompletion,
+      notifyUndo,
+      hasResult: state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result"),
+      onAddResult: () => setResultActionId(action.id),
+    }));
+  };
 
   const retry = () => void actionsPage.refetch();
 
@@ -205,16 +222,19 @@ export function ActionsPage() {
       <PageHeading title="Działania" eyebrow="Jedna lista wszystkich bieżących kroków" />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-toolbar-topline">
-          <div className="actions-view-tabs" role="tablist" aria-label="Status Działań">
-            {actionStatusViews.map((option) => (
-              <button key={option} type="button" role="tab" aria-selected={statusView === option} onClick={() => setStatusView(option)}>
-                {actionListViewLabels[option]}
+          <div className="actions-view-tabs" role="group" aria-label="Szybkie widoki Działań">
+            {actionQuickViews.map((option) => (
+              <button key={option} type="button" aria-pressed={statusView === "open" && scheduleView === option} onClick={() => setScheduleView(option)}>
+                {option === "open" ? "Otwarte" : actionScheduleViewLabels[option]}
               </button>
             ))}
           </div>
           <Button className="actions-filter-toggle" variant="ghost" aria-label={filterCount ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} aria-expanded={filtersOpen} aria-controls="actions-context-filters" onClick={() => setFiltersOpen((open) => !open)}><Filter /><span>Filtry</span>{filterCount ? <small aria-hidden="true">{filterCount}</small> : null}<ChevronDown className={filtersOpen ? "expanded" : ""} aria-hidden="true" /></Button>
         </div>
         {filtersOpen ? <div className="actions-filter-panel" id="actions-context-filters">
+          <div className="actions-filter-section"><label className="actions-filter-label" htmlFor="actions-status-filter">Status</label><select id="actions-status-filter" aria-label="Status Działań" value={statusView} onChange={(event) => setStatusView(event.target.value as ActionStatusView)}>
+            {actionStatusViews.map((option) => <option key={option} value={option}>{actionListViewLabels[option]}</option>)}
+          </select></div>
           {statusView === "open" ? <div className="actions-filter-section"><span className="actions-filter-label">Termin</span><div className="actions-date-filters" role="group" aria-label="Termin Działań">
             {actionScheduleViews.map((option) => <button key={option} type="button" aria-pressed={scheduleView === option} onClick={() => setScheduleView(option)}>{actionScheduleViewLabels[option]}</button>)}
           </div></div> : null}
@@ -222,7 +242,7 @@ export function ActionsPage() {
           <label><span>Projekt</span><select aria-label="Filtr Projektu" value={projectId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("project", event.target.value); else next.delete("project"); setParams(next); }}><option value="">Wszystkie projekty</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
           <label><span>Cel</span><select aria-label="Filtr Celu" value={goalId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("goal", event.target.value); else next.delete("goal"); setParams(next); }}><option value="">Wszystkie cele</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
         </div></div> : null}
-        {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{scheduleView !== "open" ? <Badge>{actionScheduleViewLabels[scheduleView]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
+        {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
       </section>
 
       <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i cel muszą pasować jednocześnie.</small> : null}</div>
@@ -235,6 +255,7 @@ export function ActionsPage() {
           const context = resolveActionContext(action, state);
           const mutationKey = `actions-list:${action.id}`;
           return <section role="listitem" ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }} className={`panel actions-list-row ${action.status} ${highlightId === action.id ? "navigation-card-highlight" : ""}`} key={action.id} data-navigation-card-id={navigationCardId("action", action.id)} data-highlighted={highlightId === action.id || undefined} tabIndex={-1}>
+            <span className="actions-list-complete">{!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={mutation.isBusy(`actions-status:${action.id}`)} onToggleComplete={() => void completeAction(action)} /> : null}</span>
             <span className="actions-list-copy"><NavigationLink className="actions-list-title" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} disabled={mutation.isBusy(`actions-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} /><small className="actions-list-context"><NavigationLink to={context.to} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}>{compactContextLabel(context)}</NavigationLink></small>{action.detail ? <small className="actions-list-detail">{action.detail}</small> : null}{mutation.error(mutationKey) || mutation.error(`actions-status:${action.id}`) ? <span className="inline-mutation-error" role="alert">{mutation.error(mutationKey) ?? mutation.error(`actions-status:${action.id}`)} <button type="button" onClick={() => void (mutation.retry(mutationKey) ?? mutation.retry(`actions-status:${action.id}`))?.()}>Spróbuj ponownie</button></span> : null}</span>
           </section>;
         })}
@@ -242,6 +263,7 @@ export function ActionsPage() {
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
       {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
+      <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
     </AppShell>
   );
 }

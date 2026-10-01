@@ -7,6 +7,8 @@ export interface WeeklyReviewSuggestion {
   title: string;
   detail: string;
   to: string;
+  count?: number;
+  items?: Array<{ id: string; title: string; to: string }>;
 }
 
 export interface WeeklyReviewSummary {
@@ -79,25 +81,30 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     id: "blocked",
     title: `Odblokuj ${blocked.length === 1 ? "jedno Działanie" : polishCount(blocked.length, "Działanie", "Działania", "Działań")}`,
     detail: "Najpierw podejmij decyzję albo nazwij osobę, od której zależy dalszy ruch.",
-    to: actionQueueRoute("blocked", blocked.length === 1 ? blocked[0]!.id : undefined)
+    to: actionQueueRoute("blocked", blocked.length === 1 ? blocked[0]!.id : undefined),
+    count: blocked.length
   });
   if (goalsWithoutNextAction.length) suggestions.push({
     id: "next-actions",
     title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednego Celu" : polishCount(goalsWithoutNextAction.length, "Celu", "Celów", "Celów")}`,
-    detail: "Cel bez konkretnego następnego Działania będzie trudny do wznowienia.",
-    to: `/goals/${goalsWithoutNextAction[0]!.id}`
+    detail: "Wybierz Cel z pełnej listy i dodaj mu konkretny następny krok.",
+    to: `/goals/${goalsWithoutNextAction[0]!.id}`,
+    count: goalsWithoutNextAction.length,
+    items: goalsWithoutNextAction.map((goal) => ({ id: goal.id, title: goal.title, to: `/goals/${goal.id}` }))
   });
   if (overdue.length) suggestions.push({
     id: "overdue",
     title: `Zdecyduj o ${overdue.length === 1 ? "jednym zaległym Działaniu" : polishCount(overdue.length, "zaległym Działaniu", "zaległych Działaniach", "zaległych Działaniach")}`,
     detail: "Przełóż, ukończ lub anuluj je, zamiast przenosić cały ciężar na kolejny tydzień.",
-    to: actionQueueRoute("overdue", overdue.length === 1 ? overdue[0]!.id : undefined)
+    to: actionQueueRoute("overdue", overdue.length === 1 ? overdue[0]!.id : undefined),
+    count: overdue.length
   });
   if (unprocessedInbox.length) suggestions.push({
     id: "inbox",
     title: `Przejrzyj ${polishCount(unprocessedInbox.length, "element kolejki Wiedzy", "elementy kolejki Wiedzy", "elementów kolejki Wiedzy")}`,
     detail: "Zacznij od tych, które mogą zmienić plan lub blokują następny krok.",
-    to: "/knowledge?section=inbox"
+    to: "/knowledge?section=inbox",
+    count: unprocessedInbox.length
   });
   if (!suggestions.length) suggestions.push({
     id: "continue",
@@ -114,7 +121,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     : "Nie dodano nowej Wiedzy ani aktualizacji postępu.";
   const attentionCount = blocked.length + overdue.length + goalsWithoutNextAction.length + unprocessedInbox.length;
   const attention = attentionCount
-    ? `Wymaga uwagi: ${polishCount(attentionCount, "sprawa", "sprawy", "spraw")}. Blokady: ${polishCount(blocked.length, "blokada", "blokady", "blokad")}; zaległe: ${polishCount(overdue.length, "Działanie", "Działania", "Działań")}; bez następnego kroku: ${polishCount(goalsWithoutNextAction.length, "Cel", "Cele", "Celów")}; Skrzynka: ${polishCount(unprocessedInbox.length, "element", "elementy", "elementów")}.`
+    ? `Wymaga uwagi: ${polishCount(attentionCount, "sygnał", "sygnały", "sygnałów")} w ${suggestions.length === 1 ? "jednej kategorii" : `${suggestions.length} kategoriach`}. Kategorie mogą dotyczyć tego samego Działania.`
     : "Nie ma pilnych sygnałów wymagających decyzji.";
 
   return {
@@ -127,6 +134,6 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     knowledgeAdded,
     progressUpdates,
     generatedSummary: `${delivery}. ${context} ${attention}`,
-    suggestions: suggestions.slice(0, 3)
+    suggestions
   };
 }
