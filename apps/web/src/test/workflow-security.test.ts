@@ -22,4 +22,17 @@ describe("bezpieczeństwo GitHub Actions", () => {
     expect(jobConfiguration).not.toMatch(/^\s+env:/m);
     expect(workflow.indexOf("pnpm install --frozen-lockfile --ignore-scripts")).toBeLessThan(workflow.indexOf("SUPABASE_ACCESS_TOKEN"));
   });
+
+  it("synchronizuje tylko main do dev przez API merge bez uruchamiania kodu repozytorium", async () => {
+    const workflow = await readFile(new URL("sync-dev.yml", workflowDirectory), "utf8");
+    expect(workflow).toContain("branches: [main]");
+    expect(workflow).toContain("if: github.ref == 'refs/heads/main'");
+    expect(workflow).toContain("contents: write");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain('"repos/${GH_REPO}/merges"');
+    expect(workflow).toContain("-f base=dev");
+    expect(workflow).toContain("-f head=main");
+    expect(workflow).toContain("exit 1");
+    expect(workflow).not.toMatch(/pull_request|uses:|secrets\.|git push|git reset/);
+  });
 });
