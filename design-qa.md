@@ -97,3 +97,15 @@ Przed zmianą pola Projekt i Cel zajmowały znaczną część pierwszego ekranu,
 - P3: na bardzo wąskim ekranie dalsze zakładki nadal wymagają poziomego gestu; częściowo widoczna kolejna etykieta sygnalizuje możliwość przewijania.
 
 final result: passed
+
+## 2026-10-25 — wspólne dopracowanie wyglądu
+
+Odświeżono granatowo-niebieskie tokeny w `apps/web/src/styles.css`. Warstwa prezentacji `apps/web/src/polish.css` ujednolica powierzchnie, typografię, kontrolki, nawigację oraz odstępy na listach i w formularzach. Kolory stanów pozostają osobną informacją od akcentu nawigacji.
+
+Na telefonie kontekstowe „Dodaj” znajduje się w górnym pasku. Dolna nawigacja ma spokojny przycisk zapisu bez pulsowania. Start zawiera wyraźne wejście do zapisu i kartę powrotu do pracy. Filtry rodzaju Wiedzy przewijają się poziomo na małym ekranie; karty Skrzynki mają własne odstępy i miejsce na akcje. Ekran `/capture` używa tej samej typografii i powierzchni, zachowując przyklejony przycisk zapisu. W szczegółach Działania przyciski kontekstu AI i edycji pozostają czytelne, a podpowiedzi Wiedzy zawijają się bez nakładania.
+
+Kontrola wizualna w lokalnym trybie demo objęła Start, Projekty, Cele, Działania, Rutyny, Bibliotekę, Skrzynkę, Podsumowanie, Ustawienia, szczegóły Projektu/Celu/Działania/Wiedzy, formularz nowego Działania, modal zapisu i pusty wynik wyszukiwania. Rozmiary: 390 × 844 oraz desktop 1440 × 1000; dodatkowo Biblioteka przy szerokości 320 px i zapis przy wysokości 480 px. Przy 480 px przycisk zapisu pozostaje w widocznym obszarze. Konsola bez błędów. To kontrola responsywnego widoku, nie test fizycznej klawiatury iOS.
+
+Dowody: [Start na telefonie](docs/design/polish-2026-10-25/start-mobile.jpg), [Start na desktopie](docs/design/polish-2026-10-25/start-desktop.jpg), [szybki zapis](docs/design/polish-2026-10-25/capture-mobile.jpg), [Biblioteka](docs/design/polish-2026-10-25/knowledge-mobile.jpg). Zmiany są lokalne; bez publikacji na produkcji.
+
+Weryfikacja kodu: typecheck, lint, produkcyjny build demo i `git diff --check` zakończyły się poprawnie. Build nadal sygnalizuje istniejący chunk powyżej 500 kB. Pełny przebieg 531 testów miał 24 niepowodzenia przy wolnym wykonaniu (507 przeszło). Powtórzenie czterech plików pojedynczo dało 119/121; końcowe dwa pliki dały 44/44 po ustawieniu limitu testu SQL na 30 s w poleceniu oraz jawnego oczekiwania 5 s na pierwszy leniwie ładowany widok w teście Celu. Asercje zachowania pozostały bez zmian. Testy wejścia do formularzy wskazują teraz przycisk w nagłówku zamiast usuniętego mobilnego duplikatu w treści.

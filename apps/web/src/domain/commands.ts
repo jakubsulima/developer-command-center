@@ -1,3 +1,5 @@
+import { applyReadingChanges } from "./readingProgress";
+import { validateSavedActionView, type SavedActionView } from "./savedActionViews";
 import { validateProjectParent } from "./projectHierarchy";
 import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WeeklyReviewSnapshot, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
@@ -9,7 +11,11 @@ export type InboxTriageIntent =
   | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
   | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
 
-export type DomainCommand = { type: "save_project_category"; id: string; name: string; color: string; defaultPreset?: ProjectPreset } | { type: "delete_project_category"; id: string } | {
+export type DomainCommand =
+  { type: "save_action_view"; view: SavedActionView; expectedVersion: number } | { type: "delete_action_view"; id: string; expectedVersion: number } | { type: "save_project_category"; id: string; name: string; color: string; defaultPreset?: ProjectPreset } | { type: "delete_project_category"; id: string } | {
+  type: "triage_existing_knowledge";
+  inboxId: string; knowledgeId: string; goalId?: string; projectId?: string; linkId: string; changedAt: string;
+} | {
   type: "triage_inbox_intent";
   inboxItemId: string;
   intent: InboxTriageIntent;
@@ -279,6 +285,12 @@ export type DomainCommand = { type: "save_project_category"; id: string; name: s
   readingStatus?: ReadingStatus;
 } | {
   type: "update_knowledge";
+  expectedVersion?: number;
+  revisitOn?: string | null;
+  currentPage?: number | null;
+  totalPages?: number | null;
+  readingLocation?: string | null;
+
   knowledgeId: string;
   kind?: KnowledgeKind;
   title?: string;
@@ -419,6 +431,19 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       defaultActions: command.defaultActions?.filter((action) => action.title.trim()).map((action) => ({ title: action.title.trim(), detail: action.detail?.trim() })) ?? item.defaultActions,
       updatedAt: command.changedAt
     } : item) };
+  }
+
+  if (command.type === "triage_existing_knowledge") {
+    const source = state.inbox.find((item) => item.id === command.inboxId);
+    if (!source) throw new Error("inbox_item_not_available");
+    if (source.status === "resolved" && source.resolvedToIds?.includes(command.knowledgeId)) return state;
+    if (source.status !== "unprocessed") throw new Error("inbox_item_not_available");
+    const item = state.knowledge.find((item) => item.id === command.knowledgeId && item.type === "resource" && !item.archivedAt && !item.trashedAt);
+    if (!item) throw new Error("knowledge_not_available");
+    if (command.goalId && command.projectId) throw new Error("single_context_required");
+    let next = state;
+    if ((command.goalId || command.projectId) && !state.knowledgeLinks.some((link) => link.knowledgeItemId === item.id && link.goalId === command.goalId && link.areaId === command.projectId && link.meaning === "material")) next = executeDomainCommand(state, { type: "link_knowledge", id: command.linkId, knowledgeItemId: item.id, goalId: command.goalId, areaId: command.projectId, meaning: "material", createdAt: command.changedAt });
+    return { ...next, inbox: next.inbox.map((item) => item.id === source.id ? { ...item, status: "resolved", resolvedToIds: [...(item.resolvedToIds ?? []), command.knowledgeId], snoozedUntil: undefined } : item) };
   }
 
   if (command.type === "triage_inbox_intent") {
@@ -711,6 +736,17 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     };
   }
 
+  if (command.type === "save_action_view" || command.type === "delete_action_view") {
+    const views = state.savedActionViews ?? [];
+    const id = command.type === "save_action_view" ? command.view.id : command.id;
+    const previous = views.find((view) => view.id === id);
+    if ((previous?.version ?? 0) !== command.expectedVersion) throw new Error("Widok zmienił się na innym urządzeniu. Odśwież listę i spróbuj ponownie.");
+    if (command.type === "delete_action_view") return { ...state, savedActionViews: views.filter((view) => view.id !== id) };
+    validateSavedActionView(command.view);
+    if (!previous && views.length >= 5) throw new Error("Możesz zapisać maksymalnie 5 widoków.");
+    return { ...state, savedActionViews: [...views.filter((view) => view.id !== id), { ...command.view, name: command.view.name.trim(), version: command.expectedVersion + 1 }] };
+  }
+
   if (command.type === "create_action") {
     const title = command.title.trim();
     if (!title) throw new Error("action_title_required");
@@ -859,6 +895,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   if (command.type === "update_knowledge") {
     const item = state.knowledge.find((candidate) => candidate.id === command.knowledgeId);
     if (!item) throw new Error("knowledge_not_found");
+    if (command.expectedVersion !== undefined && command.expectedVersion !== (item.version ?? 1)) throw new Error("knowledge_version_conflict");
     if (command.title !== undefined && !command.title.trim()) throw new Error("knowledge_title_required");
     const nextType = command.kind ?? item.type;
     const nextFormat = nextType !== "resource" || command.resourceFormat === null ? undefined : command.resourceFormat ?? item.resourceFormat;
@@ -869,8 +906,10 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!nextFormat && (command.readingStatus && command.readingStatus !== null || command.resourceAuthor && command.resourceAuthor !== null)) throw new Error("book_fields_require_format");
     if (nextType !== "resource" && state.knowledgeLinks.some((link) => link.targetKnowledgeItemId === item.id && link.meaning === "source")) throw new Error("knowledge_source_target_must_be_resource");
     validateExistingKnowledgeRelations(state, item.id, nextType);
+    const reading = applyReadingChanges({ ...item, type: nextType, resourceFormat: nextFormat }, command);
     const knowledge = state.knowledge.map((candidate) => candidate.id === command.knowledgeId ? {
       ...candidate,
+      ...reading,
       version: (candidate.version ?? 1) + 1,
       type: command.kind ?? candidate.type,
       title: command.title?.trim() ?? candidate.title,

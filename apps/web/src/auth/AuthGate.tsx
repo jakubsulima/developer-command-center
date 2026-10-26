@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { StoreProvider } from "../app/store";
 import { AppLoading } from "./AuthRoot";
@@ -6,7 +7,8 @@ import { useAuth } from "./useAuth";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { loading, user } = useAuth();
+  const { pathname } = useLocation();
   if (loading) return <AppLoading label="Sprawdzanie sesji…" />;
   if (!user) return <AuthPage />;
-  return <StoreProvider>{children}</StoreProvider>;
+  return <StoreProvider captureOnly={pathname === "/capture"}>{children}</StoreProvider>;
 }

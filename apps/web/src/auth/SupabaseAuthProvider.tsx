@@ -80,7 +80,9 @@ export default function SupabaseAuthProvider({ children }: { children: ReactNode
         setDemoOverride(false);
         return;
       }
-      await getSupabase().auth.signOut({ scope: "local" });
+      await (await import("../data/returnReminders")).detachReminderDevice();
+      const { error } = await getSupabase().auth.signOut({ scope: "local" });
+      if (error) throw error;
       queryClient.removeQueries({ queryKey: ["workspace-state"] });
       clearPersistentDrafts();
       clearUnscopedPrivateBrowserState();

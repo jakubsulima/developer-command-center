@@ -1,5 +1,6 @@
+import { selectWeeklyMetrics } from "./weeklyMetrics";
 import type { AppState } from "./types";
-import { isVisibleWorkspaceAction, selectWorkspaceActivity, workspaceWeekBounds } from "./activity";
+import { isVisibleWorkspaceAction, workspaceWeekBounds } from "./activity";
 import { polishCount } from "./labels";
 
 export interface WeeklyReviewSuggestion {
@@ -16,6 +17,7 @@ export interface WeeklyReviewSummary {
   end: Date;
   startDate: string;
   endDate: string;
+  metricsAvailable: boolean;
   completedActions: number;
   /** Historical compatibility field. Active UI and new reviews do not present Focus as current work. */
   focusMinutes: number;
@@ -55,20 +57,11 @@ export function weekBounds(now = new Date(), timeZone = "Europe/Warsaw") {
   return { start, end };
 }
 
-export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyReviewSummary {
+export function deriveWeeklyReview(state: AppState, now = new Date(), source: "demo" | "supabase" = "demo"): WeeklyReviewSummary {
   const { start, end, startDate, endDate } = workspaceWeekBounds(now, state.workspaceTimezone);
-  const activity = selectWorkspaceActivity(state, now);
-  const serverSummary = state.weeklySummary;
-  const serverSummaryMatchesPeriod = Boolean(serverSummary && (
-    (!serverSummary.periodStart && !serverSummary.periodEnd) ||
-    (serverSummary.periodStart === startDate && serverSummary.periodEnd === endDate)
-  ));
-  const completedActions = serverSummaryMatchesPeriod ? serverSummary!.completedActions : activity.completedActions;
-  const knowledgeAdded = serverSummaryMatchesPeriod ? serverSummary!.knowledgeAdded : activity.knowledgeAdded;
-  const progressUpdates = serverSummaryMatchesPeriod ? serverSummary!.progressUpdates : activity.progressUpdates;
-  // Keep the field for old state/export readers, but never infer a new Focus
-  // measurement when no compatible server aggregate is available.
-  const focusMinutes = serverSummaryMatchesPeriod ? serverSummary!.focusMinutes : 0;
+  const { available: metricsAvailable, activity } = selectWeeklyMetrics(state, now, source);
+  const { completedActions, knowledgeAdded, progressUpdates } = activity;
+  const focusMinutes = 0;
 
   const goalsWithoutNextAction = activeGoalsWithoutNextAction(state);
   const blocked = blockedActions(state);
@@ -129,6 +122,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date()): WeeklyRev
     end,
     startDate,
     endDate,
+    metricsAvailable,
     completedActions,
     focusMinutes,
     knowledgeAdded,

@@ -271,10 +271,15 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       }
       let items = pageItems(state, query.collection, query.goalId, query.actionFilter);
       let totalCount: number | undefined;
+      if (query.collection === "inbox") {
+        const filtered = (items as AppState["inbox"]).filter((item) => !query.inboxStatus || item.status === query.inboxStatus);
+        return { ...pageByCursor(filtered, query.pageSize, query.cursor, (item) => item.createdAt, "desc"), totalCount: filtered.length };
+      }
       if (query.collection === "knowledge") {
         const filter = createKnowledgeFilter(state, {
           resourceFormat: query.resourceFormat,
           readingStatus: query.readingStatus,
+          revisitOnOrBefore: query.revisitOnOrBefore,
           knowledgeKind: query.knowledgeKind,
           searchText: query.searchText,
           projectId: query.projectId,
@@ -287,7 +292,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       if (query.collection === "actions" && query.actionFilter) {
         return pageByCursor(items, query.pageSize, query.cursor, (item) => actionListSortValue(item as AppState["actions"][number], query.actionFilter!.view), actionListSortDirection(query.actionFilter.view));
       }
-      return { ...pageByCursor(items, query.pageSize, query.cursor, (item) => pageSortValue(item, query.collection)), totalCount };
+      return { ...pageByCursor(items, query.pageSize, query.cursor, (item) => query.revisitOnOrBefore ? (item as AppState["knowledge"][number]).revisitOn ?? "" : pageSortValue(item, query.collection)), totalCount };
     },
     async loadAction(id) {
       return (await load())?.actions.find((action) => action.id === id);

@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +18,7 @@ describe("infrastruktura Auth", () => {
 
   it("pokazuje loading, formularz i aplikację zgodnie ze stanem sesji", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const wrap = (value: AuthContextValue) => <QueryClientProvider client={queryClient}><AuthContext.Provider value={value}><AuthGate><div>Private app</div></AuthGate></AuthContext.Provider></QueryClientProvider>;
+    const wrap = (value: AuthContextValue) => <QueryClientProvider client={queryClient}><AuthContext.Provider value={value}><MemoryRouter><AuthGate><div>Private app</div></AuthGate></MemoryRouter></AuthContext.Provider></QueryClientProvider>;
     const { rerender } = render(wrap({ ...base, loading: true }));
     expect(screen.getByRole("status")).toHaveTextContent("Sprawdzanie sesji");
     rerender(wrap(base));

@@ -5,7 +5,7 @@ import { createLocalWorkspaceRepository, pageLocalWeeklyActivity } from "../data
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 import { pageByCursor, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem, type WeeklyActivityKind } from "../data/workspaceRepository";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
-import type { AppState, KnowledgeKind } from "../domain/types";
+import type { AppState, InboxStatus, KnowledgeKind } from "../domain/types";
 import type { ReadingStatus } from "../domain/types";
 import type { KnowledgeVisibilityFilter } from "../domain/knowledgeFilters";
 import { createKnowledgeFilter } from "../domain/knowledgeFilters";
@@ -20,7 +20,7 @@ const defaultPageSize: Record<WorkspacePageCollection, number> = {
   reviews: 20
 };
 
-export interface WorkspacePageOptions { goalId?: string; actionFilter?: ActionListFilter; resourceFormat?: "book"; readingStatus?: ReadingStatus; knowledgeKind?: KnowledgeKind; searchText?: string; projectId?: string; knowledgeGoalId?: string; knowledgeVisibility?: KnowledgeVisibilityFilter; activityKind?: WeeklyActivityKind; periodStart?: string; periodEndExclusive?: string; periodTimeZone?: string; activityProjectId?: string; activityGoalId?: string }
+export interface WorkspacePageOptions { inboxStatus?: InboxStatus; goalId?: string; actionFilter?: ActionListFilter; resourceFormat?: "book"; readingStatus?: ReadingStatus; revisitOnOrBefore?: string; knowledgeKind?: KnowledgeKind; searchText?: string; projectId?: string; knowledgeGoalId?: string; knowledgeVisibility?: KnowledgeVisibilityFilter; activityKind?: WeeklyActivityKind; periodStart?: string; periodEndExclusive?: string; periodTimeZone?: string; activityProjectId?: string; activityGoalId?: string }
 
 const localKnowledgeRevisions = new WeakMap<AppState, string>();
 const localWeeklyActivityRevisions = new WeakMap<AppState, string>();
@@ -56,7 +56,7 @@ function localWeeklyActivityRevision(state: AppState) {
 }
 
 export function workspacePageQueryKey(collection: WorkspacePageCollection, mode: string, workspaceId: string | undefined, options: WorkspacePageOptions = {}) {
-  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today, options.resourceFormat, options.readingStatus, options.knowledgeKind, options.searchText, options.projectId, options.knowledgeGoalId, options.knowledgeVisibility, options.activityKind, options.periodStart, options.periodEndExclusive, options.periodTimeZone, options.activityProjectId, options.activityGoalId] as const;
+  return ["workspace-page", collection, mode, workspaceId, options.goalId, options.actionFilter?.view, options.actionFilter?.projectId, options.actionFilter?.goalId, options.actionFilter?.today, options.resourceFormat, options.readingStatus, options.revisitOnOrBefore, options.knowledgeKind, options.searchText, options.projectId, options.knowledgeGoalId, options.knowledgeVisibility, options.activityKind, options.periodStart, options.periodEndExclusive, options.periodTimeZone, options.activityProjectId, options.activityGoalId, options.inboxStatus, options.actionFilter?.schedule] as const;
 }
 
 export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection: WorkspacePageCollection, pageSize = defaultPageSize[collection], options: WorkspacePageOptions = {}) {
@@ -64,7 +64,7 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
   const localRepository = useMemo(() => createLocalWorkspaceRepository(), []);
   const localRevision = mode !== "demo" ? undefined : collection === "knowledge"
     ? localKnowledgeRevision(state)
-    : collection === "weekly-activity" ? localWeeklyActivityRevision(state) : undefined;
+    : collection === "inbox" ? JSON.stringify(state.inbox) : collection === "weekly-activity" ? localWeeklyActivityRevision(state) : undefined;
   return useInfiniteQuery({
     queryKey: localRevision === undefined
       ? workspacePageQueryKey(collection, mode, state.workspaceId, options)
@@ -72,6 +72,10 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
     enabled: !loading && (collection !== "weekly-activity" || Boolean(options.activityKind && options.periodStart && options.periodEndExclusive && options.periodTimeZone)),
     initialPageParam: undefined as PageCursor | undefined,
     queryFn: async ({ pageParam }) => {
+      if (mode === "demo" && collection === "inbox") {
+        const items = state.inbox.filter((item) => !options.inboxStatus || item.status === options.inboxStatus);
+        return { ...pageByCursor(items, pageSize, pageParam, (item) => item.createdAt, "desc"), totalCount: items.length };
+      }
       if (mode === "demo" && collection === "actions" && options.actionFilter) {
         const actions = state.actions.filter((action) => matchesActionListFilter(state, action, options.actionFilter!));
         return pageByCursor(actions, pageSize, pageParam, (action) => actionListSortValue(action, options.actionFilter!.view), actionListSortDirection(options.actionFilter.view));
@@ -83,6 +87,7 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
         const filter = createKnowledgeFilter(state, {
           resourceFormat: options.resourceFormat,
           readingStatus: options.readingStatus,
+        revisitOnOrBefore: options.revisitOnOrBefore,
           knowledgeKind: options.knowledgeKind,
           searchText: options.searchText,
           projectId: options.projectId,
@@ -91,12 +96,13 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
         });
         const filtered = state.knowledge.filter(filter);
         return {
-          ...pageByCursor(filtered, pageSize, pageParam, (item) => item.updatedAt ?? item.createdAt ?? ""),
+          ...pageByCursor(filtered, pageSize, pageParam, (item) => options.revisitOnOrBefore ? item.revisitOn ?? "" : item.updatedAt ?? item.createdAt ?? ""),
           totalCount: filtered.length
         };
       }
       const repository = mode === "demo" ? localRepository : createSupabaseWorkspaceRepository();
-      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
+      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, inboxStatus: options.inboxStatus, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus,
+        revisitOnOrBefore: options.revisitOnOrBefore, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     select: (data) => ({

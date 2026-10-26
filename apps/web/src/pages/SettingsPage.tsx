@@ -1,3 +1,5 @@
+import { IPhoneCaptureSetup } from "../components/IPhoneCaptureSetup";
+import { ReturnReminderSettings } from "../components/ReturnReminderSettings";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -38,6 +40,8 @@ export function SettingsPage() {
 
   return <AppShell>
     <PageHeading title="Ustawienia" eyebrow="Preferencje przestrzeni pracy" />
+    <IPhoneCaptureSetup />
+    <ReturnReminderSettings />
     <p className="page-lead">Zdecyduj, jaki okres danych obejmuje Przegląd Celów z AI i jak długo można ponownie użyć zapisanego wyniku.</p>
     <Panel className="ai-review-settings-panel">
       <div className="section-heading"><div><span className="section-kicker">Przegląd Celów z AI</span><h2>Zakres i ponowne użycie wyniku</h2></div></div>

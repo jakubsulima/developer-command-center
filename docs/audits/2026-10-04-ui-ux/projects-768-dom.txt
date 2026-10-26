@@ -1,0 +1,72 @@
+- complementary:
+  - navigation "Główna nawigacja":
+    - link:
+      - /url: /
+    - link:
+      - /url: /projects
+    - link:
+      - /url: /routines
+    - link:
+      - /url: /goals
+    - link:
+      - /url: /actions
+    - link "3":
+      - /url: /knowledge
+      - generic: "3"
+    - link:
+      - /url: /review
+  - button "Otwórz menu profilu":
+    - generic: JK
+- banner:
+  - combobox "Szukaj w Projektach, Celach, Działaniach i Wiedzy"
+  - button "Dodaj nowy Projekt":
+    - generic: Nowy Projekt
+    - generic: ⌘J
+  - text: Tryb demo
+- main:
+  - text: "Projekty w widoku: 2"
+  - heading "Projekty" [level=1]
+  - 'generic "Widok: Aktywne"': Aktywne
+  - generic "Więcej opcji widoku":
+    - generic: Więcej opcji widoku
+  - option "Wszystkie kategorie" [selected]
+  - option "Praca"
+  - option "Nauka"
+  - option "Projekty osobiste"
+  - option "AI"
+  - option "Czytanie"
+  - option "Bez kategorii"
+  - heading "Czytanie 1" [level=2]:
+    - text: Czytanie
+    - generic: "1"
+  - generic: CA
+  - 'heading "Czytelnia: architektura" [level=3]'
+  - 'link "Otwórz projekt Czytelnia: architektura"':
+    - /url: /projects/area-reading
+    - generic: Otwórz
+  - 'generic "Najbliższy ruch: Bez zaplanowanej pracy"':
+    - strong: Bez zaplanowanej pracy
+  - generic: Cele
+  - strong: "0"
+  - generic: Działania
+  - strong: "0"
+  - generic: Wiedza
+  - strong: "2"
+  - heading "Bez kategorii 1" [level=2]:
+    - text: Bez kategorii
+    - generic: "1"
+  - generic: F
+  - heading "Finanse" [level=3]
+  - link "Otwórz projekt Finanse":
+    - /url: /projects/area-finanse
+    - generic: Otwórz
+  - 'generic "Najbliższy ruch: 2 zaległe — Pobrać historię transakcji"':
+    - strong: 2 zaległe
+    - generic: Pobrać historię transakcji
+  - generic: Cele
+  - strong: "1"
+  - generic: Działania
+  - strong: "3"
+  - generic: Wiedza
+  - strong: "1"
+- generic "Wyniki operacji"

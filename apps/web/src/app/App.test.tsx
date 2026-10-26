@@ -34,7 +34,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
-    const navigation = await screen.findByRole("navigation", { name: "Nawigacja mobilna" });
+    const navigation = await screen.findByRole("banner");
     await user.click(within(navigation).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("radio", { name: /Materiał/ }));
@@ -48,9 +48,9 @@ describe("goal-centric workspace", () => {
   it("przechwytuje treść bez wcześniejszej klasyfikacji", async () => {
     const user = userEvent.setup();
     renderApp("/knowledge?section=inbox&capture=true");
-    const capture = await screen.findByPlaceholderText("Zapisz treść lub link…");
+    const capture = await screen.findByPlaceholderText("Zapisz myśl, zadanie albo wklej link…");
     await user.type(capture, "Sprawdzić indeks na tabeli transakcji");
-    await user.click(screen.getByRole("button", { name: "Zapisz do Skrzynki" }));
+    await user.click(screen.getByRole("button", { name: "Zapisz" }));
     expect(screen.getAllByText("Sprawdzić indeks na tabeli transakcji").length).toBeGreaterThanOrEqual(1);
     expect(capture).toHaveValue("");
   });
@@ -60,7 +60,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/goals");
     await screen.findByRole("heading", { name: "Cele" });
-    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Cel" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowy Cel" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
     expect(within(dialog).getByText("Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Nazwa Celu"));
@@ -89,7 +89,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/projects");
     await screen.findByRole("heading", { name: "Projekty" });
-    await user.click(within(await screen.findByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Projekt" }));
+    await user.click(within(await screen.findByRole("banner")).getByRole("button", { name: "Dodaj nowy Projekt" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy projekt" });
     await user.type(within(dialog).getByLabelText("Nazwa Projektu"), "Zdrowie");
     await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, Działania i wiedza o zdrowiu");
@@ -152,7 +152,7 @@ describe("goal-centric workspace", () => {
 
     await user.click(screen.getByRole("tab", { name: "Cele" }));
     const goals = screen.getByRole("region", { name: "Cele" });
-    const mobileNavigation = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
+    const mobileNavigation = screen.getByRole("banner");
 
     expect(within(goals).getByText("Bieżący Cel")).toBeInTheDocument();
     expect(within(goals).queryByText("Osiągnięty Cel")).not.toBeInTheDocument();
@@ -375,7 +375,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/routines");
     await screen.findByRole("heading", { name: "Rutyny" });
-    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nową Rutynę" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nową Rutynę" }));
     const create = screen.getByRole("dialog", { name: "Nowe Działanie cykliczne" });
     expect(within(create).getByText("Tak zapiszesz Rutynę")).toBeInTheDocument();
     expect(within(create).getByRole("button", { name: /Co tydzień/ })).toHaveAttribute("aria-pressed", "true");
@@ -400,7 +400,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = screen.getByRole("dialog", { name: "Nowe Działanie" });
     await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
@@ -414,8 +414,8 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("link", { name: "Zobacz wszystkie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/knowledge?section=inbox&capture=true");
-    expect(screen.queryByRole("button", { name: "Dodaj Działanie" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/capture");
+    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
     expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
   });
 
@@ -426,15 +426,15 @@ describe("goal-centric workspace", () => {
       inbox: [{ id: "inbox-ai", kind: "text", content: "Zrob budzet domowy", createdAt: "2026-08-27T09:00:00.000Z", status: "unprocessed" }]
     }));
     renderApp("/knowledge?section=inbox");
-    await user.click(await screen.findByRole("button", { name: "Przetwórz" }));
+    await user.click(await screen.findByRole("button", { name: "Uporządkuj" }));
     const dialog = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
     await user.click(within(dialog).getByRole("button", { name: "Zaproponuj przez AI" }));
     const preview = await screen.findByRole("dialog", { name: "Podgląd propozycji AI" });
     expect(within(preview).getByText("Działanie")).toBeInTheDocument();
     expect(within(preview).getAllByText("Zrob budzet domowy").length).toBeGreaterThan(0);
-    expect(screen.getByRole("tab", { name: /Nowe/ })).toHaveTextContent("1");
+    expect(screen.getAllByText("Zrob budzet domowy").length).toBeGreaterThan(0);
     await user.click(within(preview).getByRole("button", { name: "Zatwierdź" }));
-    expect(await screen.findByRole("heading", { name: "Start" })).toBeInTheDocument();
+    expect(await screen.findByText("Zapisano. Możesz na tym skończyć.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Podgląd propozycji AI" })).not.toBeInTheDocument();
   });
 });

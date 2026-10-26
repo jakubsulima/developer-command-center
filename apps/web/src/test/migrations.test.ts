@@ -60,11 +60,175 @@ describe("migracje Supabase", () => {
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927195000_weekly_review_snapshots.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20260927200000_weekly_activity_detail_pages.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20261001090000_undo_action_completion_checked.sql", import.meta.url), "utf8"));
+    for (const name of ["20261004105434_knowledge_discovery", "20261004105437_saved_action_views", "20261004105439_knowledge_reading_progress", "20261004110925_ai_context_export", "20261024175333_easy_capture_and_reminders", "20261026050255_correct_context_function_volatility"]) {
+      await database.exec(await readFile(new URL(`../../../../supabase/migrations/${name}.sql`, import.meta.url), "utf8"));
+    }
   }, 30_000);
 
   afterEach(async () => {
     await database.exec("reset role");
     await database.query("select set_config('request.jwt.claim.sub', '', false)");
+  });
+
+  it("filters Inbox before pagination, retrieves an older capture and only undoes unchanged captures", async () => {
+    const user = crypto.randomUUID(), other = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1),($2)", [user,other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    const foreignWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [other]);
+    const old = crypto.randomUUID();
+    await database.query("insert into public.inbox_items(id,workspace_id,kind,raw_content,status,created_at,idempotency_key,created_by) values ($1,$2,'text','Older','snoozed',now()-interval '2 days',gen_random_uuid(),$3)", [old,workspace,user]);
+    await database.query("insert into public.inbox_items(workspace_id,kind,raw_content,idempotency_key,created_by) select $1,'text','New '||i,gen_random_uuid(),$2 from generate_series(1,55) i", [workspace,user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    const page = await scalar<{items:{id:string}[];totalCount:number}>("select public.get_inbox_filtered_page($1,'snoozed',5)",[workspace]);
+    expect(page.items.map(item=>item.id)).toEqual([old]); expect(page.totalCount).toBe(1);
+    expect((await scalar<{items:unknown[]}>("select public.get_inbox_filtered_page($1)",[foreignWorkspace])).items).toEqual([]);
+    const command = crypto.randomUUID();
+    const capture = await scalar<string>("select (public.capture_item($1,'One thought','text',$2)).id",[workspace,command]);
+    expect(await scalar("select (public.capture_item($1,'One thought','text',$2)).id",[workspace,command])).toBe(capture);
+    await expect(database.query("select public.capture_item($1,'Changed in another tab','text',$2)",[workspace,command])).rejects.toThrow("capture_payload_conflict");
+    const whitespaceKey = crypto.randomUUID();
+    expect(await scalar("select (public.capture_item($1,$2,'text',$3)).raw_content",[workspace,"  Full text\nwith whitespace  ",whitespaceKey])).toBe("  Full text\nwith whitespace  ");
+    await database.query("select public.undo_capture($1)",[capture]);
+    expect(await scalar("select status from public.inbox_items where id=$1",[capture])).toBe("discarded");
+    await expect(database.query("select public.undo_capture($1)",[old])).rejects.toThrow("capture_changed_or_unavailable");
+  });
+
+  it("isolates reminder settings, rejects invalid timezones and claims once per local day", async () => {
+    const user = crypto.randomUUID(), other = crypto.randomUUID(), device = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1),($2)",[user,other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    const subscription = JSON.stringify({ endpoint:"https://web.push.apple.com/test",keys:{auth:"auth",p256dh:"key"} });
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    await database.query("insert into public.return_reminders(workspace_id,device_id,enabled,weekdays,local_time,timezone,destination,subscription) values ($1,$2,true,array[0,1,2,3,4,5,6],date_trunc('minute',now() at time zone 'UTC')::time,'UTC','/capture',$3::jsonb)",[workspace,device,subscription]);
+    await expect(database.query("update public.return_reminders set timezone='Invalid/Zone' where workspace_id=$1",[workspace])).rejects.toThrow("invalid_reminder_timezone");
+    await expect(database.query("select public.claim_return_reminders()")).rejects.toThrow();
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[other]);
+    expect(await scalar("select count(*)::int from public.return_reminders where workspace_id=$1",[workspace])).toBe(0);
+    await database.exec("reset role; set role service_role");
+    expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(1);
+    expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(0);
+    await database.query("update public.return_reminder_deliveries set lease_until=now()-interval '1 minute',status='sent' where workspace_id=$1",[workspace]);
+    expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(0);
+    await database.exec("reset role; set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    await database.query("select public.detach_reminder_device($1)",[device]);
+    expect(await scalar("select enabled from public.return_reminders where workspace_id=$1",[workspace])).toBe(false);
+  });
+
+  it("moves beyond an already claimed batch of 100 reminders", async () => {
+    const users = Array.from({length:101},()=>crypto.randomUUID());
+    await database.query("insert into auth.users(id) select unnest($1::uuid[])",[users]);
+    await database.query("insert into public.return_reminders(workspace_id,user_id,device_id,enabled,weekdays,local_time,timezone,destination,subscription) select workspace_id,user_id,gen_random_uuid(),true,array[0,1,2,3,4,5,6],date_trunc('minute',now() at time zone 'UTC')::time,'UTC','/capture',$2::jsonb from public.workspace_members where user_id=any($1::uuid[])",[users,JSON.stringify({endpoint:"https://web.push.apple.com/test",keys:{auth:"auth",p256dh:"key"}})]);
+    await database.exec("set role service_role");
+    expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(100);
+    expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(1);
+    await database.query("update public.return_reminders set enabled=false where user_id=any($1::uuid[])",[users]);
+  });
+
+  it("combines action status and date while respecting an explicit independent pin", async () => {
+    const user = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)",[user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    await database.query("insert into public.actions(workspace_id,title,status,scheduled_for,pinned_to_today,blocker) values ($1,'Future pinned','ready','2099-01-01',true,null),($1,'Waiting overdue','blocked','2000-01-01',false,'Waiting'),($1,'Ready overdue','ready','2000-01-01',false,null)",[workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    const page = await scalar<{items:{title:string}[]}>("select public.get_actions_filtered_page($1,'blocked','overdue')",[workspace]);
+    expect(page.items.map(item=>item.title)).toEqual(['Waiting overdue']);
+    const today = await scalar<{items:{title:string}[]}>("select public.get_actions_page($1,'today')",[workspace]);
+    expect(today.items.map(item=>item.title)).toEqual(['Future pinned']);
+  });
+
+  it("finds URL duplicates beyond loaded pages and atomically resolves existing Knowledge without leaking another workspace", async () => {
+    const user = "ac040000-0000-0000-0000-000000000001", other = "ac040000-0000-0000-0000-000000000002";
+    await database.query("insert into auth.users(id) values ($1),($2)", [user,other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    const foreignWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[other]);
+    const book = "ac040000-0000-0000-0000-000000000010", project = "ac040000-0000-0000-0000-000000000011", inbox = "ac040000-0000-0000-0000-000000000012";
+    await database.query("insert into public.areas(id,workspace_id,name) values ($1,$2,'Project')",[project,workspace]);
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'resource','Existing')",[book,workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,source_url) values ($1,$2,'HTTPS://EXAMPLE.COM:443?x=1#A')",[book,workspace]);
+    await database.query("insert into public.inbox_items(id,workspace_id,kind,raw_content,idempotency_key,created_by) values ($1,$2,'link','https://example.com/?x=1#A',$1,$3)",[inbox,workspace,user]);
+    await database.query("insert into public.entities(workspace_id,type,title) values ($1,'resource','Foreign')",[foreignWorkspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    const suggestions = await scalar<{id:string}[]>("select public.get_knowledge_suggestions($1,'https://example.com/?x=1#A',null)",[workspace]);
+    expect(suggestions.map((item)=>item.id)).toEqual([book]);
+    expect(await scalar("select public.get_knowledge_suggestions($1,'https://example.com/?x=2#A',null)",[workspace])).toEqual([]);
+    const source = "ac040000-0000-0000-0000-000000000020";
+    const longUrl = `https://example.com/${Array.from({ length: 200 }, () => crypto.randomUUID()).join("")}`;
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'resource','Long source')",[source,workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,source_url) values ($1,$2,$3)",[source,workspace,longUrl]);
+    expect((await scalar<{id:string}[]>("select public.get_knowledge_suggestions($1,$2,null)",[workspace,longUrl])).map(item=>item.id)).toEqual([source]);
+    const note = "ac040000-0000-0000-0000-000000000021";
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'note','Related note')",[note,workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,detail) values ($1,$2,'')",[note,workspace]);
+    await database.query("insert into public.knowledge_links(workspace_id,knowledge_entity_id,area_id,meaning) values ($1,$2,$3,'reference')",[workspace,note,project]);
+    await database.query("insert into public.knowledge_links(workspace_id,knowledge_entity_id,target_knowledge_entity_id,meaning) values ($1,$2,$3,'source')",[workspace,note,source]);
+    for (let retry=0;retry<2;retry++) await database.query("select public.triage_existing_knowledge($1,$2,null,$3)",[inbox,book,project]);
+    expect(await scalar("select count(*)::int from public.knowledge_links where knowledge_entity_id=$1",[book])).toBe(1);
+    expect((await database.query("select raw_content,status,resolved_to_ids from public.inbox_items where id=$1",[inbox])).rows[0]).toMatchObject({raw_content:"https://example.com/?x=1#A",status:"resolved",resolved_to_ids:[book]});
+    expect((await scalar<{id:string}[]>("select public.get_knowledge_suggestions($1,null,$2,$3::uuid[])",[workspace,project,[book]])).map(item=>item.id)).toEqual([source]);
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[other]);
+    expect(await scalar("select public.get_knowledge_suggestions($1,'https://example.com/?x=1#A',null)",[workspace])).toEqual([]);
+    await expect(database.query("select public.triage_existing_knowledge($1,$2,null,$3)",[inbox,book,project])).rejects.toThrow(/not_available/);
+  });
+
+  it("enforces saved view limits, versions and ownership even for two members of the same workspace",async()=>{
+    const user="ac041000-0000-0000-0000-000000000001",other="ac041000-0000-0000-0000-000000000002";
+    await database.query("insert into auth.users(id) values ($1),($2)",[user,other]);
+    const workspace=await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    await database.query("insert into public.workspace_members(workspace_id,user_id,role) values ($1,$2,'owner')",[workspace,other]);
+    await database.exec("set role authenticated");await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    const ids = Array.from({length:6},(_,i)=>`ac041000-0000-0000-0000-${String(i+10).padStart(12,'0')}`);
+    for(let i=0;i<5;i++)await database.query("select public.save_action_view($1,$2,'Today','{\"view\":\"today\"}'::jsonb,$3,0)",[workspace,ids[i],i]);
+    await expect(database.query("select public.save_action_view($1,$2,'Sixth','{\"view\":\"open\"}'::jsonb,0,0)",[workspace,ids[5]])).rejects.toThrow(/limit/);
+    await database.query("select public.save_action_view($1,$2,'Renamed','{\"view\":\"today\"}'::jsonb,0,1)",[workspace,ids[0]]);
+    await expect(database.query("select public.delete_action_view($1,1)",[ids[0]])).rejects.toThrow(/conflict/);
+    expect(await scalar("select count(*)::int from public.saved_action_views where workspace_id=$1",[workspace])).toBe(5);
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[other]);
+    expect(await scalar("select count(*)::int from public.saved_action_views where workspace_id=$1",[workspace])).toBe(0);
+    await expect(database.query("select public.delete_action_view($1,2)",[ids[0]])).rejects.toThrow(/conflict/);
+    await database.query("select public.save_action_view($1,$2,'Own','{\"view\":\"today\"}'::jsonb,0,0)",[workspace,ids[5]]);
+    expect(await scalar("select count(*)::int from public.saved_action_views where workspace_id=$1",[workspace])).toBe(1);
+  });
+
+  it("persists shared reading position with checked versions, validates pages and filters revisit dates before pagination",async()=>{
+    const user="ac042000-0000-0000-0000-000000000001";await database.query("insert into auth.users(id) values ($1)",[user]);
+    const workspace=await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    const book="ac042000-0000-0000-0000-000000000010";
+    await database.exec("set role authenticated");await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    await database.query("select public.create_knowledge_with_relations($1,$2,'resource','Book','',null,null,null,'[]'::jsonb,$2,'book',null,'reading')",[workspace,book]);
+    await database.query("select public.update_knowledge_item_checked($1,1,$2::jsonb,null,gen_random_uuid())",[book,JSON.stringify({currentPage:0,totalPages:100,revisitOn:"2026-10-04",readingLocation:"Chapter 1"})]);
+    expect(await scalar("select public.get_knowledge_item($1)",[book])).toMatchObject({currentPage:0,totalPages:100,readingStatus:"reading",revisitOn:"2026-10-04",version:2});
+    await expect(database.query("select public.update_knowledge_item_checked($1,1,'{}'::jsonb,null,gen_random_uuid())",[book])).rejects.toThrow(/conflict/);
+    await expect(database.query("select public.update_knowledge_item_checked($1,2,'{\"currentPage\":101}'::jsonb,null,gen_random_uuid())",[book])).rejects.toThrow();
+    await expect(database.query("select public.update_knowledge_item_checked($1,2,'{\"currentPage\":1.5}'::jsonb,null,gen_random_uuid())",[book])).rejects.toThrow();
+    const page=await scalar<{items:{id:string;currentPage:number}[];totalCount:number}>("select public.get_knowledge_page($1,1,null,null,null,null,null,null,null,null,'active','2026-10-04'::date)",[workspace]);
+    expect(page.items).toHaveLength(1);expect(page.items[0]).toMatchObject({id:book,currentPage:0});expect(page.totalCount).toBe(1);
+    await database.query("select public.update_knowledge_item_checked($1,2,'{\"revisitOn\":\"2026-10-05\"}'::jsonb,null,gen_random_uuid())",[book]);
+    expect((await scalar<{totalCount:number}>("select public.get_knowledge_page($1,1,null,null,null,null,null,null,null,null,'active','2026-10-04'::date)",[workspace])).totalCount).toBe(0);
+    await database.query("select public.update_knowledge_item_checked($1,3,'{\"revisitOn\":null,\"currentPage\":null}'::jsonb,null,gen_random_uuid())",[book]);
+    expect(await scalar("select public.get_knowledge_item($1)",[book])).toMatchObject({currentPage:null,revisitOn:null,version:4});
+  });
+
+  it("loads fresh authorized AI context without visiting lists, bounds large notes and rejects foreign objects",async()=>{
+    const user="ac043000-0000-0000-0000-000000000001",other="ac043000-0000-0000-0000-000000000002";
+    await database.query("insert into auth.users(id) values ($1),($2)",[user,other]);
+    const workspace=await scalar<string>("select workspace_id from public.workspace_members where user_id=$1",[user]);
+    const project="ac043000-0000-0000-0000-000000000010",note="ac043000-0000-0000-0000-000000000011";
+    await database.query("insert into public.areas(id,workspace_id,name,description) values ($1,$2,'Fresh project','Context')",[project,workspace]);
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'note','Large note')",[note,workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,detail) values ($1,$2,repeat('ą',50000))",[note,workspace]);
+    await database.query("insert into public.knowledge_links(workspace_id,knowledge_entity_id,area_id,meaning) values ($1,$2,$3,'reference')",[workspace,note,project]);
+    await database.exec("set role authenticated");await database.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+    const data=await scalar<{areas:{name:string}[];knowledge:{detail:string}[];readLimited:boolean}>("select public.get_ai_context_data($1,'project',$2)",[workspace,project]);
+    expect(data.areas[0].name).toBe("Fresh project");expect(data.knowledge[0].detail.length).toBeLessThanOrEqual(40000);expect(data.readLimited).toBe(true);
+    expect(new TextEncoder().encode(JSON.stringify(data)).byteLength).toBeLessThan(256*1024);
+    const excluded=await scalar<{knowledge:unknown[]}>("select public.get_ai_context_data($1,'project',$2,true,true,true,true,'{}'::uuid[],$3::text[])",[workspace,project,[`knowledge:${note}`]]);expect(excluded.knowledge).toEqual([]);
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)",[other]);
+    await expect(database.query("select public.get_ai_context_data($1,'project',$2)",[workspace,project])).rejects.toThrow(/context_not_available/);
   });
 
   it("migrates hierarchy without deleting projects and supports multiple isolated categories", async () => {
@@ -124,8 +288,8 @@ describe("migracje Supabase", () => {
   it("tworzy komplet tabel publicznych z włączonym RLS", async () => {
     const tableCount = await scalar<number>("select count(*)::int from pg_tables where schemaname = 'public'");
     const rlsCount = await scalar<number>("select count(*)::int from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity");
-    expect(tableCount).toBe(34);
-    expect(rlsCount).toBe(34);
+    expect(tableCount).toBe(37);
+    expect(rlsCount).toBe(37);
   });
 
   it("zachowuje dane książki i pozwala odłączyć nowe relacje według ID klienta", async () => {
@@ -481,7 +645,8 @@ describe("migracje Supabase", () => {
     await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
 
     await database.query("select public.capture_item($1, 'Pomysł', 'text', $2)", [workspace, commandId]);
-    await database.query("select public.capture_item($1, 'Inna treść nie nadpisuje pierwszej', 'text', $2)", [workspace, commandId]);
+    await database.query("select public.capture_item($1, 'Pomysł', 'text', $2)", [workspace, commandId]);
+    await expect(database.query("select public.capture_item($1, 'Inna treść nie nadpisuje pierwszej', 'text', $2)", [workspace, commandId])).rejects.toThrow("capture_payload_conflict");
     expect(await scalar<number>("select count(*)::int from public.inbox_items where idempotency_key = $1", [commandId])).toBe(1);
     expect(await scalar<string>("select raw_content from public.inbox_items where idempotency_key = $1", [commandId])).toBe("Pomysł");
 

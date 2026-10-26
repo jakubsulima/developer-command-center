@@ -1,3 +1,8 @@
+import { formatActionDate } from "../domain/actionPresentation";
+import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
+import { localDateForTimeZone } from "../domain/activity";
+import { readingPositionLabel } from "../domain/readingProgress";
+import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import { Archive, BookMarked, Box, FileText, GitBranch, Inbox, Library, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -61,8 +66,9 @@ export function KnowledgePage() {
   }, { replace: true });
   const section = params.get("section") === "inbox" ? "inbox" : "library";
   const captureOpen = params.get("capture") === "true";
-  const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const kind = (params.get("kind") ?? "all") as KnowledgeKind | "all";
+  const now = useWorkspaceClock();
+  const revisitOnOrBefore = params.get("revisit") === "due" ? localDateForTimeZone(now, state.workspaceTimezone) : undefined;
   const booksOnly = params.get("format") === "book";
   const statusParam = params.get("readingStatus");
   const readingStatus = (["to_read", "reading", "read", "paused", "abandoned"] as string[]).includes(statusParam ?? "") ? statusParam as ReadingStatus : undefined;
@@ -84,7 +90,7 @@ export function KnowledgePage() {
   const setForm = formDraft.setValue;
   const closeGuard = useDraftCloseGuard({ dirty: formDraft.dirty, status: formDraft.status, formName: "nowa Wiedza", discard: formDraft.discard, onClose: () => setModalOpen(false), copyText: [form.title, form.detail].filter(Boolean).join("\n") });
   const requestCreateClose = () => { if (formDraft.flush()) closeGuard.requestClose(); };
-  const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { resourceFormat: booksOnly ? "book" : undefined, readingStatus, knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind, searchText: normalized, projectId: areaFilter || undefined, knowledgeGoalId: goalFilter || undefined, knowledgeVisibility: view });
+  const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { revisitOnOrBefore, resourceFormat: booksOnly ? "book" : undefined, readingStatus, knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind, searchText: normalized, projectId: areaFilter || undefined, knowledgeGoalId: goalFilter || undefined, knowledgeVisibility: view });
   const booksPage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { resourceFormat: "book" });
   const bookOptions = [...new Map([...(booksPage.data?.items ?? []), ...state.knowledge].filter((item) => item.resourceFormat === "book" && !item.archivedAt && !item.trashedAt).map((item) => [item.id, item])).values()];
   const advancedFilterCount = Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(Boolean(readingStatus)) + Number(booksOnly) + Number(view !== "active");
@@ -129,13 +135,14 @@ export function KnowledgePage() {
   const matches = useMemo(() => createKnowledgeFilter(state, {
     resourceFormat: booksOnly ? "book" : undefined,
     readingStatus,
+    revisitOnOrBefore,
     knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind,
     searchText: normalized,
     projectId: areaFilter || undefined,
     goalId: goalFilter || undefined,
     visibility: view
-  }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, state, view]);
-  const results = knowledgeItems.filter(matches).sort((left, right) => (left.updatedAt ?? left.createdAt ?? "").localeCompare(right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
+  }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, revisitOnOrBefore, state, view]);
+  const results = knowledgeItems.filter(matches).sort((left, right) => (revisitOnOrBefore ? left.revisitOn ?? "" : left.updatedAt ?? left.createdAt ?? "").localeCompare(revisitOnOrBefore ? right.revisitOn ?? "" : right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
   const create = async (event?: FormEvent) => {
     event?.preventDefault();
     const guidance = knowledgeKindGuidance[form.kind];
@@ -200,7 +207,7 @@ export function KnowledgePage() {
       <div className="knowledge-section-bar">
         <div className="knowledge-section-tabs" role="tablist" aria-label="Widoki Wiedzy">
           <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{knowledgePage.data?.totalCount ?? "…"}</small></button>
-          <button type="button" role="tab" aria-selected={section === "inbox"} onClick={() => { params.set("section", "inbox"); setParams(params); }}><Inbox /><span>Skrzynka</span>{pending > 0 ? <small>{pending}</small> : null}</button>
+          <button type="button" role="tab" aria-selected={section === "inbox"} onClick={() => { params.set("section", "inbox"); setParams(params); }}><Inbox /><span>Skrzynka</span></button>
         </div>
       </div>
       {section === "inbox" ? <KnowledgeInbox /> : <>
@@ -211,6 +218,7 @@ export function KnowledgePage() {
         </div>
         <div className="knowledge-kind-filters" role="group" aria-label="Rodzaj Wiedzy">
           <button type="button" aria-pressed={kind === "all" && !booksOnly} onClick={() => { params.delete("kind"); params.delete("format"); params.delete("readingStatus"); setParams(params); }}><BookMarked /><span>Wszystkie</span></button>
+          <button type="button" aria-pressed={Boolean(revisitOnOrBefore)} onClick={() => { if (revisitOnOrBefore) params.delete("revisit"); else { params.set("revisit", "due"); params.delete("visibility"); } setParams(params); }}>Do powrotu</button>
           <button type="button" aria-pressed={booksOnly} onClick={() => { params.delete("kind"); params.delete("readingStatus"); params.set("format", "book"); setParams(params); }}><BookMarked /><span>Książki</span></button>
           {filterableKnowledgeKinds.map((value) => {
             const Icon = knowledgeKindIcons[value];
@@ -248,14 +256,14 @@ export function KnowledgePage() {
             const relationLabel = relationCount === 1 ? "1 powiązanie" : relationCount >= 2 && relationCount <= 4 ? `${relationCount} powiązania` : `${relationCount} powiązań`;
             const sourceLink = item.type === "note" ? state.knowledgeLinks.find((link) => link.knowledgeItemId === item.id && link.meaning === "source" && link.targetKnowledgeItemId) : undefined;
             const sourceBook = sourceLink?.targetKnowledgeItemId ? sourceBooksById.get(sourceLink.targetKnowledgeItemId) : undefined;
-            const helper = item.resourceFormat === "book" ? [item.resourceAuthor, item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ") : item.sourceInboxItemId ? "Źródło: Skrzynka" : item.type === "note" ? (relationCount ? relationLabel : null) : item.detail.trim() || (relationCount ? relationLabel : null);
+            const helper = item.resourceFormat === "book" ? [item.resourceAuthor, readingPositionLabel(item), item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ") : item.sourceInboxItemId ? "Źródło: Skrzynka" : item.type === "note" ? (relationCount ? relationLabel : null) : item.detail.trim() || (relationCount ? relationLabel : null);
             const firstLine = item.detail.split("\n").find((line) => line.trim())?.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl");
             const titleIsFirstLine = item.type === "note" && Boolean(firstLine && firstLine === item.title.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl"));
             const noteDetail = titleIsFirstLine ? item.detail.replace(/^\s*[^\n]*\n?/, "").trim() : item.detail;
             const longNote = noteDetail.length > 600 || noteDetail.split("\n").length > 8;
             return (
               <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} tabIndex={-1}>
-                {item.resourceFormat === "book" ? <Badge>Książka</Badge> : <KnowledgeKindBadge kind={item.type} />}
+                {item.revisitOn ? <Badge>Powrót: {formatActionDate(item.revisitOn, state.workspaceTimezone)}</Badge> : null}{item.resourceFormat === "book" ? <Badge>Książka</Badge> : <KnowledgeKindBadge kind={item.type} />}
                 <span className="knowledge-row-content"><NavigationLink className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)}><strong className="line-clamp-2">{item.title}</strong></NavigationLink>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{sourceBook ? <NavigationLink className="knowledge-row-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy">Źródło: {sourceBook.title}{sourceBook.resourceAuthor ? ` · ${sourceBook.resourceAuthor}` : ""}</NavigationLink> : null}{item.type === "note" && noteDetail ? <>{longNote ? <details className="knowledge-row-note-details"><summary>{noteDetail.slice(0, 520).trimEnd()}… <span>Pokaż więcej</span></summary><p>{noteDetail}</p></details> : <small className="knowledge-row-note-preview">{noteDetail}</small>}</> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <div className="knowledge-actions">
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
@@ -264,7 +272,7 @@ export function KnowledgePage() {
             );
           })}
         </div></div>
-      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Dodaj na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
+      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Dodaj na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "revisit", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
       {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
       {results.length && knowledgePage.data && !knowledgePage.hasNextPage && !knowledgePage.isFetching && !knowledgePage.isError ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
@@ -300,7 +308,7 @@ export function KnowledgePage() {
         </KnowledgeNoteFields> : <>
           <label className="field-label" htmlFor="knowledge-title">{knowledgeKindGuidance[form.kind].titleLabel}</label>
           <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
-          {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /><label className="checkbox-field"><input type="checkbox" checked={form.isBook} onChange={(event) => setForm((current) => ({ ...current, isBook: event.target.checked }))} /><span>To książka</span></label>{form.isBook ? <><label className="field-label" htmlFor="knowledge-author">Autor <span className="optional-label">opcjonalnie</span></label><input id="knowledge-author" value={form.resourceAuthor} onChange={(event) => setForm((current) => ({ ...current, resourceAuthor: event.target.value }))} /><label className="field-label" htmlFor="knowledge-reading-status">Status czytania</label><select id="knowledge-reading-status" value={form.readingStatus} onChange={(event) => setForm((current) => ({ ...current, readingStatus: event.target.value as ReadingStatus }))}>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></> : null}</> : null}
+          {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /><KnowledgeSuggestions url={form.sourceUrl} target={form.areaId ? { areaId: form.areaId } : form.goalIds[0] ? { goalId: form.goalIds[0] } : undefined} /><label className="checkbox-field"><input type="checkbox" checked={form.isBook} onChange={(event) => setForm((current) => ({ ...current, isBook: event.target.checked }))} /><span>To książka</span></label>{form.isBook ? <><label className="field-label" htmlFor="knowledge-author">Autor <span className="optional-label">opcjonalnie</span></label><input id="knowledge-author" value={form.resourceAuthor} onChange={(event) => setForm((current) => ({ ...current, resourceAuthor: event.target.value }))} /><label className="field-label" htmlFor="knowledge-reading-status">Status czytania</label><select id="knowledge-reading-status" value={form.readingStatus} onChange={(event) => setForm((current) => ({ ...current, readingStatus: event.target.value as ReadingStatus }))}>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></> : null}</> : null}
           <label className="field-label" htmlFor="knowledge-detail">{knowledgeKindGuidance[form.kind].detailLabel}{!knowledgeKindGuidance[form.kind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label>
           <textarea id="knowledge-detail" rows={4} required={knowledgeKindGuidance[form.kind].detailRequired} placeholder={knowledgeKindGuidance[form.kind].detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
           <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>

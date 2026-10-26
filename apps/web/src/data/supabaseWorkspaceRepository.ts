@@ -36,15 +36,20 @@ async function withActionReviewDates(actions: GoalAction[]): Promise<GoalAction[
   return actions.map((action) => ({ ...action, reviewOn: dates.get(action.id) ?? action.reviewOn ?? undefined }));
 }
 
-function decodeWeeklySummary(value: unknown, label = "WorkspaceCore.weeklySummary") {
+export function decodeWeeklySummary(value: unknown, label = "WorkspaceCore.weeklySummary") {
   const weeklySummary = objectPayload(value, label);
+  const count = (key: string) => {
+    const value = weeklySummary[key];
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`${label}.${key}: nieprawidłowy licznik`);
+    return value;
+  };
   return {
     periodStart: optionalStringPayload(weeklySummary.periodStart),
     periodEnd: optionalStringPayload(weeklySummary.periodEnd),
-    completedActions: Number(weeklySummary.completedActions ?? 0),
-    focusMinutes: Number(weeklySummary.focusMinutes ?? 0),
-    knowledgeAdded: Number(weeklySummary.knowledgeAdded ?? 0),
-    progressUpdates: Number(weeklySummary.progressUpdates ?? 0)
+    completedActions: count("completedActions"),
+    focusMinutes: count("focusMinutes"),
+    knowledgeAdded: count("knowledgeAdded"),
+    progressUpdates: count("progressUpdates")
   };
 }
 
@@ -174,8 +179,10 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (query.collection === "actions" && (!isUuid(query.actionFilter?.projectId) || !isUuid(query.actionFilter?.goalId))) {
         return { items: [], nextCursor: undefined } as Page<WorkspacePageItem>;
       }
-      const { data, error } = await getSupabase().rpc(query.collection === "actions" && query.actionFilter?.view === "waiting" ? "get_waiting_actions_page" : pageRpc[query.collection], {
+      const { data, error } = await getSupabase().rpc(query.collection === "inbox" && query.inboxStatus ? "get_inbox_filtered_page" : query.collection === "actions" && query.actionFilter?.schedule ? "get_actions_filtered_page" : query.collection === "actions" && query.actionFilter?.view === "waiting" ? "get_waiting_actions_page" : pageRpc[query.collection], {
         target_workspace_id: query.workspaceId,
+        ...(query.collection === "inbox" && query.inboxStatus ? { target_status: query.inboxStatus } : {}),
+        ...(query.collection === "actions" && query.actionFilter?.schedule ? { target_schedule: query.actionFilter.schedule } : {}),
         ...(query.collection === "goal-progress" ? { target_goal_id: query.goalId ?? null } : {}),
         ...(query.collection === "actions" ? {
           target_view: query.actionFilter?.view ?? "open",
@@ -191,9 +198,10 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
           target_project_id: query.activityProjectId ?? null,
           target_goal_id: query.activityGoalId ?? null
         } : {}),
-        ...(query.collection === "knowledge" && (query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim() || query.projectId || query.knowledgeGoalId || query.knowledgeVisibility) ? {
+        ...(query.collection === "knowledge" && (query.revisitOnOrBefore || query.resourceFormat || query.readingStatus || query.knowledgeKind || query.searchText?.trim() || query.projectId || query.knowledgeGoalId || query.knowledgeVisibility) ? {
           target_resource_format: query.resourceFormat ?? null,
           target_reading_status: query.readingStatus ?? null,
+          ...(query.revisitOnOrBefore ? { target_revisit_on: query.revisitOnOrBefore } : {}),
           target_knowledge_kind: query.knowledgeKind ?? null,
           target_search_text: query.searchText ?? null,
           target_project_id: query.projectId ?? null,

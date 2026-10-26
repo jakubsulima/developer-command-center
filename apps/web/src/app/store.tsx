@@ -1,3 +1,6 @@
+import { getSupabase } from "../lib/supabase";
+import { workspaceWeekBounds } from "../domain/activity";
+import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
@@ -9,7 +12,7 @@ import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
-import type { ActionResultInput, AppState, CreateKnowledgeInput, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
+import type { ActionResultInput, AppState, CreateKnowledgeInput, InboxItem, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference, type WeeklyReviewSaveMetadata } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -116,7 +119,7 @@ function loadDemoState(): AppState {
   }
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({ children, captureOnly = false }: { children: ReactNode; captureOnly?: boolean }) {
   const { mode, user } = useAuth();
   const queryClient = useQueryClient();
   const identityKey = `${mode}:${user?.id ?? "anonymous"}`;
@@ -153,7 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const aiReviewSettingsSignatureRef = useRef<string | undefined>(undefined);
 
   const remoteQuery = useQuery({
-    queryKey: ["workspace-state", user?.id],
+    queryKey: captureOnly ? ["workspace-state", user?.id, "capture"] : ["workspace-state", user?.id],
     enabled: mode === "supabase" && Boolean(user),
     // Reconnect refreshes are owned by WorkspaceDataFreshness below. Leaving
     // React Query's default enabled would schedule the same full read twice.
@@ -167,7 +170,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const writeRevision = mutationCoordinator.getWriteRevision();
       const startedAt = performance.now();
       try {
-        const snapshot = await (await loadRepository()).loadSupabaseState(user!.id);
+        const repository = await loadRepository();
+        const snapshot = await (captureOnly ? repository.loadCaptureWorkspace(user!.id) : repository.loadSupabaseState(user!.id));
         readMetadataRef.current.set(snapshot as object, { identityKey: requestedIdentity, writeRevision });
         return snapshot;
       } finally {
@@ -232,6 +236,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const invalidateActiveWorkspaceQueries = useCallback(async () => {
     await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["ai-context"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions"], refetchType: "active" }),
+      queryClient.invalidateQueries({ queryKey: ["workspace-current-plan"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["workspace-page"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["actions-highlight"], refetchType: "active" }),
       queryClient.invalidateQueries({ queryKey: ["workspace-action"], refetchType: "active" }),
@@ -317,6 +324,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshWorkspace]);
 
+  // Batch post-mutation reads; the coordinator rejects snapshots started before a newer write.
+  useEffect(() => {
+    if (mode !== "supabase") return;
+    let lastRevision = mutationCoordinator.getWriteRevision();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = mutationCoordinator.subscribe(() => {
+      const revision = mutationCoordinator.getWriteRevision();
+      const snapshot = mutationCoordinator.getSyncState();
+      if (revision === lastRevision || snapshot.pendingCount > 0) return;
+      lastRevision = revision;
+      clearTimeout(timer);
+      timer = setTimeout(() => { void mutationCoordinator.whenIdle().then(() => refreshWorkspace(true)).catch(() => undefined); }, 150);
+    });
+    return () => { clearTimeout(timer); unsubscribe(); };
+  }, [mode, mutationCoordinator, refreshWorkspace]);
+
+  const calendarNow = useWorkspaceClock();
+  const calendarWeek = workspaceWeekBounds(calendarNow, state.workspaceTimezone).startDate;
+  const checkedCalendarKey = useRef<{ identity: string; workspaceId?: string; key: string } | undefined>(undefined);
+  useEffect(() => {
+    const key = `${identityKey}:${state.workspaceId}:${calendarWeek}:${state.workspaceTimezone}`;
+    const previous = checkedCalendarKey.current;
+    if (previous?.key === key) return;
+    checkedCalendarKey.current = { identity: identityKey, workspaceId: state.workspaceId, key };
+    if (!previous || previous.identity !== identityKey || previous.workspaceId !== state.workspaceId) return;
+    if (mode === "supabase" && state.workspaceId && state.weeklySummary?.periodStart !== calendarWeek) {
+      void refreshWorkspace(true).catch(() => undefined);
+    }
+  }, [calendarWeek, identityKey, mode, state.workspaceId, state.workspaceTimezone, state.weeklySummary?.periodStart, refreshWorkspace]);
+
   const aiReviewSignature = useMemo(() => JSON.stringify({
     goals: state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active"),
     criteria: state.goalCriteria,
@@ -383,9 +420,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [aiReviewSettingsSignature, refreshLatestGoalReview]);
 
   useEffect(() => {
-    if ((!state.workspaceId && mode !== "demo") || aiGoalReviewReadStatus !== "idle") return;
+    if (captureOnly || (!state.workspaceId && mode !== "demo") || aiGoalReviewReadStatus !== "idle") return;
     void refreshLatestGoalReview();
-  }, [aiGoalReviewReadStatus, mode, refreshLatestGoalReview, state.workspaceId]);
+  }, [aiGoalReviewReadStatus, captureOnly, mode, refreshLatestGoalReview, state.workspaceId]);
 
 
   const runRemote = useCallback(async (operation: () => Promise<void>, key = "workspace") => {
@@ -944,6 +981,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     async linkKnowledge(knowledgeItemId, target, meaning = "reference") {
+      const existing = stateRef.current.knowledgeLinks.find((link) => link.knowledgeItemId === knowledgeItemId && link.meaning === meaning && Object.entries(target).every(([key, value]) => link[key as keyof typeof link] === value));
+      if (existing) return existing.id;
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const current = await ensureWorkspaceState();
@@ -966,6 +1005,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist: async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).linkKnowledgeRemote(stateRef.current.workspaceId!, id, knowledgeItemId, target, meaning), `knowledge-link:${id}`);
         }
+      });
+      return id;
+    },
+    async triageExistingKnowledge(inboxId, knowledgeId, goalId, projectId) {
+      await hydrateKnowledge([knowledgeId]);
+      const command = { type: "triage_existing_knowledge", inboxId, knowledgeId, goalId, projectId, linkId: crypto.randomUUID(), changedAt: new Date().toISOString() } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `inbox:${inboxId}`, command, [{ collection: "inbox", ids: [inboxId] }, { collection: "knowledgeLinks", ids: [command.linkId] }], async () => {
+        if (mode === "demo") return;
+        const { getSupabase } = await import("../lib/supabase");
+        const { error } = await getSupabase().rpc("triage_existing_knowledge", { target_inbox_id: inboxId, target_knowledge_id: knowledgeId, target_goal_id: goalId ?? null, target_project_id: projectId ?? null, target_link_id: command.linkId });
+        if (error) throw new Error("Nie udało się powiązać istniejącego materiału.");
       });
     },
     async unlinkKnowledge(linkId) {
@@ -1071,26 +1121,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).setLearningGoalStatusRemote(goalId, status, reason), `learning-goal:${goalId}`);
       });
     },
-    async capture(content, kind = "text") {
+    async capture(content, kind = "text", idempotencyKey) {
+      const captureIdentity = identityRef.current;
       const normalized = normalizeCapture(content, kind);
       const trimmed = normalized.content;
       kind = normalized.kind;
-      const optimisticId = crypto.randomUUID();
+      const optimisticId = idempotencyKey ?? crypto.randomUUID();
+      let confirmed: InboxItem | undefined;
       const optimisticItem = { id: optimisticId, kind, content: trimmed, createdAt: new Date().toISOString(), status: "unprocessed" as const };
       const current = await ensureWorkspaceState();
+      if (identityRef.current !== captureIdentity) throw new Error("Sesja zmieniła się podczas zapisu.");
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       await mutationCoordinator.run({
         key: `inbox:${optimisticId}`,
         apply: () => {
           const previous = stateRef.current;
           return {
-            nextState: { ...previous, inbox: [optimisticItem, ...previous.inbox] },
+            nextState: { ...previous, inbox: previous.inbox.some((item) => item.id === optimisticId) ? previous.inbox : [optimisticItem, ...previous.inbox] },
             rollback: (currentState: AppState) => restoreMutationScopes(currentState, previous, [{ collection: "inbox", ids: [optimisticId] }]),
             reapply: (fresh: AppState) => ({ ...fresh, inbox: fresh.inbox.some((item) => item.id === optimisticId) ? fresh.inbox : [optimisticItem, ...fresh.inbox] })
           };
         },
         persist: async () => {
-          if (mode !== "demo") await runRemote(async () => { await (await loadRepository()).captureRemote(stateRef.current.workspaceId!, trimmed, kind, optimisticId); }, `inbox:${optimisticId}`);
+          if (mode !== "demo") await runRemote(async () => { confirmed = await (await loadRepository()).captureRemote(current.workspaceId!, trimmed, kind, optimisticId); }, `inbox:${optimisticId}`);
+        }
+      });
+      if (identityRef.current !== captureIdentity) throw new Error("Sesja zmieniła się podczas zapisu.");
+      const receipt = confirmed ?? stateRef.current.inbox.find((item) => item.id === optimisticId) ?? optimisticItem;
+      const next = { ...stateRef.current, inbox: [receipt, ...stateRef.current.inbox.filter((item) => item.id !== optimisticId && item.id !== receipt.id)] };
+      stateRef.current = next;
+      setState(next);
+      return receipt;
+    },
+    async undoCapture(id) {
+      const current = await ensureWorkspaceState();
+      const item = current.inbox.find((entry) => entry.id === id);
+      if ((item && item.status !== "unprocessed") || (!item && mode === "demo")) throw new Error("Wpis został już zmieniony. Otwórz go w Skrzynce.");
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, `inbox:${id}`, { type: "set_inbox_status", inboxItemId: id, status: "discarded", changedAt: new Date().toISOString() }, [{ collection: "inbox", ids: [id] }], async () => {
+        if (mode !== "demo") {
+          const { error } = await getSupabase().rpc("undo_capture", { target_id: id });
+          if (error) throw new Error("Wpis został zmieniony lub cofnięcie się nie udało. Otwórz Skrzynkę.");
         }
       });
     },
@@ -1177,6 +1247,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return knowledgeId;
     },
+    async saveActionView(view, expectedVersion) {
+      const command = { type: "save_action_view", view, expectedVersion } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, "saved-action-views", command, [{ collection: "savedActionViews", ids: [view.id] }], async () => {
+        if (mode !== "demo") {
+          const { error } = await getSupabase().rpc("save_action_view", { target_workspace_id: stateRef.current.workspaceId, target_id: view.id, target_name: view.name, target_filters: view.filters, target_position: view.position, expected_version: expectedVersion });
+          if (error) throw new Error(error.message.includes("limit") ? "Możesz zapisać maksymalnie 5 widoków." : error.message.includes("conflict") ? "Widok zmienił się na innym urządzeniu. Odśwież listę." : "Nie udało się zapisać widoku. Sprawdź dostępność migracji i spróbuj ponownie.");
+        }
+      });
+    },
+    async deleteActionView(id, expectedVersion) {
+      const command = { type: "delete_action_view", id, expectedVersion } as const;
+      await runScopedCommand(mutationCoordinator, () => stateRef.current, "saved-action-views", command, [{ collection: "savedActionViews", ids: [id] }], async () => {
+        if (mode !== "demo") {
+          const { error } = await getSupabase().rpc("delete_action_view", { target_id: id, expected_version: expectedVersion });
+          if (error) throw new Error("Nie udało się usunąć widoku. Odśwież listę i spróbuj ponownie.");
+        }
+      });
+    },
     async updateKnowledge(knowledgeId, changes, requestedVersion) {
       await hydrateKnowledge([knowledgeId]);
       let expectedVersion = 1;
@@ -1195,7 +1283,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const { goalIds: _goalIds, ...knowledgeChanges } = changes;
           void _goalIds;
           const linkIds = [...previous.knowledgeLinks.filter((link) => link.knowledgeItemId === knowledgeId && link.goalId).map((link) => link.id), ...(goalLinks ?? []).map((link) => link.id)];
-          const command = { type: "update_knowledge", knowledgeId, ...knowledgeChanges, goalLinks, changedAt } as const;
+          const command = { type: "update_knowledge", knowledgeId, expectedVersion, ...knowledgeChanges, goalLinks, changedAt } as const;
           return {
             nextState: executeDomainCommand(previous, command),
             rollback: (current: AppState) => restoreMutationScopes(current, previous, [{ collection: "knowledge", ids: [knowledgeId] }, { collection: "knowledgeLinks", ids: linkIds }]),

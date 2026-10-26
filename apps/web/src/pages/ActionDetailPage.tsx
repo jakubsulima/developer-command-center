@@ -1,3 +1,5 @@
+import { AIContextExport } from "../components/AIContextExport";
+import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
 import { CalendarDays, Check, Flag, FolderKanban, Pin, PinOff, ChevronRight, LockKeyhole, Pencil } from "lucide-react";
 import { useState } from "react";
@@ -86,7 +88,7 @@ export function ActionDetailPage() {
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} showBack />
-    <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div>
+    <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><div className="action-heading-tools"><AIContextExport target={{ type: "action", id: action.id }} /><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div></div>
       {parentLabel && context.name ? <NavigationLink className="action-parent-link" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><span className="action-parent-icon">{parentIcon}</span><span>{parentLabel}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
       <div className="action-status-row"><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="detail" disabled={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusView("statuses")} /></div>
     </header>
@@ -101,7 +103,7 @@ export function ActionDetailPage() {
           {state.actions.some((candidate) => candidate.id === action.id) ? <Button loading={mutation.isBusy(key)} onClick={() => void changePin()}>{action.pinnedToToday ? <PinOff /> : <Pin />}{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button> : null}
         </div>
       </main>
-      <aside className="action-detail-aside"><ActionKnowledgeRelations action={action} variant="detail" onAddResult={() => setResultOpen(true)} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Działanie: ${action.title}` }} /></aside>
+      <aside className="action-detail-aside"><KnowledgeSuggestions projectId={action.areaId ?? state.goals.find((goal) => goal.id === action.goalId)?.areaId} target={{ actionId: action.id }} /><ActionKnowledgeRelations action={action} variant="detail" onAddResult={() => setResultOpen(true)} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Działanie: ${action.title}` }} /></aside>
     </div>
   </div><ActionStatusDialog action={action} open={Boolean(statusView)} initialView={statusView} busy={mutation.isBusy(statusKey)} error={mutation.error(statusKey)} onClose={() => setStatusView(undefined)} onChange={changeStatus} /><ActionEditDialog action={action} open={editOpen} busy={mutation.isBusy(editKey)} error={mutation.error(editKey)} onClose={() => setEditOpen(false)} onSave={saveEdit} /><ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} /></AppShell>;
 }

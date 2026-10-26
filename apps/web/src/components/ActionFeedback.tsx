@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, CheckCircle2, RotateCcw, X } from "lucide-react";
 import { Button } from "./ui";
 import { ActionFeedbackContext, type ActionFeedbackValue, type UndoNoticeInput } from "./action-feedback-context";
@@ -13,13 +13,18 @@ interface UndoNotice extends UndoNoticeInput {
 }
 
 export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
+  const interacting = useRef(new Set<string>());
+  const lastTick = useRef(Date.now());
   const [notices, setNotices] = useState<UndoNotice[]>([]);
 
   useEffect(() => {
     if (!notices.length) return;
+    lastTick.current = Date.now();
     const timer = window.setInterval(() => {
       const now = Date.now();
-      setNotices((current) => current.filter((notice) => notice.working || notice.error || notice.expiresAt > now));
+      const elapsed = now - lastTick.current;
+      lastTick.current = now;
+      setNotices((current) => current.map((notice) => interacting.current.has(notice.id) ? { ...notice, expiresAt: notice.expiresAt + elapsed } : notice).filter((notice) => notice.working || notice.error || notice.kind === "error" || notice.expiresAt > now));
     }, 250);
     return () => window.clearInterval(timer);
   }, [notices.length]);
@@ -54,7 +59,7 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="undo-stack" aria-live="polite" aria-label="Wyniki operacji">
         {notices.map((notice) => (
-          <section className={`undo-notice ${notice.error || notice.kind === "error" ? "undo-notice-error" : ""}`} role={notice.error || notice.kind === "error" ? "alert" : "status"} key={notice.id}>
+          <section className={`undo-notice ${notice.error || notice.kind === "error" ? "undo-notice-error" : ""}`} role={notice.error || notice.kind === "error" ? "alert" : "status"} key={notice.id} onPointerEnter={() => interacting.current.add(notice.id)} onPointerLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) interacting.current.delete(notice.id); }} onFocus={() => interacting.current.add(notice.id)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(":hover")) interacting.current.delete(notice.id); }}>
             <span className="undo-notice-icon">{notice.error || notice.kind === "error" ? <AlertCircle /> : <CheckCircle2 />}</span>
             <span><strong>{notice.message}</strong>{notice.error && <small>Cofnięcie nie powiodło się: {notice.error}</small>}</span>
             {notice.kind === "undo" || notice.action ? <div className="undo-notice-actions">

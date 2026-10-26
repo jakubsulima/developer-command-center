@@ -1,5 +1,7 @@
+import { selectWeeklyMetrics } from "./weeklyMetrics";
+import { blockerTiming, compareRecommendedActions } from "./actionRecommendation";
 import type { AppState, Goal, GoalAction, InboxItem } from "./types";
-import { isActionInTodayProjection, isVisibleWorkspaceAction, localDateForTimeZone, selectWorkspaceActivity } from "./activity";
+import { isActionInTodayProjection, isVisibleWorkspaceAction, localDateForTimeZone } from "./activity";
 import { routeForEntity } from "./routes";
 import { activeGoalsWithoutNextAction, blockedActions, isOpenAction, knowledgeQueue, overdueActions } from "./weeklyReview";
 
@@ -43,6 +45,7 @@ export interface HomeSummary {
   attentionCount: number;
   recommendation: HomeRecommendation;
   activity: HomeActivitySummary;
+  metricsAvailable: boolean;
   goalsWithoutNextAction: Goal[];
   knowledgeQueue: InboxItem[];
 }
@@ -95,28 +98,30 @@ function actionContext(action: GoalAction, state: AppState) {
   return "Samodzielne Działanie";
 }
 
-export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummary {
+export function deriveHomeSummary(state: AppState, now = new Date(), source: "demo" | "supabase" = "demo", priorityGoalIds: readonly string[] = []): HomeSummary {
   const today = localDateForTimeZone(now, state.workspaceTimezone);
-  const activity = selectWorkspaceActivity(state, now);
-  const blocked = sortByAge(blockedActions(state));
+  const { activity, available: metricsAvailable } = selectWeeklyMetrics(state, now, source);
+  const allBlocked = sortByAge(blockedActions(state));
+  const blocked = allBlocked.filter((action) => blockerTiming(action, today) === "due").sort((a, b) => a.reviewOn!.localeCompare(b.reviewOn!) || a.id.localeCompare(b.id));
+  const undatedBlocked = allBlocked.filter((action) => blockerTiming(action, today) === "undated");
   const overdue = sortByAge(
     overdueActions(state, today).filter((action) => action.status !== "blocked"),
   );
-  const goalsWithoutNextAction = [...activeGoalsWithoutNextAction(state)].sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.id.localeCompare(b.id));
+  const goalsWithoutNextAction = [...activeGoalsWithoutNextAction(state)].filter((goal) => !state.actions.some((action) => action.goalId === goal.id && isVisibleWorkspaceAction(state, action) && ((action.status === "blocked" && blockerTiming(action, today) === "future") || (action.isNext && action.scheduledFor && action.scheduledFor > today)))).sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.id.localeCompare(b.id));
   const activeGoalIds = new Set(state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").map((goal) => goal.id));
   const nextActions = state.actions
-    .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && action.isNext && Boolean(action.goalId && activeGoalIds.has(action.goalId)))
-    .sort((a, b) => (a.createdAt ?? "9999").localeCompare(b.createdAt ?? "9999") || a.goalId!.localeCompare(b.goalId!) || a.id.localeCompare(b.id));
+    .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && ["ready", "in_progress", "testing"].includes(action.status) && (!action.scheduledFor || action.scheduledFor <= today) && action.isNext && Boolean(action.goalId && activeGoalIds.has(action.goalId)))
+    .sort((a, b) => compareRecommendedActions(a, b, priorityGoalIds));
   const queue = [...knowledgeQueue(state)].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const todayActions = state.actions
-    .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && isActionInTodayProjection(action, today))
-    .sort((a, b) => (a.scheduledFor ?? today).localeCompare(b.scheduledFor ?? today) || a.position - b.position || a.id.localeCompare(b.id));
+    .filter((action) => isOpenAction(action) && action.status !== "blocked" && isVisibleWorkspaceAction(state, action) && isActionInTodayProjection(action, today))
+    .sort((a, b) => compareRecommendedActions(a, b, priorityGoalIds));
   const upcomingActions = state.actions
     .filter((action) => isOpenAction(action) && isVisibleWorkspaceAction(state, action) && Boolean(action.scheduledFor && action.scheduledFor > today && action.scheduledFor <= shiftDate(today, 7)))
     .sort((a, b) => a.scheduledFor!.localeCompare(b.scheduledFor!) || a.position - b.position || a.id.localeCompare(b.id));
 
   const attentionSignals: HomeAttentionSignal[] = [
-    ...blocked.map((action) => signalForAction("blocked", action)),
+    ...[...blocked, ...undatedBlocked].map((action) => signalForAction("blocked", action)),
     ...overdue.map((action) => signalForAction("overdue", action)),
     ...goalsWithoutNextAction.map((goal) => ({ id: `goal-${goal.id}`, kind: "goal_without_next_action" as const, title: goal.title, detail: "Aktywny Cel nie ma gotowego następnego Działania.", to: `/goals/${encodeURIComponent(goal.id)}`, goalId: goal.id })),
     ...queue.map((item) => ({ id: `knowledge-${item.id}`, kind: "knowledge_queue" as const, title: item.content, detail: "Element Skrzynki czeka na decyzję.", to: `/knowledge?section=inbox&status=${item.status}&item=${encodeURIComponent(item.id)}`, inboxItemId: item.id }))
@@ -127,8 +132,10 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
   else if (overdue[0]) recommendation = { kind: "overdue", title: `Zdecyduj o zaległym Działaniu: ${overdue[0].title}`, detail: "Ukończ, przełóż albo anuluj — nie przenoś go bez decyzji.", to: actionQueueRoute("overdue", overdue[0].id) };
   else if (todayActions[0]) recommendation = { kind: "today_action", title: `Zacznij od: ${todayActions[0].title}`, detail: todayActions[0].scheduledFor === today ? "To najbliższe Działanie zaplanowane na dziś." : "To Działanie zostało przez Ciebie przypięte na dziś.", to: actionRoute(todayActions[0]) };
   else if (nextActions[0]) recommendation = { kind: "next_action", title: nextActions[0].title, detail: "To świadomie wybrane następne Działanie dla aktywnego Celu.", context: actionContext(nextActions[0], state), to: actionRoute(nextActions[0]) };
+  else if (undatedBlocked[0]) recommendation = { kind: "blocked", title: `Ustal, kiedy wrócić do blokady: ${undatedBlocked[0].title}`, detail: undatedBlocked[0].blocker ?? "Wybierz datę ponownego sprawdzenia.", to: actionQueueRoute("blocked", undatedBlocked[0].id) };
   else if (goalsWithoutNextAction[0]) recommendation = { kind: "goal_without_next_action", title: `Ustal następny krok: ${goalsWithoutNextAction[0].title}`, detail: "Aktywny Cel potrzebuje jednego konkretnego ruchu.", to: `/goals/${encodeURIComponent(goalsWithoutNextAction[0].id)}` };
   else if (queue[0]) recommendation = { kind: "knowledge_queue", title: `Przejrzyj kolejkę Wiedzy: ${queue[0].content}`, detail: "Podejmij decyzję, zanim element zacznie obciążać pamięć.", to: `/knowledge?section=inbox&status=${queue[0].status}&item=${encodeURIComponent(queue[0].id)}` };
+  else if (allBlocked.length || upcomingActions.length) recommendation = { kind: "calm", title: "Brak pilnego kroku na dziś", detail: `Najbliższy termin: ${[...allBlocked.map((a) => a.reviewOn), ...upcomingActions.map((a) => a.scheduledFor)].filter(Boolean).sort()[0] ?? "sprawdź listę Działań"}.`, to: "/actions" };
   else recommendation = { kind: "calm", title: "Wszystko jest pod kontrolą", detail: "Nie ma pilnych wyjątków. Wybierz spokojnie kolejny krok.", to: "/?show=today" };
 
   return {
@@ -141,6 +148,7 @@ export function deriveHomeSummary(state: AppState, now = new Date()): HomeSummar
     attentionCount: attentionSignals.length,
     recommendation,
     activity,
+    metricsAvailable,
     goalsWithoutNextAction,
     knowledgeQueue: queue
   };

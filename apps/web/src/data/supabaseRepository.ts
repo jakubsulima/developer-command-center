@@ -1,3 +1,4 @@
+import { loadSavedActionViews } from "./savedActionViewsRepository";
 import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectPreset, ProjectStatus, RecurringActionTemplate, WeeklyReviewSnapshot } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
@@ -12,7 +13,7 @@ interface ProjectRow { entity_id: string; outcome: string; constraints_md: strin
 interface RequirementRow { entity_id: string; project_id: string; description: string; status: string }
 interface CommitmentRow { id: string; target_entity_id: string; status: string; is_primary: boolean; effort_budget_minutes: number | null }
 interface WorkItemRow { entity_id: string; primary_context_entity_id: string; description: string; status: string; blocker: string | null }
-interface InboxRow { id: string; kind: InboxKind; raw_content: string; status: string; created_at: string; snoozed_until?: string | null; discarded_at?: string | null }
+interface InboxRow { id: string; kind: InboxKind; raw_content: string; status: InboxItem["status"]; resolved_to_ids?: string[]; created_at: string; snoozed_until?: string | null; discarded_at?: string | null }
 interface SessionRow { id: string; work_item_id: string; started_at: string; ended_at: string | null; end_reason: "paused" | "work_item_completed" | "stopped" | "interrupted" | null; scratchpad: string }
 interface CheckpointRow { id: string; work_item_id: string; current_state: string; next_action: string; branch: string | null; file_path: string | null; created_at: string }
 interface EvidenceRow { entity_id: string; result: "supports" | "reveals_gap" | "inconclusive"; feedback: string; criterion: string; created_at: string }
@@ -284,22 +285,32 @@ function isMissingWorkspaceReadModel(error: unknown) {
  * a one-deployment compatibility path while the additive RPC migration rolls
  * through environments; it is never used for a successful new deployment.
  */
+/** Resolve ownership before capture without fetching unrelated collections. */
+export async function loadCaptureWorkspace(userId: string): Promise<AppState> {
+  const membership = dataOrThrow(await getSupabase().from("workspace_members").select("workspace_id").eq("user_id", userId).limit(1).single(), "CaptureWorkspace") as { workspace_id: string } | null;
+  if (!membership) throw new Error("Użytkownik nie ma przypisanej przestrzeni pracy.");
+  const workspace = dataOrThrow(await getSupabase().from("workspaces").select("timezone").eq("id", membership.workspace_id).single(), "CaptureTimezone") as { timezone: string };
+  return { ...structuredClone(emptyState), workspaceId: membership.workspace_id, workspaceTimezone: workspace.timezone };
+}
+
 export async function loadSupabaseState(userId: string): Promise<AppState> {
   try {
     const repository = createSupabaseWorkspaceRepository();
     const core = await repository.loadCore(userId);
     const workspaceId = core.workspaceId;
     if (!workspaceId) throw new Error("Użytkownik nie ma przypisanej przestrzeni pracy.");
-    const [inbox, knowledge, progress, completedActions] = await Promise.all([
+    const [inbox, knowledge, progress, completedActions, savedActionViews] = await Promise.all([
       repository.loadPage({ workspaceId, collection: "inbox", pageSize: 50 }),
       repository.loadPage({ workspaceId, collection: "knowledge", pageSize: 50 }),
       repository.loadPage({ workspaceId, collection: "goal-progress", pageSize: 25 }),
-      repository.loadPage({ workspaceId, collection: "completed-actions", pageSize: 50 })
+      repository.loadPage({ workspaceId, collection: "completed-actions", pageSize: 50 }),
+      loadSavedActionViews(workspaceId)
     ]);
     const typed = (items: WorkspacePageItem[]) => items;
     return migrateLegacyWorkspaceState({
       ...structuredClone(emptyState),
       workspaceId,
+      savedActionViews,
       workspaceTimezone: core.workspaceTimezone,
       aiReviewSettings: core.aiReviewSettings,
       areas: core.areas,
@@ -338,7 +349,7 @@ export async function captureRemote(workspaceId: string, content: string, kind: 
     command_idempotency_key: idempotencyKey
   });
   const row = dataOrThrow(result, "Capture") as unknown as InboxRow;
-  return { id: row.id, kind: row.kind, content: row.raw_content, createdAt: row.created_at, status: "unprocessed" };
+  return { id: row.id, kind: row.kind, content: row.raw_content, createdAt: row.created_at, status: row.status, snoozedUntil: row.snoozed_until ?? undefined, discardedAt: row.discarded_at ?? undefined, resolvedToIds: row.resolved_to_ids ?? undefined };
 }
 
 export async function resolveInboxRemote(id: string) {
@@ -693,7 +704,7 @@ export async function recordActionResultRemote(workspaceId: string, actionId: st
   }), "Zapis rezultatu Działania");
 }
 
-export async function updateKnowledgeRemote(knowledgeId: string, expectedVersion: number, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: import("../domain/types").ReadingStatus | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
+export async function updateKnowledgeRemote(knowledgeId: string, expectedVersion: number, changes: import("../domain/readingProgress").ReadingChanges & { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: import("../domain/types").ReadingStatus | null }, goalLinks?: Array<{ id: string; goalId: string }>) {
   dataOrThrow(await getSupabase().rpc("update_knowledge_item_checked", {
     target_knowledge_id: knowledgeId,
     expected_version: expectedVersion,
@@ -743,6 +754,7 @@ export async function setLearningGoalStatusRemote(goalId: string, status: "draft
 }
 
 const exportTables = [
+  "saved_action_views", "return_reminders",
   "areas", "goal_templates", "goals", "goal_criteria", "actions", "progress_entries",
   "recurring_action_templates", "knowledge_links", "knowledge_items",
   "workspace_members", "entities", "projects", "requirements", "commitments", "work_items",
@@ -756,7 +768,8 @@ export async function exportWorkspaceRemote(workspaceId: string) {
   const workspaceResult = await client.from("workspaces").select("*").eq("id", workspaceId).single();
   const workspace = dataOrThrow(workspaceResult, "Eksport przestrzeni pracy");
   const results = await Promise.all(exportTables.map(async (table) => {
-    const result = await client.from(table).select("*").eq("workspace_id", workspaceId);
+    const result = await client.from(table).select(table === "return_reminders" ? "workspace_id,user_id,enabled,weekdays,local_time,timezone,destination,updated_at" : "*").eq("workspace_id", workspaceId);
+    if (["saved_action_views", "return_reminders"].includes(table) && ["42P01", "PGRST205"].includes(result.error?.code ?? "")) return [table, []] as const;
     return [table, dataOrThrow(result, `Eksport ${table}`)] as const;
   }));
   return {

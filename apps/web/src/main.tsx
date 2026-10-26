@@ -11,6 +11,7 @@ import { AuthGate } from "./auth/AuthGate";
 import { AuthRoot } from "./auth/AuthRoot";
 import { installPerformanceMetrics } from "./lib/performanceMetrics";
 import "./styles.css";
+import "./polish.css";
 
 AppErrorReporter.install();
 installPerformanceMetrics();

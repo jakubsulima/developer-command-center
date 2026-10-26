@@ -1,6 +1,6 @@
 # Plan rozwoju funkcjonalnego: od decyzji do działania
 
-Data: 23 września 2026. Status: propozycja do realizacji, bez zmian w aplikacji.
+Data: 23 września 2026. Status: częściowo zrealizowany. Plan tygodnia i powrót do blokady mają wcześniejszą implementację; podpowiedzi Wiedzy i ulubione widoki zaimplementowano lokalnie 4 października. Powtórki pozostają odłożone. Zdalne migracje nowych funkcji oczekują na wybór środowiska. [Raport realizacji](./2026-10-04-product-improvements-implementation.md).
 
 ## Cel i punkt wyjścia
 

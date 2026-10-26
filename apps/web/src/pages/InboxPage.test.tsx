@@ -16,12 +16,13 @@ vi.mock("../components/action-feedback-context", async (original) => ({ ...await
 beforeEach(() => {
   mocks.triage.mockReset().mockResolvedValue(undefined);
   mocks.proposal.mockReset().mockResolvedValue({ proposalId: "proposal", proposal: { decision: "knowledge", knowledgeKind: "note", title: "Tytuł AI", detail: "Treść AI", linkedType: "project", linkedId: "project", confidence: "high", reason: "Powód" } });
-  mocks.store.mockReturnValue({ loading: false, state: { ...structuredClone(emptyState), workspaceId: "workspace", inbox: [{ id: "capture", content: "Surowa treść", kind: "text", status: "unprocessed", capturedAt: "2026-09-27" }], areas: [{ id: "project", name: "Projekt", visibility: "active" }] }, triageInboxIntent: mocks.triage, releaseDueInbox: vi.fn(), requestInboxTriageProposal: mocks.proposal });
+  mocks.store.mockReturnValue({ loading: false, state: { ...structuredClone(emptyState), workspaceId: "workspace", inbox: [{ id: "capture", content: "Surowa treść", kind: "text", status: "unprocessed", createdAt: "2026-09-27" }], areas: [{ id: "project", name: "Projekt", visibility: "active" }] }, triageInboxIntent: mocks.triage, releaseDueInbox: vi.fn(), requestInboxTriageProposal: mocks.proposal });
 });
 async function openProposal() {
   const user = userEvent.setup();
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><KnowledgeInbox /></MemoryRouter></QueryClientProvider>);
-  await user.click(screen.getByRole("button", { name: /Przetwórz/ }));
+  await user.click(screen.getByRole("button", { name: "Uporządkuj" }));
+  await user.click(screen.getByText("Więcej możliwości"));
   await user.click(screen.getByRole("button", { name: "Zaproponuj przez AI" }));
   await user.click(await screen.findByRole("button", { name: "Edytuj" }));
   return user;

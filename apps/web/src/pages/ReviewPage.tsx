@@ -1,3 +1,7 @@
+import { CurrentWeekPlanNotice } from "../components/CurrentWeekPlanNotice";
+import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
+import { useCurrentWeekPlan } from "../hooks/useCurrentWeekPlan";
+import { WeeklyMetricsNotice } from "../components/WeeklyMetricsNotice";
 import { ArrowRight, BookMarked, CalendarCheck, CalendarDays, Check, CheckCircle2, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -35,9 +39,12 @@ export function ReviewPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const reviewsPage = useWorkspaceInfinitePage<ReviewRecord>("reviews", 100);
-  const weekly = useMemo(() => deriveWeeklyReview(mode === "demo" ? { ...state, weeklySummary: undefined } : state), [mode, state]);
+  const now = useWorkspaceClock();
+  const weekly = useMemo(() => deriveWeeklyReview(state, now, mode), [state, mode, now]);
+  const planRead = useCurrentWeekPlan(now);
+  const currentPlan = planRead.plan;
   const draft = usePersistentDraft<WeeklyReviewNoteDraft>("weekly-review-note", { note: "" }, 450, { targetId: weekly.startDate, migrateFrom: { kind: "weekly-review-note" } });
-  const nextWeek = nextWorkspaceWeek(new Date(), state.workspaceTimezone);
+  const nextWeek = nextWorkspaceWeek(now, state.workspaceTimezone);
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const activeTab: ReviewTab = isReviewTab(requestedTab) ? requestedTab : "summary";
   const [saving, setSaving] = useState(false);
@@ -84,9 +91,7 @@ export function ReviewPage() {
   const selectedHistoryWeek = historyWeeks.find((week) => week.key === historyWeekKey) ?? historyWeeks[0];
   const selectedHistoryReview = selectedHistoryWeek?.records.find((review) => review.id === historyReviewId) ?? selectedHistoryWeek?.records[0];
   const historyTrend = weeklyReviewTrendPoints(reviewHistory, trendWeeks, state.workspaceTimezone);
-  const planForThisWeek = reviewHistory
-    .filter((review) => review.snapshot?.plan.startDate === weekly.startDate)
-    .sort((left, right) => right.completedAt.localeCompare(left.completedAt))[0];
+  const planForThisWeek = currentPlan;
   const executionPage = useWorkspaceInfinitePage<WeeklyActivityDetail>("weekly-activity", 100, {
     activityKind: planForThisWeek ? "actions" : undefined,
     periodStart: weekly.startDate,
@@ -218,6 +223,7 @@ export function ReviewPage() {
 
   return (
     <AppShell>
+      <CurrentWeekPlanNotice read={planRead} />
       <PageHeading
         className="weekly-review-page-heading"
         title="Podsumowanie tygodnia"
@@ -246,11 +252,12 @@ export function ReviewPage() {
         <div className="weekly-review-tabpanels">
           <div id="weekly-review-panel-summary" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-summary" hidden={activeTab !== "summary"} tabIndex={0}>
             <Panel className="review-main weekly-summary-card">
-              <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.generatedSummary}</p></span></div>
+              <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.metricsAvailable ? weekly.generatedSummary : "Czekam na aktualne dane tygodnia."}</p></span></div>
+              <WeeklyMetricsNotice available={weekly.metricsAvailable} />
               <div className="weekly-metrics" aria-label="Wyniki tego tygodnia">
-                <div role="group" aria-label={`${weekly.completedActions} ${polishPluralForm(weekly.completedActions, "ukończone Działanie", "ukończone Działania", "ukończonych Działań")}`}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "actions"} onClick={() => toggleActivityDetail("actions")}><CheckCircle2 /><span><strong>{weekly.completedActions}</strong><small>Ukończone</small></span></button></div>
-                <div role="group" aria-label={`${weekly.knowledgeAdded} ${polishPluralForm(weekly.knowledgeAdded, "dodany element Wiedzy", "dodane elementy Wiedzy", "dodanych elementów Wiedzy")}`}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "knowledge"} onClick={() => toggleActivityDetail("knowledge")}><BookMarked /><span><strong>{weekly.knowledgeAdded}</strong><small>Wiedza</small></span></button></div>
-                <div role="group" aria-label={`${weekly.progressUpdates} ${polishPluralForm(weekly.progressUpdates, "aktualizacja postępu", "aktualizacje postępu", "aktualizacji postępu")}`}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "progress"} onClick={() => toggleActivityDetail("progress")}><ListChecks /><span><strong>{weekly.progressUpdates}</strong><small>Postęp</small></span></button></div>
+                <div role="group" aria-label={weekly.metricsAvailable ? `${weekly.completedActions} ${polishPluralForm(weekly.completedActions, "ukończone Działanie", "ukończone Działania", "ukończonych Działań")}` : "Brak aktualnej liczby ukończonych Działań"}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "actions"} onClick={() => toggleActivityDetail("actions")}><CheckCircle2 /><span><strong>{weekly.metricsAvailable ? weekly.completedActions : "—"}</strong><small>Ukończone</small></span></button></div>
+                <div role="group" aria-label={weekly.metricsAvailable ? `${weekly.knowledgeAdded} ${polishPluralForm(weekly.knowledgeAdded, "dodany element Wiedzy", "dodane elementy Wiedzy", "dodanych elementów Wiedzy")}` : "Brak aktualnej liczby dodanych elementów Wiedzy"}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "knowledge"} onClick={() => toggleActivityDetail("knowledge")}><BookMarked /><span><strong>{weekly.metricsAvailable ? weekly.knowledgeAdded : "—"}</strong><small>Wiedza</small></span></button></div>
+                <div role="group" aria-label={weekly.metricsAvailable ? `${weekly.progressUpdates} ${polishPluralForm(weekly.progressUpdates, "aktualizacja postępu", "aktualizacje postępu", "aktualizacji postępu")}` : "Brak aktualnej liczby aktualizacji postępu"}><button className="weekly-metric-button" type="button" aria-expanded={activityKind === "progress"} onClick={() => toggleActivityDetail("progress")}><ListChecks /><span><strong>{weekly.metricsAvailable ? weekly.progressUpdates : "—"}</strong><small>Postęp</small></span></button></div>
               </div>
               {activityKind ? <section className="weekly-activity-detail" aria-label={`Szczegóły: ${activityKind === "actions" ? "ukończone Działania" : activityKind === "knowledge" ? "dodana Wiedza" : "aktualizacje postępu"}`}>
                 <div className="weekly-activity-detail-heading"><div><span className="section-kicker">{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · {state.workspaceTimezone}</span><h3>{activityKind === "actions" ? "Ukończone Działania" : activityKind === "knowledge" ? "Dodana Wiedza" : "Aktualizacje postępu"}</h3></div><Button variant="ghost" onClick={() => setActivityKind(null)}>Zamknij</Button></div>
@@ -267,7 +274,7 @@ export function ReviewPage() {
               </section> : null}
               <section className="weekly-execution-summary" aria-labelledby="weekly-execution-title">
                 <div><span className="section-kicker"><ListChecks />Plan kontra wykonanie</span><h3 id="weekly-execution-title">Realizacja tygodnia</h3></div>
-                {!planForThisWeek ? <p>Brak zapisanego Planu na ten tydzień — nie ma podstaw do porównania.</p> : executionPage.isPending ? <p>Wczytuję wykonanie zapisanego Planu…</p> : executionPage.isError ? <p role="alert">Nie udało się pobrać wykonania Planu. <Button variant="ghost" onClick={() => void executionPage.refetch()}>Spróbuj ponownie</Button></p> : !executionListComplete ? <><p>Do dokładnego porównania potrzebuję wczytać wszystkie ukończone Działania.</p><Button variant="secondary" loading={executionPage.isFetchingNextPage} onClick={() => void executionPage.fetchNextPage()}>Wczytaj dalsze Działania</Button></> : plannedActions.length ? <>
+                {!planForThisWeek && (planRead.pending || planRead.error) ? <p>Porównanie czeka na aktualny odczyt Planu.</p> : !planForThisWeek ? <p>Brak zapisanego Planu na ten tydzień — nie ma podstaw do porównania.</p> : executionPage.isPending ? <p>Wczytuję wykonanie zapisanego Planu…</p> : executionPage.isError ? <p role="alert">Nie udało się pobrać wykonania Planu. <Button variant="ghost" onClick={() => void executionPage.refetch()}>Spróbuj ponownie</Button></p> : !executionListComplete ? <><p>Do dokładnego porównania potrzebuję wczytać wszystkie ukończone Działania.</p><Button variant="secondary" loading={executionPage.isFetchingNextPage} onClick={() => void executionPage.fetchNextPage()}>Wczytaj dalsze Działania</Button></> : plannedActions.length ? <>
                   <div className="weekly-execution-counts"><p><strong>{plannedCompleted} z {plannedActions.length}</strong><span>zaplanowanych Działań ukończono</span></p><p><strong>{additionalCompleted}</strong><span>ukończonych poza Planem</span></p></div>
                   {plannedActions.some((action) => !completedIds.has(action.id)) ? <details className="weekly-unfinished-plan"><summary>Nierozstrzygnięte kroki ({plannedActions.filter((action) => !completedIds.has(action.id)).length})</summary><ul>{plannedActions.filter((action) => !completedIds.has(action.id)).map((planned) => {
                     const current = state.actions.find((action) => action.id === planned.id);
@@ -303,7 +310,7 @@ export function ReviewPage() {
                 </details> : null}
                 {weekly.suggestions.length === 1 && weekly.suggestions[0].id === "continue" ? <p className="weekly-signal-note">Nie wykryto zaległości, blokad, Celów bez kroku ani nowych elementów w Skrzynce.</p> : null}
               </section> : null}
-              <details className="weekly-summary-mobile-details"><summary>Pełny opis tygodnia</summary><p>{weekly.generatedSummary}</p></details>
+              <details className="weekly-summary-mobile-details"><summary>Pełny opis tygodnia</summary><p>{weekly.metricsAvailable ? weekly.generatedSummary : "Czekam na aktualne dane tygodnia."}</p></details>
             </Panel>
 
             <Panel className="weekly-decision">
@@ -383,14 +390,14 @@ export function ReviewPage() {
           <div className="weekly-review-submit-heading"><span className="section-kicker"><CalendarCheck />Zamknięcie tygodnia</span><h2 id="weekly-review-submit-title">Co zapisze zamknięcie</h2></div>
           <details className="weekly-close-details"><summary>Podgląd zapisu</summary><div className="weekly-close-preview">
             <div><strong>Tydzień</strong><span>{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)}</span></div>
-            <div><strong>Podsumowanie systemowe</strong><span>{weekly.generatedSummary}</span></div>
+            <div><strong>Podsumowanie systemowe</strong><span>{weekly.metricsAvailable ? weekly.generatedSummary : "Brak aktualnych metryk — zapis podsumowania jest niedostępny."}</span></div>
             <div><strong>Liczniki</strong><span>{weekly.completedActions} ukończonych Działań · {weekly.knowledgeAdded} dodanych elementów Wiedzy · {weekly.progressUpdates} aktualizacji postępu</span></div>
             <div><strong>Cele na kolejny tydzień</strong><span>{selectedGoals.length ? selectedGoals.map((goal) => goal.title).join(", ") : "Nie wybrano Celów"}</span>{!selectedGoals.length ? <Link to={tabHref("plan")}>Wybierz Cele w Planie</Link> : null}</div>
             <div><strong>Twoja decyzja</strong><span>{draft.value.note.trim() || "Brak dodatkowej notatki"}</span></div>
           </div><p className="muted-copy">Treść analizy AI nie jest dopisywana do historii zamknięć.</p></details>
           {Object.keys(planDraft.value.changes).length ? <p className="muted-copy" role="status">Najpierw zapisz lub cofnij przygotowane zmiany terminów.</p> : null}
           {error ? <p className="auth-message error" role="alert">{error}</p> : null}
-          <Button variant="primary" loading={saving} onClick={() => void complete()}><Check />{completedThisWeek || error ? "Zapisz nową rewizję" : "Zapisz podsumowanie"}</Button>
+          <Button variant="primary" loading={saving} disabled={!weekly.metricsAvailable} onClick={() => void complete()}><Check />{completedThisWeek || error ? "Zapisz nową rewizję" : "Zapisz podsumowanie"}</Button>
         </Panel> : null}
       </div>
     </AppShell>

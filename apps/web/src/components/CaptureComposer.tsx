@@ -1,53 +1,83 @@
-import { Link2, TextCursorInput } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { InboxKind } from "../domain/types";
-import { captureErrorMessage, normalizeCapture } from "../domain/capture";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import type { InboxItem, InboxKind } from "../domain/types";
+import { normalizeCapture } from "../domain/capture";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { Button } from "./ui";
 import { Textarea } from "./ui/textarea";
-import { recordFirstFlowStage } from "../lib/firstFlow";
 
-type CaptureDraft = { content: string; kind: "text" | "link" };
-const isCaptureDraft = (value: unknown): value is CaptureDraft => Boolean(value && typeof value === "object" && typeof (value as CaptureDraft).content === "string" && ((value as CaptureDraft).kind === "text" || (value as CaptureDraft).kind === "link"));
-const migrateCaptureDraft = (value: unknown): CaptureDraft | undefined => typeof value === "string" ? { content: value, kind: "text" } : undefined;
+type CaptureDraft = { content: string; commandId: string; attempted: boolean };
+const newDraft = (): CaptureDraft => ({ content: "", commandId: crypto.randomUUID(), attempted: false });
+const isCaptureDraft = (value: unknown): value is CaptureDraft => {
+  const item = value as Partial<CaptureDraft> | null;
+  return Boolean(item && typeof item.content === "string" && typeof item.commandId === "string" && item.commandId && typeof item.attempted === "boolean");
+};
+function migrateCaptureDraft(value: unknown): CaptureDraft | undefined {
+  if (typeof value === "string") return { ...newDraft(), content: value };
+  if (value && typeof value === "object" && "content" in value && typeof value.content === "string") return { ...newDraft(), content: value.content };
+}
 
-export function CaptureComposer({ draftKey, id, onSubmit, onClose, onSuccess, compact = false }: {
+export function CaptureComposer({ draftKey, id, onSubmit, onClose, onSuccess, closeGuard, compact = false }: {
   draftKey: string;
   id: string;
-  onSubmit: (content: string, kind: InboxKind) => Promise<void>;
+  onSubmit: (content: string, kind: InboxKind, commandId: string) => Promise<InboxItem | void>;
   onClose?: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (item: InboxItem | void) => void;
   compact?: boolean;
-
+  closeGuard?: RefObject<(() => boolean) | null>;
 }) {
-  const draft = usePersistentDraft<CaptureDraft>(draftKey, { content: "", kind: "text" }, 450, {
-    validate: isCaptureDraft,
-    migrate: migrateCaptureDraft
-  });
+  const [initial] = useState(newDraft);
+  const draft = usePersistentDraft(draftKey, initial, 250, { validate: isCaptureDraft, migrate: migrateCaptureDraft });
+  const locked = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const preview = (() => { try { return normalizeCapture(draft.value.content, draft.value.kind).previewDomain; } catch { return undefined; } })();
-  useEffect(() => { if (!compact) recordFirstFlowStage("capture-started"); }, [compact]);
+  const [saved, setSaved] = useState(false);
+  const [cleanupFailed, setCleanupFailed] = useState(false);
+  const flushDraft = draft.flush;
+  useEffect(() => {
+    if (!closeGuard) return;
+    closeGuard.current = () => {
+      if (saving) return false;
+      if (flushDraft()) return true;
+      setError("Zachowaj lub skopiuj treść przed zamknięciem.");
+      return false;
+    };
+    return () => { closeGuard.current = null; };
+  }, [closeGuard, saving, flushDraft]);
   const submit = async () => {
-    if (saving) return;
-    setError(""); setSuccess(""); setSaving(true);
+    if (locked.current || !draft.value.content.trim() || cleanupFailed) return;
+    const normalized = normalizeCapture(draft.value.content);
+    draft.setValue((current) => ({ ...current, attempted: true }));
+    if (!draft.flush()) { draft.setValue((current) => ({ ...current, attempted: false })); setError("Nie udało się zachować szkicu. Skopiuj treść lub ponów zapis."); return; }
+    locked.current = true;
+    setSaving(true); setError(""); setSaved(false);
     try {
-      const normalized = normalizeCapture(draft.value.content, draft.value.kind);
-      await onSubmit(normalized.content, normalized.kind);
-      draft.clear(); setSuccess("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
-      if (!compact) recordFirstFlowStage("capture-saved");
-      onSuccess?.();
+      const receipt = await onSubmit(normalized.content, normalized.kind, draft.value.commandId);
+      setSaved(true);
+      if (!draft.clear(newDraft())) {
+        setCleanupFailed(true);
+        setError("Wpis zapisano, ale szkic pozostał na urządzeniu. Usuń zapisany szkic poniżej.");
+      } else onSuccess?.(receipt);
     } catch (caught) {
-      const code = caught instanceof Error ? caught.message : "capture_failed";
-      setError(captureErrorMessage(code));
-    } finally { setSaving(false); }
+      if (caught instanceof Error && caught.message.includes("capture_payload_conflict")) {
+        draft.setValue((current) => ({ ...current, commandId: crypto.randomUUID(), attempted: false }));
+        draft.flush();
+        setError("Ten szkic zmienił się w innym oknie. Twoja treść pozostała w polu — zapisz ją ponownie jako osobny wpis.");
+      } else setError("Nie potwierdzono zapisu. Treść pozostała na tym urządzeniu. Ponów tę samą próbę, aby uniknąć duplikatu.");
+    } finally { locked.current = false; setSaving(false); }
   };
   return <div className={`capture-composer ${compact ? "capture-composer-compact" : ""}`}>
-    <label className="sr-only" htmlFor={id}>Zapisz treść lub link</label>
-    <Textarea id={id} rows={compact ? 2 : 5} placeholder="Zapisz treść lub link…" value={draft.value.content} disabled={saving} onChange={(event) => draft.setValue((current) => ({ ...current, content: event.target.value }))} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void submit(); } }} aria-invalid={Boolean(error)} aria-describedby={`${id}-feedback`} />
-    <div className="capture-mode-row"><div role="group" aria-label="Typ przechwycenia"><button type="button" disabled={saving} aria-pressed={draft.value.kind === "text"} className={draft.value.kind === "text" ? "active" : ""} onClick={() => draft.setValue((current) => ({ ...current, kind: "text" }))}><TextCursorInput />Tekst</button><button type="button" disabled={saving} aria-pressed={draft.value.kind === "link"} className={draft.value.kind === "link" ? "active" : ""} onClick={() => draft.setValue((current) => ({ ...current, kind: "link" }))}><Link2 />Link</button></div>{preview ? <span className="capture-preview">Rozpoznano pełny link: {preview}</span> : <small>Pełny adres HTTP/HTTPS zostanie zapisany jako link.</small>}</div>
-    <div id={`${id}-feedback`} aria-live="polite">{draft.dirty ? <small>Draft {draft.status === "saving" ? "zapisuje się…" : draft.status === "error" ? "nie został zapisany" : "zapisany na tym urządzeniu"}</small> : null}{error ? <p className="auth-message error" role="alert">{error} <button type="button" className="back-link" onClick={() => void submit()}>Spróbuj ponownie</button></p> : null}{success ? <p className="auth-message success">{success}</p> : null}</div>
-    <div className="capture-composer-actions">{onClose ? <Button type="button" disabled={saving} onClick={onClose}>Zamknij</Button> : null}<Button type="button" variant="ghost" disabled={!draft.dirty || saving} onClick={() => { draft.discard(); setError(""); }}>Odrzuć szkic</Button><Button type="button" variant="primary" loading={saving} disabled={!draft.value.content.trim()} onClick={() => void submit()}>Zapisz do Skrzynki</Button></div>
+    <label className="field-label" htmlFor={id}>Co chcesz zapamiętać lub zrobić?</label>
+    <Textarea id={id} autoFocus rows={compact ? 3 : 5} placeholder="Zapisz myśl, zadanie albo wklej link…" value={draft.value.content} readOnly={draft.value.attempted || saving} onChange={(event) => { setSaved(false); draft.setValue((current) => ({ ...current, content: event.target.value })); }} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} aria-invalid={Boolean(error)} aria-describedby={`${id}-feedback`} />
+    <div id={`${id}-feedback`} aria-live="polite">
+      {draft.restored && !saved ? <small>Przywrócono szkic z tego urządzenia.</small> : null}
+      {draft.status === "error" ? <p role="alert">Nie udało się zachować szkicu na urządzeniu.</p> : null}
+      {error ? <p className="auth-message error" role="alert">{error}</p> : null}
+      {saved ? <p className="auth-message success">Zapisano.</p> : null}
+    </div>
+    <div className="capture-composer-actions">
+      {onClose ? <Button type="button" disabled={saving} onClick={() => { if (draft.flush()) onClose(); else setError("Zachowaj lub skopiuj treść przed zamknięciem."); }}>Zamknij</Button> : null}
+      {cleanupFailed ? <Button onClick={() => { if (draft.clear(newDraft())) { setCleanupFailed(false); setError(""); } }}>Usuń zapisany szkic</Button> : <Button type="button" variant="primary" loading={saving} disabled={!draft.value.content.trim()} onClick={() => void submit()}>{draft.value.attempted ? "Ponów zapis" : "Zapisz"}</Button>}
+    </div>
+    {draft.dirty ? <details className="capture-draft-options"><summary>Opcje szkicu</summary><Button variant="ghost" onClick={() => void (navigator.clipboard ? navigator.clipboard.writeText(draft.value.content) : Promise.reject(new Error("clipboard_unavailable"))).catch(() => setError("Nie udało się skopiować. Zaznacz tekst w polu."))}>Kopiuj treść</Button>{!draft.value.attempted ? <Button variant="ghost" onClick={() => { if (draft.clear(newDraft())) setError(""); }}>Odrzuć szkic</Button> : null}</details> : null}
   </div>;
 }

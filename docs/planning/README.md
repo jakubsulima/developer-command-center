@@ -1,12 +1,36 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Szybki zapis i regularny powrót z 24 października 2026
+
+[Plan szybkiego zapisu i powrotu do Command](./2026-10-24-easy-capture-and-return-plan.md)
+odpowiada na dwa wskazane problemy: zapominanie o aplikacji i zbyt duży wysiłek
+przy zapisie. Obejmuje jeden prosty Capture, skrót na iPhonie, spokojniejszy Start,
+odnajdywanie wpisów bez obowiązkowego porządkowania oraz opcjonalne przypomnienie.
+Wskazuje elementy do usunięcia lub ukrycia, kolejność sześciu etapów, reguły danych,
+ochronę szkiców, odbiór na telefonie i mierniki pilotażu.
+Status: plan do wdrożenia; bez zmian kodu i bez włączania przypomnień.
+
+## Poprawki Startu i rozwój Wiedzy z 4 października 2026
+
+[Szczegółowy plan poprawek i rozwoju](./2026-10-04-product-improvements-plan.md)
+rozpisuje pięć poprawek pierwszego wydania: zgodne metryki tygodnia, rekomendacje
+respektujące termin powrotu do blokady, kompaktowy stan starej analizy AI,
+czytelne etykiety planu oraz dostępny wybór Czytelni. Kolejne wydania obejmują
+podpowiedzi Wiedzy, eksport kontekstu do AI i opcjonalne funkcje. Dokument
+zawiera mapę kodu, reguły danych, zależności, testy, kryteria odbioru i sposób
+wycofania. Status: pierwsze wydanie, podpowiedzi Wiedzy, eksport AI, ulubione widoki i postęp czytania zaimplementowane lokalnie; 522 testy przeszły. Migracje i pełny odbiór pozostają do wykonania. [Raport realizacji i weryfikacji](./2026-10-04-product-improvements-implementation.md).
+
+Plan uwzględnia kod sprawdzony 4 października: plan tygodnia, data powrotu do
+blokady, krótkie notatki i Czytelnia mają już implementację. Historyczne statusy
+poniżej nie są kompletną ewidencją bieżącego wdrożenia ani jego odbioru.
+
 ## Poprawki po review mobilnego UI i UX z 30 września 2026
 
 [Plan poprawek po review zmian Luny](./2026-09-30-mobile-ui-ux-review-fixes-plan.md)
 obejmuje cofanie ukończenia i przywracanie następnego kroku, bezpieczny ekran
 ładowania, stabilną edycję opisu w Quick Add oraz kompletne oznaczenie filtrów.
 Zawiera kolejność prac, mapę kodu, testy regresji i kryteria odbioru.
-Status: zaplanowane, bez wdrożenia poprawek.
+Status: cztery etapy zaimplementowane i zweryfikowane lokalnie; odbiór rzeczywistego telefonu i Supabase pozostaje do wykonania.
 
 ## Mobilne UI i UX — plan z 30 września 2026
 
@@ -22,7 +46,7 @@ zmiany oraz wcześniejsze plany. Status: propozycja; bez zmian implementacji.
 opisuje naprawy filtrów i paginacji, zapis notatki z jednym wymaganym polem,
 ochronę szkiców, notatki przy książkach i kryteria odbioru. Zawiera mapę kodu,
 reguły kompatybilności oraz gotowe polecenie dla kolejnego modelu.
-Status: zaplanowane; etapy A–E stanowią pierwsze wydanie, etap F osobny przyrost.
+Status: etapy A–E zaimplementowane i sprawdzone lokalnie, migracja filtrów Wiedzy wdrożona; etap F odłożony.
 
 ## Szablony Projektów i Czytelnia — plan z 26 września 2026
 
@@ -63,7 +87,7 @@ Status: propozycja, implementacja nierozpoczęta.
 zamyka dziewięć problemów wykrytych na liście, szczególe, Starcie, w Projekcie,
 Celu i Quick Add. Obejmuje wspólną prezentację statusu, daty, blokady i Rutyny,
 edycję ze szczegółu, kolejność wdrożenia, testy oraz kryteria odbioru.
-Status: zaplanowane, implementacja nierozpoczęta.
+Status: panel intencji, wybór źródeł i eksport Markdown/JSON zaimplementowane lokalnie. Migracja oczekuje na wdrożenie; instrukcja Projektu i MCP pozostają do realizacji.
 
 ## Kierunek od AI na ekranie Start — plan z 19 września 2026
 

@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule, WeeklyReviewSnapshot } from "../domain/types";
+import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule, WeeklyReviewSnapshot } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -101,7 +101,8 @@ export interface AppStore {
   createRecurringAction: (input: NewRecurringActionInput) => Promise<string>;
   updateRecurringAction: (templateId: string, changes: Partial<NewRecurringActionInput>, updateFutureActions?: boolean) => Promise<void>;
   materializeRecurring: (today?: string) => Promise<void>;
-  linkKnowledge: (knowledgeItemId: string, target: KnowledgeRelationTarget, meaning?: KnowledgeRelationMeaning) => Promise<void>;
+  linkKnowledge: (knowledgeItemId: string, target: KnowledgeRelationTarget, meaning?: KnowledgeRelationMeaning) => Promise<string>;
+  triageExistingKnowledge: (inboxId: string, knowledgeId: string, goalId?: string, projectId?: string) => Promise<void>;
   unlinkKnowledge: (linkId: string) => Promise<void>;
   triageInboxIntent: (inboxItemId: string, intent: NewInboxTriageIntent) => Promise<void>;
   createProject: (input: NewProjectInput) => Promise<CreatedProjectReference>;
@@ -109,14 +110,17 @@ export interface AppStore {
   setPrimaryCommitment: (projectId: string) => void;
   createLearningGoal: (input: NewLearningGoalInput) => Promise<void>;
   setLearningGoalStatus: (goalId: string, status: "draft" | "shaped" | "achieved" | "abandoned", reason?: string) => Promise<void>;
-  capture: (content: string, kind?: InboxKind) => Promise<void>;
+  capture: (content: string, kind?: InboxKind, idempotencyKey?: string) => Promise<InboxItem>;
+  undoCapture: (id: string) => Promise<void>;
   resolveInbox: (id: string) => Promise<void>;
   triageInbox: (id: string, target: KnowledgeKind, title: string, detail: string, projectId?: string) => void;
   setInboxStatus: (id: string, status: InboxStatus, snoozedUntil?: string) => Promise<void>;
   releaseDueInbox: (now?: Date) => Promise<void>;
   createKnowledge: (input: CreateKnowledgeInput) => Promise<string>;
   recordActionResult: (actionId: string, result: ActionResultInput) => Promise<string>;
-  updateKnowledge: (knowledgeId: string, changes: { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: ReadingStatus | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
+  saveActionView: (view: import("../domain/savedActionViews").SavedActionView, expectedVersion: number) => Promise<void>;
+  deleteActionView: (id: string, expectedVersion: number) => Promise<void>;
+  updateKnowledge: (knowledgeId: string, changes: import("../domain/readingProgress").ReadingChanges & { kind?: KnowledgeKind; title?: string; detail?: string; sourceUrl?: string | null; resourceFormat?: "book" | null; resourceAuthor?: string | null; readingStatus?: ReadingStatus | null; goalIds?: string[] }, expectedVersion?: number) => Promise<void>;
   setVisibility: (entityType: "project" | "knowledge", entityId: string, visibility: "active" | "archived" | "trashed") => Promise<void>;
   setAIProposal: (status: AppState["aiProposal"]) => Promise<void>;
   completeReview: (summary?: string, type?: "daily" | "weekly", answers?: Record<string, string | string[]>, templateVersion?: number, idempotencyKey?: string, metadata?: WeeklyReviewSaveMetadata) => Promise<boolean>;

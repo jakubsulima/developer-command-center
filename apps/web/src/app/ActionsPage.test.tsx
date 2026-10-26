@@ -67,14 +67,15 @@ describe("lista wszystkich Działań", () => {
       expect(within(screen.getByLabelText("Status Działań")).getByRole("option", { name: label })).toBeInTheDocument();
     }
     await user.click(screen.getByRole("button", { name: "Bez terminu" }));
-    expect(screen.getByTestId("location-address")).toHaveTextContent("view=unscheduled");
+    expect(screen.getByTestId("location-address")).toHaveTextContent("schedule=unscheduled");
     expect(await screen.findByRole("link", { name: "Krok bez terminu" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Krok na dziś" })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Status Działań"), "blocked");
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=blocked");
     expect(await screen.findByRole("link", { name: "Krok zablokowany" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "Termin Działań" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Termin Działań" })).toBeInTheDocument();
+    expect(screen.getByTestId("location-address")).toHaveTextContent("schedule=unscheduled");
 
     await user.selectOptions(screen.getByLabelText("Status Działań"), "cancelled");
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=cancelled");

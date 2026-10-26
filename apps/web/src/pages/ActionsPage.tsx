@@ -1,3 +1,5 @@
+import { SavedActionViews } from "../components/SavedActionViews";
+import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { ChevronDown, Filter, ListTodo, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -96,12 +98,14 @@ export function ActionsPage() {
   const rawView = params.get("view");
   const view: ActionListView = isActionListView(rawView) ? rawView : "open";
   const statusView: ActionStatusView = actionStatusViews.includes(view as ActionStatusView) ? view as ActionStatusView : "open";
-  const scheduleView: ActionScheduleView = isActionScheduleView(view) ? view : "open";
-  const [filtersOpen, setFiltersOpen] = useState(Boolean(params.get("project") || params.get("goal") || view !== "open"));
+  const rawSchedule = params.get("schedule");
+  const scheduleView: ActionScheduleView = rawSchedule && ["today", "overdue", "unscheduled"].includes(rawSchedule) ? rawSchedule as ActionScheduleView : isActionScheduleView(view) ? view : "open";
+  const [filtersOpen, setFiltersOpen] = useState(Boolean(params.get("project") || params.get("goal") || view !== "open" || scheduleView !== "open"));
   const projectId = params.get("project") || undefined;
   const goalId = params.get("goal") || undefined;
-  const today = localDateForTimeZone(new Date(), state.workspaceTimezone);
-  const actionFilter = useMemo<ActionListFilter>(() => ({ view, projectId, goalId, today }), [goalId, projectId, today, view]);
+  const now = useWorkspaceClock();
+  const today = localDateForTimeZone(now, state.workspaceTimezone);
+  const actionFilter = useMemo<ActionListFilter>(() => ({ view, schedule: scheduleView === "open" ? undefined : scheduleView, projectId, goalId, today }), [goalId, projectId, today, view, scheduleView]);
   const actionsPage = useWorkspaceInfinitePage<GoalAction>("actions", 30, { actionFilter });
   const highlightId = params.get("highlight") || undefined;
   const highlightQuery = useQuery({
@@ -116,8 +120,8 @@ export function ActionsPage() {
     .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
     .map((item) => state.actions.find((current) => current.id === item.id) ?? item)
     .filter((item) => matchesActionListFilter(state, item, actionFilter));
-  const hasFilters = view !== "open" || Boolean(projectId || goalId);
-  const filterCount = Number(view !== "open") + Number(Boolean(projectId)) + Number(Boolean(goalId));
+  const hasFilters = view !== "open" || scheduleView !== "open" || Boolean(projectId || goalId);
+  const filterCount = Number(view !== "open") + Number(scheduleView !== "open") + Number(Boolean(projectId)) + Number(Boolean(goalId));
   const groupedItems = groupOpenActions(items, view, today);
 
   useEffect(() => {
@@ -160,13 +164,15 @@ export function ActionsPage() {
 
   const setStatusView = (nextView: ActionStatusView) => {
     const next = new URLSearchParams(params);
+    if (scheduleView !== "open") next.set("schedule", scheduleView);
     if (nextView === "open") next.delete("view"); else next.set("view", nextView);
     setParams(next);
   };
 
   const setScheduleView = (nextView: ActionScheduleView) => {
     const next = new URLSearchParams(params);
-    if (nextView === "open") next.delete("view"); else next.set("view", nextView);
+    if (isActionScheduleView(view)) next.delete("view");
+    if (nextView === "open") next.delete("schedule"); else next.set("schedule", nextView);
     setParams(next);
   };
 
@@ -175,12 +181,14 @@ export function ActionsPage() {
     next.delete("project");
     next.delete("goal");
     next.delete("view");
+    next.delete("schedule");
     setParams(next);
   };
 
   const showOpenActions = () => {
     const next = new URLSearchParams(params);
     next.delete("view");
+    next.delete("schedule");
     setParams(next);
   };
 
@@ -220,11 +228,12 @@ export function ActionsPage() {
   return (
     <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", quickAdd: { mode: "action", pinnedToToday: false, draftKey: "actions-list" } }}>
       <PageHeading title="Działania" eyebrow="Jedna lista wszystkich bieżących kroków" />
+      <SavedActionViews />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-toolbar-topline">
           <div className="actions-view-tabs" role="group" aria-label="Szybkie widoki Działań">
             {actionQuickViews.map((option) => (
-              <button key={option} type="button" aria-pressed={statusView === "open" && scheduleView === option} onClick={() => setScheduleView(option)}>
+              <button key={option} type="button" aria-pressed={scheduleView === option} onClick={() => setScheduleView(option)}>
                 {option === "open" ? "Otwarte" : actionScheduleViewLabels[option]}
               </button>
             ))}
@@ -235,14 +244,14 @@ export function ActionsPage() {
           <div className="actions-filter-section"><label className="actions-filter-label" htmlFor="actions-status-filter">Status</label><select id="actions-status-filter" aria-label="Status Działań" value={statusView} onChange={(event) => setStatusView(event.target.value as ActionStatusView)}>
             {actionStatusViews.map((option) => <option key={option} value={option}>{actionListViewLabels[option]}</option>)}
           </select></div>
-          {statusView === "open" ? <div className="actions-filter-section"><span className="actions-filter-label">Termin</span><div className="actions-date-filters" role="group" aria-label="Termin Działań">
+          {<div className="actions-filter-section"><span className="actions-filter-label">Termin</span><div className="actions-date-filters" role="group" aria-label="Termin Działań">
             {actionScheduleViews.map((option) => <button key={option} type="button" aria-pressed={scheduleView === option} onClick={() => setScheduleView(option)}>{actionScheduleViewLabels[option]}</button>)}
-          </div></div> : null}
+          </div></div>}
           <div className="knowledge-filter-fields">
           <label><span>Projekt</span><select aria-label="Filtr Projektu" value={projectId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("project", event.target.value); else next.delete("project"); setParams(next); }}><option value="">Wszystkie projekty</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
           <label><span>Cel</span><select aria-label="Filtr Celu" value={goalId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("goal", event.target.value); else next.delete("goal"); setParams(next); }}><option value="">Wszystkie cele</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
         </div></div> : null}
-        {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
+        {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{scheduleView !== "open" && scheduleView !== view ? <Badge>{actionScheduleViewLabels[scheduleView]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
       </section>
 
       <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i cel muszą pasować jednocześnie.</small> : null}</div>

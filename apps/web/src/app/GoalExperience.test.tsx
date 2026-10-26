@@ -16,7 +16,8 @@ describe("goal-centric experience", () => {
   it("completes the featured Action in one touch and can undo it", async () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
-    const complete = await screen.findByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" });
+    // The first detail route is lazy-loaded; allow its cold import to finish.
+    const complete = await screen.findByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" }, { timeout: 5000 });
 
     await user.click(complete);
     expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
@@ -47,7 +48,7 @@ describe("goal-centric experience", () => {
     const details = screen.getByRole("region", { name: "Szczegóły Celu" });
     const actionsSection = within(details).getByText("Pozostałe Działania", { selector: "strong" }).closest("details") as HTMLDetailsElement;
     expect(actionsSection).not.toHaveAttribute("open");
-    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj Działanie do Celu FinTrack API" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj Działanie do Celu FinTrack API" }));
     const quickAdd = screen.getByRole("dialog", { name: "Nowe Działanie" });
     expect(within(quickAdd).getByLabelText("Co chcesz zrobić?")).toBeInTheDocument();
     await user.keyboard("{Escape}");

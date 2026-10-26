@@ -1,3 +1,4 @@
+import { RecentWorkTracker } from "../components/ReturnToWork";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AppRouteLoading } from "../components/AppRouteLoading";
@@ -38,6 +39,7 @@ function timedImport<T>(route: string, loader: () => Promise<T>) {
   });
 }
 
+const CapturePage = lazy(() => import("../pages/CapturePage").then((module) => ({ default: module.CapturePage })));
 const InboxPage = lazy(() => timedImport("inbox", () => import("../pages/InboxPage").then((module) => ({ default: module.InboxPage }))));
 const KnowledgePage = lazy(() => timedImport("knowledge", () => import("../pages/KnowledgePage").then((module) => ({ default: module.KnowledgePage }))));
 const GoalsPage = lazy(() => timedImport("goals", () => import("../pages/GoalsPage").then((module) => ({ default: module.GoalsPage }))));
@@ -53,6 +55,7 @@ const ReviewPage = lazy(() => timedImport("review", () => import("../pages/Revie
 const SettingsPage = lazy(() => timedImport("settings", () => import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))));
 
 export function App() {
+  const location = useLocation();
   const { loading } = useStore();
   const appStartRecorded = useRef(false);
   useEffect(() => {
@@ -64,8 +67,10 @@ export function App() {
   return (
     <ActionFeedbackProvider>
       <ScrollToTop />
-      <Suspense fallback={<AppRouteLoading />}><Routes>
+      <RecentWorkTracker />
+      <Suspense fallback={location.pathname === "/capture" ? <main className="capture-page" role="status">Otwieranie szybkiego zapisu…</main> : <AppRouteLoading />}><Routes>
         <Route path="/" element={<StartPage />} />
+        <Route path="/capture" element={<CapturePage />} />
         <Route path="/routines" element={<RoutinesPage />} />
         <Route path="/focus" element={<Navigate to="/" replace />} />
         <Route path="/inbox" element={<InboxPage />} />
