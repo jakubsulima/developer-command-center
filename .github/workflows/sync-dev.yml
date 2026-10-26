@@ -1,0 +1,39 @@
+name: Synchronizacja main do dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: sync-main-to-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Aktualizuj dev z main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # The merge API preserves dev-only commits and rejects conflicts. No
+      # checkout, repository scripts, extra secrets or force pushes are needed.
+      - name: Scal aktualny main do dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if ! gh api --method POST "repos/${GH_REPO}/merges" \
+            -f base=dev \
+            -f head=main \
+            -f commit_message='Merge main into dev (automatic sync)' \
+            --silent; then
+            echo '::error::Synchronizacja main do dev nie powiodła się. Sprawdź błąd API powyżej; konflikt wymaga ręcznego scalenia. Historia dev nie została nadpisana.'
+            exit 1
+          fi
+          echo 'Dev zawiera aktualny main.' >> "$GITHUB_STEP_SUMMARY"
