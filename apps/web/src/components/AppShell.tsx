@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles, TerminalSquare } from "lucide-react";
+import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
+import { QuickCapture } from "./QuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
@@ -41,7 +42,6 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const { user, signOut } = useAuth();
   const location = useLocation();
   useNavigationRestoration();
-  const pending = state.inbox.filter((item) => item.status === "unprocessed").length;
   const activeGoals = state.goals.filter((goal) => goal.visibility === "active" && goal.status === "active").length;
   const activeRoutines = state.recurringActionTemplates.filter((routine) => routine.status === "active").length;
   const syncing = syncState.status === "syncing";
@@ -55,10 +55,14 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         ? `Dane odświeżone ${new Date(dataFreshness.lastSuccessfulAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
         : "Dane nie zostały jeszcze odświeżone";
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const captureCloseGuard = useRef<(() => boolean) | null>(null);
   const [quickAddRequest, setQuickAddRequest] = useState<AppShellQuickAddRequest | undefined>();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  const leaveAccount = () => void signOut().catch((error) => setSignOutError(error instanceof Error ? error.message : "Nie udało się wylogować."));
   const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const addActionRef = useRef(addAction);
@@ -83,6 +87,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   useEffect(() => {
     if (!loadingView) return;
     setQuickAddOpen(false);
+    setCaptureOpen(false);
     setMobileSearchOpen(false);
     setProfileCenterOpen(false);
     setProfileMenuOpen(false);
@@ -134,7 +139,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
-        triggerAdd();
+        if (!document.querySelector('[aria-modal="true"]')) setCaptureOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -163,9 +168,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></div>
         <nav className="side-nav" aria-label="Główna nawigacja">
-          {navigation.map(({ to, label, icon: Icon, badge }) => (
+          {navigation.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => isActive ? "active" : ""}>
-              <Icon /><span>{label}</span>{badge && pending > 0 && <span className="nav-badge">{pending}</span>}
+              <Icon /><span>{label}</span>
             </NavLink>
           ))}
         </nav>
@@ -178,7 +183,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
             <NavLink role="menuitem" className="profile-settings-link" to="/settings" onClick={() => setProfileMenuOpen(false)}><Settings /><span>Ustawienia</span></NavLink>
             <button role="menuitem" disabled={exportState === "loading"} onClick={() => { setProfileMenuOpen(false); void downloadExport(); }}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksportuj dane"}</span></button>
             {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
-            {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); void signOut(); }}><LogOut /><span>Wyloguj się</span></button> : null}
+            {mode === "supabase" ? <button className="danger" role="menuitem" onClick={() => { setProfileMenuOpen(false); leaveAccount(); }}><LogOut /><span>Wyloguj się</span></button> : null}
           </div> : null}
           <button className="profile-row" type="button" disabled={loadingView} aria-disabled={loadingView || undefined} aria-expanded={profileMenuOpen} aria-controls="profile-menu" aria-label="Otwórz menu profilu" onClick={() => setProfileMenuOpen((open) => !open)}><Avatar className="avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span><ChevronDown /></button>
         </div>
@@ -189,21 +194,23 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         <div className="desktop-global-search"><GlobalSearch disabled={loadingView} /></div>
         <button className="icon-button mobile-search-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span><kbd className="quick-add-shortcut">⌘J</kbd></Button>
+          <Button className="desktop-capture-button" disabled={loadingView} onClick={() => setCaptureOpen(true)}>Szybki zapis<kbd>⌘J</kbd></Button>
+          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span></Button>
           {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
         </div>
       </header>
 
-      <main className="main-content">{children}</main>
+      <main className="main-content">{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
       {aside && <aside className="context-rail">{aside}</aside>}
 
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab${addIsOpen ? " active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd} aria-label={addAction?.ariaLabel ?? "Otwórz centrum dodawania"} title={addAction?.label ?? "Dodaj"}><span className="capture-fab-icon"><Plus /></span><span>Dodaj</span></button>
+        <button className={`capture-fab${captureOpen ? " active" : ""}`} disabled={loadingView} aria-expanded={captureOpen} aria-haspopup="dialog" onClick={() => setCaptureOpen(true)} aria-label="Szybki zapis"><span className="capture-fab-icon"><Plus /></span><span>Zapisz</span></button>
         <NavLink to="/actions"><CheckSquare /><span>Działania</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
+      <Modal open={captureOpen} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}>{captureOpen ? <QuickCapture closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /> : null}</Modal>
       <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
@@ -216,7 +223,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
           <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span><ChevronRight /></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
-          <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Do uporządkowania</small></span><b>{pending}</b></NavLink>
+          <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Ostatnie zapisy</small></span></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
           <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Przegląd Celów z AI</small></span><ChevronRight /></NavLink>
         </nav></section>
@@ -225,7 +232,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
           <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
           {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
           {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
-          {mode === "supabase" ? <button className="danger" type="button" onClick={() => void signOut()}><LogOut /><span>Wyloguj się</span></button> : null}
+          {mode === "supabase" ? <button className="danger" type="button" onClick={leaveAccount}><LogOut /><span>Wyloguj się</span></button> : null}
         </div></section>
       </div></Sheet>
     </div>
@@ -235,7 +242,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
 export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
   return (
     <div className={`page-heading ${className}`.trim()}>
-      <div>{eyebrow && <span className="eyebrow"><Sparkles />{eyebrow}</span>}<h1>{title}</h1></div>
+      <div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h1>{title}</h1></div>
       {action}
     </div>
   );

@@ -7,6 +7,7 @@ export type ActionListView = typeof actionListViews[number];
 
 export interface ActionListFilter {
   view: ActionListView;
+  schedule?: "today" | "overdue" | "unscheduled";
   projectId?: string;
   goalId?: string;
   today?: string;
@@ -56,6 +57,9 @@ export function matchesActionListFilter(state: AppState, action: GoalAction, fil
   if (filter.goalId && action.goalId !== filter.goalId) return false;
   if (filter.projectId && !actionBelongsToProject(state, action, filter.projectId)) return false;
   const today = filter.today ?? localDateForTimeZone(new Date(), state.workspaceTimezone);
+  if (filter.schedule === "today" && !isActionInTodayProjection(action, today)) return false;
+  if (filter.schedule === "overdue" && !(action.scheduledFor && action.scheduledFor < today)) return false;
+  if (filter.schedule === "unscheduled" && (action.scheduledFor || action.pinnedToToday)) return false;
   const open = ["ready", "in_progress", "testing", "blocked"].includes(action.status);
   if (filter.view === "completed") return action.status === "completed";
   if (filter.view === "cancelled") return action.status === "cancelled";

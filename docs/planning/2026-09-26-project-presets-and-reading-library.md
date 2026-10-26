@@ -5,7 +5,7 @@ Status: etapy 1–5 zaimplementowane lokalnie. Migracje pierwszego wydania i
 poprawka `search_path` wdrożone do podłączonego Supabase 27 września 2026;
 historia i schemat RPC zweryfikowane. Zdalny odczyt listy Wiedzy działa w
 przeglądarce. Nie wykonywano zdalnych zapisów testowych na danych użytkownika.
-Etap 6 nierozpoczęty.
+4 października zaimplementowano lokalnie wybór szablonu w nagłówku Projektu, pozycję książki i termin powrotu. Migracja nowych pól oczekuje na wdrożenie. Pozostałe elementy etapu 6 zachowują status nierozpoczętych. [Raport realizacji](./2026-10-04-product-improvements-implementation.md).
 
 ## Poprawki po review
 

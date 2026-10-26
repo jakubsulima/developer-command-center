@@ -72,13 +72,13 @@ describe("Project Module", () => {
     state.goals = [goal()];
     state.actions = [
       action({ id: "overdue", title: "Zaległy krok", scheduledFor: "2026-09-20" }),
-      action({ id: "blocked", title: "Czeka na decyzję", status: "blocked", blocker: "Czekam na akceptację", reviewOn: "2026-09-28", scheduledFor: "2026-09-24", isNext: true }),
+      action({ id: "blocked", title: "Czeka na decyzję", status: "blocked", blocker: "Czekam na akceptację", reviewOn: "2026-09-24", scheduledFor: "2026-09-24", isNext: true }),
       action({ id: "today", title: "Na dziś", scheduledFor: "2026-09-24" })
     ];
 
     expect(projectSignal(state, "project", signalNow)).toMatchObject({
       kind: "blocked", actionId: "blocked", title: "Czeka na decyzję", label: "Do odblokowania",
-      description: "Czekam na akceptację Wróć do niego 28 wrz.",
+      description: "Czekam na akceptację Wróć do niego 24 wrz.",
       counts: { openActions: 3, blockedActions: 1, overdueActions: 1, todayActions: 1 }
     });
   });
@@ -92,7 +92,7 @@ describe("Project Module", () => {
     ];
 
     expect(projectSignal(state, "project", signalNow)).toMatchObject({
-      kind: "blocked", actionId: "blocked", counts: { overdueActions: 1, blockedActions: 1 }
+      kind: "overdue", actionId: "overdue", counts: { overdueActions: 1, blockedActions: 1 }
     });
     state.actions = state.actions.filter((candidate) => candidate.id !== "blocked");
     expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "overdue", actionId: "overdue", label: "Wymaga decyzji", description: "Do zrobienia · termin minął 21 wrz." });

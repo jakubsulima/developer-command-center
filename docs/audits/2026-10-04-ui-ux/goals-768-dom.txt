@@ -1,0 +1,28 @@
+- complementary:
+  - navigation "Główna nawigacja":
+    - link:
+      - /url: /
+    - link:
+      - /url: /projects
+    - link:
+      - /url: /routines
+    - link:
+      - /url: /goals
+    - link:
+      - /url: /actions
+    - link "3":
+      - /url: /knowledge
+      - generic: "3"
+    - link:
+      - /url: /review
+  - button "Otwórz menu profilu" [disabled]:
+    - generic: JK
+- banner:
+  - combobox "Szukaj w Projektach, Celach, Działaniach i Wiedzy" [disabled]
+  - button "Otwórz szybkie dodawanie" [disabled]:
+    - generic: Dodaj
+    - generic: ⌘J
+  - text: Tryb demo
+- main:
+  - status "Ładowanie widoku"
+- generic "Wyniki operacji"

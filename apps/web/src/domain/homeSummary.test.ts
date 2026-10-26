@@ -122,3 +122,12 @@ describe("deriveHomeSummary", () => {
     expect(home).toEqual({ completedActions: review.completedActions, progressUpdates: review.progressUpdates, knowledgeAdded: review.knowledgeAdded, periodStart: review.startDate, periodEnd: review.endDate });
   });
 });
+
+it("uses the same complete weekly aggregate on Start and Review with partial local data", () => {
+  const now = new Date("2026-10-04T10:00:00Z");
+  const state = { ...structuredClone(emptyState), weeklySummary: { periodStart: "2026-09-28", periodEnd: "2026-10-05", completedActions: 5, knowledgeAdded: 2, progressUpdates: 1, focusMinutes: 0 } };
+  const home = deriveHomeSummary(state, now, "supabase");
+  const review = deriveWeeklyReview(state, now, "supabase");
+  expect(home.activity.completedActions).toBe(review.completedActions);
+  expect(home.activity.completedActions).toBe(5);
+});

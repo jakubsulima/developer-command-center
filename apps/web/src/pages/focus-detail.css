@@ -78,8 +78,6 @@
 .focus-detail .goal-criteria-surface .plain-list { margin: 0; }
 .focus-detail .goal-criteria-surface .plain-list > li { padding: 0; margin: 0; border: 0; }
 .focus-detail .criterion-check { position: relative; min-height: 44px; padding: 6px 0; gap: 10px; font-size: 14px; font-weight: 400; }
-.focus-detail .criterion-check input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; }
-.focus-detail .criterion-check > svg { flex-shrink: 0; width: 22px; height: 22px; }
 .focus-detail .criterion-check:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 4px; }
 .focus-detail .criterion-check:has(input:disabled) { opacity: .6; }
 .focus-detail .criteria-empty p { margin: 0; font-size: 13px; }

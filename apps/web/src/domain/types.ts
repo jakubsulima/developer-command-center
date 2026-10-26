@@ -325,6 +325,11 @@ export interface LearningGoal {
 export interface NewLearningGoalInput { title: string; criterion: string; skill: string }
 
 export interface KnowledgeItem {
+  revisitOn?: string;
+  currentPage?: number;
+  totalPages?: number;
+  readingLocation?: string;
+
   id: string;
   version?: number;
   type: KnowledgeKind;
@@ -408,6 +413,7 @@ export interface FocusState {
 }
 
 export interface AppState {
+  savedActionViews?: import("./savedActionViews").SavedActionView[];
   workspaceId?: string;
   workspaceTimezone: string;
   aiReviewSettings?: AIReviewSettings;

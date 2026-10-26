@@ -1,0 +1,71 @@
+- banner:
+  - generic: Command
+  - button "Otwórz wyszukiwanie":
+  - text: Dodaj
+- main:
+  - text: Jedna lista wszystkich bieżących kroków
+  - heading "Działania" [level=1]
+  - generic "Ulubione widoki (0/5)"
+  - region "Filtry Działań":
+    - group "Szybkie widoki Działań":
+      - button "Otwarte" [pressed]
+      - button "Na dziś"
+      - button "Zaległe"
+    - button "Filtry Działań":
+  - generic: 3 otwarte działania
+  - 'generic "Lista: Otwarte"':
+    - region "Zaległe":
+      - heading "Zaległe 2" [level=2]:
+        - generic: Zaległe
+        - generic: "2"
+      - list:
+        - 'button "Ukończ: Pobrać historię transakcji"':
+        - link "Pobrać historię transakcji":
+          - /url: /actions/action-budget-overdue
+          - strong: Pobrać historię transakcji
+        - 'button "Zmień status: Do zrobienia — Pobrać historię transakcji"':
+          - generic: Do zrobienia
+        - text: Zaległe · 1 sie
+        - 'link "Cel: Zbudować spokojny budżet domowy"':
+          - /url: /goals/goal-budget
+        - generic: Ostatnie trzy miesiące
+        - 'button "Ukończ: Ustalić kwotę automatycznego przelewu"':
+        - link "Ustalić kwotę automatycznego przelewu":
+          - /url: /actions/action-budget-upcoming
+          - strong: Ustalić kwotę automatycznego przelewu
+        - 'button "Zmień status: Do zrobienia — Ustalić kwotę automatycznego przelewu"':
+          - generic: Do zrobienia
+        - text: Zaległe · 10 sie
+        - 'link "Cel: Zbudować spokojny budżet domowy"':
+          - /url: /goals/goal-budget
+    - region "Dzisiaj":
+      - heading "Dzisiaj 1" [level=2]:
+        - generic: Dzisiaj
+        - generic: "1"
+      - list:
+        - 'button "Ukończ: Spisać stałe koszty"':
+        - link "Spisać stałe koszty":
+          - /url: /actions/action-budget-today
+          - strong: Spisać stałe koszty
+        - 'button "Zmień status: Do zrobienia — Spisać stałe koszty"':
+          - generic: Do zrobienia
+        - text: Na dziś
+        - 'link "Cel: Zbudować spokojny budżet domowy"':
+          - /url: /goals/goal-budget
+        - generic: Rachunki, subskrypcje i raty
+  - paragraph: To wszystkie Działania w tym widoku.
+- navigation "Nawigacja mobilna":
+  - link "Start":
+    - /url: /
+    - generic: Start
+  - link "Projekty":
+    - /url: /projects
+    - generic: Projekty
+  - button "Dodaj nowe Działanie":
+    - generic: Dodaj
+  - link "Działania":
+    - /url: /actions
+    - generic: Działania
+  - button "Otwórz menu Więcej":
+    - generic: Więcej
+- generic "Wyniki operacji"

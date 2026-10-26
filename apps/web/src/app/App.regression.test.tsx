@@ -103,7 +103,7 @@ describe("regresje nowego modelu Celów", () => {
       const user = userEvent.setup();
       renderApp(path);
       await screen.findByRole("heading", { name: heading, level: 1 });
-      await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: trigger }));
+      await user.click(within(screen.getByRole("banner")).getByRole("button", { name: trigger }));
       const dialog = await screen.findByRole("dialog", { name: title });
       if (path.includes("/projects/fintrack-api")) expect(dialog).toHaveTextContent("Projekt: FinTrack API");
       await user.keyboard("{Control>}j{/Control}");
@@ -198,7 +198,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(profileCenter).queryByText("Działanie cykliczne")).not.toBeInTheDocument();
   });
 
-  it("pokazuje Na dziś przed Kierunkiem od AI i rozwija pełną listę sygnałów", async () => {
+  it("pokazuje Na dziś i odkrywa wskazówki dopiero na żądanie", async () => {
     const user = userEvent.setup();
     const state = structuredClone(demoState);
     state.goals = [
@@ -213,25 +213,14 @@ describe("regresje nowego modelu Celów", () => {
     localStorage.setItem("command-center-state-v1", JSON.stringify(state));
     renderApp();
 
-    const priority = await screen.findByRole("region", { name: "Najważniejsze teraz" });
-    const today = screen.getByRole("region", { name: "Na dziś" });
+    const today = await screen.findByRole("region", { name: "Na dziś" });
+    expect(screen.queryByRole("region", { name: "Najważniejsze teraz" })).not.toBeInTheDocument();
+    const help = screen.getByText("Pomóż wybrać następny krok");
+    expect(help.closest("details")).not.toHaveAttribute("open");
+    await user.click(help);
     const guidance = screen.getByRole("region", { name: "Kierunek od AI" });
-    const overviewToggle = screen.getByRole("button", { name: /Sygnały i dalszy plan/ });
-    expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(overviewToggle);
-    const attention = screen.getByRole("region", { name: "Wymaga uwagi" });
-    expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
-    expect(Boolean(priority.compareDocumentPosition(today) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(today.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(today.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(attention.querySelectorAll(".attention-list > a")).toHaveLength(2);
-    const attentionCount = Number(within(attention).getByLabelText(/spraw wymaga uwagi$/).getAttribute("aria-label")?.match(/\d+/)?.[0]);
-    expect(within(attention).getByRole("link", { name: "Zobacz wszystkie" })).toHaveAttribute("href", "/?show=attention");
 
-    await user.click(within(attention).getByRole("link", { name: "Zobacz wszystkie" }));
-    expect(screen.getByRole("region", { name: "Wymaga uwagi" }).querySelectorAll(".attention-list > a")).toHaveLength(attentionCount);
-    await user.click(within(screen.getByRole("region", { name: "Wymaga uwagi" })).getByRole("link", { name: "Zwiń listę" }));
-    expect(screen.getByRole("region", { name: "Wymaga uwagi" }).querySelectorAll(".attention-list > a")).toHaveLength(2);
   });
 
   it("pokazuje ogólne Rutyny niezależnie od planu dnia i otwiera ich ustawienia", async () => {
@@ -291,9 +280,9 @@ describe("regresje nowego modelu Celów", () => {
     renderApp("/knowledge?section=inbox");
     const source = await screen.findByText("https://www.postgresql.org/docs/current/erd.html");
     const item = source.closest("section") as HTMLElement;
-    await user.click(within(item).getByRole("button", { name: "Przetwórz" }));
+    await user.click(within(item).getByRole("button", { name: "Uporządkuj" }));
     const decision = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
-    await user.click(within(decision).getByText("Zapisz w Bibliotece").closest("button")!);
+    await user.click(within(decision).getByText("Zapisz materiał").closest("button")!);
     await user.clear(screen.getByLabelText("Nazwa materiału"));
     await user.type(screen.getByLabelText("Nazwa materiału"), "Dokumentacja PostgreSQL ERD");
     const knowledgeDialog = screen.getByRole("dialog", { name: "Zapisz w Bibliotece" });
@@ -328,7 +317,7 @@ describe("regresje nowego modelu Celów", () => {
   it("pokazuje walidację nowego Celu przy konkretnych polach", async () => {
     const user = userEvent.setup();
     renderApp("/goals");
-    await user.click(within(await screen.findByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy Cel" }));
+    await user.click(within(await screen.findByRole("banner")).getByRole("button", { name: "Dodaj nowy Cel" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
     await user.type(within(dialog).getByLabelText("Nazwa Celu"), "   ");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
@@ -340,7 +329,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
-    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj do Biblioteki" });
     await user.type(within(dialog).getByLabelText("Treść notatki"), "Uzgodniony kierunek modelu danych.");
     await user.click(within(dialog).getByText("Więcej", { exact: true }));
@@ -426,27 +415,26 @@ describe("regresje nowego modelu Celów", () => {
     expect(screen.queryByRole("button", { name: /start|wznów|pauza|checkpoint/i })).not.toBeInTheDocument();
   });
 
-  it("otwiera pełne dodawanie skrótem z dowolnego widoku bez utraty kontekstu", async () => {
+  it("otwiera szybki zapis skrótem bez utraty kontekstu", async () => {
     const user = userEvent.setup();
     renderApp("/goals/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API" });
     await user.keyboard("{Control>}j{/Control}");
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Powiązania i ustawienia")).toBeInTheDocument();
-    await user.click(within(dialog).getByText("Zmień", { exact: true }));
-    await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
-    await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Pomysł zapisany przy Celu");
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
+    expect(within(dialog).getByRole("heading", { name: "Szybki zapis" })).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Co chcesz zapamiętać lub zrobić?"), "Pomysł zapisany przy Celu");
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz" }));
     expect(await screen.findByRole("heading", { name: "FinTrack API" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
+    expect(screen.getByRole("status")).toHaveTextContent("Zapisano w Skrzynce.");
+
   });
 
   it("rozpoznaje komendę /cel i tworzy Cel z jednego pola", async () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.keyboard("{Control>}j{/Control}");
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = await screen.findByRole("dialog");
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
     await user.type(input, "/cel Uporządkować dokumentację");

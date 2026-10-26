@@ -6,6 +6,7 @@ export type KnowledgeVisibilityFilter = "active" | "archived" | "trashed";
 export interface KnowledgeFilters {
   resourceFormat?: "book";
   readingStatus?: ReadingStatus;
+  revisitOnOrBefore?: string;
   knowledgeKind?: KnowledgeKind;
   searchText?: string;
   projectId?: string;
@@ -35,6 +36,7 @@ export function createKnowledgeFilter(state: AppState, filters: KnowledgeFilters
   return (item: KnowledgeItem) => knowledgeVisibility(item) === (filters.visibility ?? "active")
       && (!filters.resourceFormat || item.resourceFormat === filters.resourceFormat)
       && (!filters.readingStatus || (item.resourceFormat === "book" && item.readingStatus === filters.readingStatus))
+      && (!filters.revisitOnOrBefore || Boolean(item.revisitOn && item.revisitOn <= filters.revisitOnOrBefore && ["resource", "note"].includes(item.type)))
       && (!filters.knowledgeKind || item.type === filters.knowledgeKind)
       && (!filters.projectId || projectIds?.has(item.id))
       && (!filters.goalId || linksByKnowledge.has(item.id))

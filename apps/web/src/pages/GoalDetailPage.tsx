@@ -1,3 +1,5 @@
+import { AIContextExport } from "../components/AIContextExport";
+import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, FolderKanban, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from "lucide-react";
@@ -199,7 +201,7 @@ export function GoalDetailPage() {
       {action.status === "blocked" && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setActionStatus(action.id, "ready"))}><RotateCcw />Odblokuj</Button>}
       {action.recurringTemplateId && !["completed", "skipped", "cancelled"].includes(action.status) && <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><SkipForward />Pomiń</Button>}
       {!['completed', 'cancelled'].includes(action.status) && <Button variant="danger" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "cancelled"); notifyUndo({ message: "Działanie anulowane.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><Ban />Anuluj Działanie</Button>}
-  </div><ActionKnowledgeRelations action={action} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Cel: ${goal.title}` }} />
+  </div><KnowledgeSuggestions projectId={goal.areaId} target={{ goalId: goal.id }} /><ActionKnowledgeRelations action={action} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Cel: ${goal.title}` }} />
   </div>;
 
   const remainingActions = actions.filter((action) => action.id !== nextAction?.id && !["completed", "cancelled", "skipped"].includes(action.status));
@@ -222,7 +224,7 @@ export function GoalDetailPage() {
       <Button variant="danger" disabled={visibilitySaving} onClick={(event) => { closeGoalMenu(event.currentTarget); setVisibilityError(""); setTrashOpen(true); }}><Trash2 />Przenieś do kosza</Button>
     </div></details></div>
     <section className="goal-overview">
-      <div className="goal-overview-main"><h1>{goal.title}</h1>{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}<p><span className="goal-outcome-label">Oczekiwany rezultat</span>{goal.outcome}</p></div>
+      <div className="goal-overview-main"><h1>{goal.title}</h1><AIContextExport target={{ type: "goal", id: goal.id }} />{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}<p><span className="goal-outcome-label">Oczekiwany rezultat</span>{goal.outcome}</p></div>
     </section>
     {goalStatusError && !pendingGoalStatus ? <p className="inline-mutation-error" role="alert">{goalStatusError}</p> : null}
     {visibilityError && !trashOpen ? <p className="inline-mutation-error" role="alert">{visibilityError} <button type="button" onClick={() => void changeGoalVisibility("archived")}>Spróbuj ponownie</button></p> : null}

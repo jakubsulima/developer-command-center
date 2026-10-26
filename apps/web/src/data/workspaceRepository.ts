@@ -1,6 +1,6 @@
 import type { DomainCommand } from "../domain/commands";
 import type { ActionListFilter } from "../domain/actionsList";
-import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, KnowledgeItem, KnowledgeKind, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink, ReadingStatus } from "../domain/types";
+import type { AppState, FocusSessionRecord, GoalAction, GoalCriterion, GoalTemplate, Goal, InboxItem, InboxStatus, KnowledgeItem, KnowledgeKind, LegacyProjectRecord, RecurringActionTemplate, ReviewRecord, Area, KnowledgeLink, ReadingStatus } from "../domain/types";
 import type { WeeklyReviewSummary } from "../domain/weeklyReview";
 import type { AIGoalReview, AIGoalReviewFeedbackRating, AIGoalReviewLatest } from "../domain/aiGoalReview";
 import type { AIInboxTriageFeedbackRating, AIInboxTriageProposal } from "../domain/aiInboxTriage";
@@ -108,6 +108,7 @@ export interface WeeklyActivityDetail {
 }
 
 export interface WorkspacePageQuery {
+  inboxStatus?: InboxStatus;
   workspaceId: string;
   collection: WorkspacePageCollection;
   pageSize: number;
@@ -115,6 +116,7 @@ export interface WorkspacePageQuery {
   actionFilter?: ActionListFilter;
   resourceFormat?: "book";
   readingStatus?: ReadingStatus;
+  revisitOnOrBefore?: string;
   knowledgeKind?: KnowledgeKind;
   searchText?: string;
   projectId?: string;

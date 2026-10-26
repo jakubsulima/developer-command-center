@@ -1,6 +1,6 @@
 # Kontekst dla AI — plan wdrożenia
 
-Data: 2026-09-14. Status: plan, implementacja nierozpoczęta.
+Data: 2026-09-14. Status: panel intencji, wybór źródeł oraz eksport Markdown i JSON zaimplementowane i sprawdzone lokalnie 4 października. Migracja odczytu oczekuje na wdrożenie. Trwała instrukcja Projektu i integracja MCP nie zostały zrealizowane. [Raport zakresu i weryfikacji](./2026-10-04-product-improvements-implementation.md).
 
 ## Cel i zakres
 

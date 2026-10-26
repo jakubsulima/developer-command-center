@@ -1,0 +1,99 @@
+- complementary:
+  - navigation "Główna nawigacja":
+    - link:
+      - /url: /
+    - link:
+      - /url: /projects
+    - link:
+      - /url: /routines
+    - link:
+      - /url: /goals
+    - link:
+      - /url: /actions
+    - link "3":
+      - /url: /knowledge
+      - generic: "3"
+    - link:
+      - /url: /review
+  - button "Otwórz menu profilu":
+    - generic: JK
+- banner:
+  - combobox "Szukaj w Projektach, Celach, Działaniach i Wiedzy"
+  - button "Dodaj nowy element Wiedzy":
+    - generic: Nowa Wiedza
+    - generic: ⌘J
+  - text: Tryb demo
+- main:
+  - text: Biblioteka materiałów i Skrzynka do późniejszego przetworzenia
+  - heading "Wiedza" [level=1]
+  - tablist "Widoki Wiedzy":
+    - tab "Biblioteka 6" [selected]:
+      - generic: Biblioteka
+      - generic: "6"
+    - tab "Skrzynka 3":
+      - generic: Skrzynka
+      - generic: "3"
+  - searchbox "Szukaj w wiedzy"
+  - button "Filtry":
+    - generic: Filtry
+  - group "Rodzaj Wiedzy":
+    - button "Wszystkie" [pressed]:
+      - generic: Wszystkie
+    - button "Do powrotu"
+    - button "Książki":
+      - generic: Książki
+    - button "Notatka":
+      - generic: Notatka
+    - button "Materiał":
+      - generic: Materiał
+    - button "Decyzja":
+      - generic: Decyzja
+    - button "Rezultat":
+      - generic: Rezultat
+  - paragraph: 6 z 6 elementów
+  - 'generic "Typ Wiedzy: Rezultat"':
+    - generic: Rezultat
+  - link "Diagram ERD — Transactions v1":
+    - /url: /knowledge/know-1
+    - strong: Diagram ERD — Transactions v1
+  - generic: FinTrack API • zaktualizowano wczoraj
+  - 'button "Więcej opcji: Diagram ERD — Transactions v1"':
+  - 'generic "Typ Wiedzy: Decyzja"':
+    - generic: Decyzja
+  - link "Typ danych dla kwot pieniężnych":
+    - /url: /knowledge/know-2
+    - strong: Typ danych dla kwot pieniężnych
+  - generic: DECIMAL(18,2) zamiast float • 2 źródła
+  - 'button "Więcej opcji: Typ danych dla kwot pieniężnych"':
+  - 'generic "Typ Wiedzy: Materiał"':
+    - generic: Materiał
+  - 'link "PostgreSQL: constraints and normalization"':
+    - /url: /knowledge/know-3
+    - strong: "PostgreSQL: constraints and normalization"
+  - generic: Dokumentacja źródłowa • użyte w 2 projektach
+  - 'button "Więcej opcji: PostgreSQL: constraints and normalization"':
+  - 'generic "Typ Wiedzy: Notatka"':
+    - generic: Notatka
+  - link "Wzorce modelowania transakcji":
+    - /url: /knowledge/know-4
+    - strong: Wzorce modelowania transakcji
+  - generic: Notatka robocza • 4 powiązania
+  - 'button "Więcej opcji: Wzorce modelowania transakcji"':
+  - generic: Książka
+  - link "Designing Data-Intensive Applications":
+    - /url: /knowledge/know-book
+    - strong: Designing Data-Intensive Applications
+  - generic: Martin Kleppmann · W trakcie
+  - 'button "Więcej opcji: Designing Data-Intensive Applications"':
+  - 'generic "Typ Wiedzy: Notatka"':
+    - generic: Notatka
+  - link "Replikacja a dostępność":
+    - /url: /knowledge/know-book-note
+    - strong: Replikacja a dostępność
+  - generic: 2 powiązania
+  - 'link "Źródło: Designing Data-Intensive Applications · Martin Kleppmann"':
+    - /url: /knowledge/know-book
+  - generic: Replikacja zwiększa dostępność odczytu, ale wymaga jawnej decyzji o spójności i tolerancji opóźnień.
+  - 'button "Więcej opcji: Replikacja a dostępność"':
+  - paragraph: To wszystkie elementy w tym widoku.
+- generic "Wyniki operacji"

@@ -1,3 +1,4 @@
+import { compareRecommendedActions, blockerTiming } from "./actionRecommendation";
 import type { AppState, GoalAction, Project } from "./types";
 import { isActionInTodayProjection, isVisibleWorkspaceAction, localDateForTimeZone } from "./activity";
 import { isOpenAction } from "./weeklyReview";
@@ -46,7 +47,7 @@ function statusDescription(action: GoalAction) {
  * Projects one stable, current signal for a Project from the shared workspace state.
  * The optional clock keeps selection deterministic in views and tests.
  */
-export function projectSignal(state: AppState, projectId: string, now = new Date()): ProjectSignal | undefined {
+export function projectSignal(state: AppState, projectId: string, now = new Date(), priorityGoalIds: readonly string[] = []): ProjectSignal | undefined {
   const project = state.areas.find((area) => area.id === projectId && area.visibility === "active");
   if (!project) return undefined;
 
@@ -62,7 +63,7 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
     .sort(compareActions);
 
   const overdueActions = actions.filter((action) => action.status !== "blocked" && Boolean(action.scheduledFor && action.scheduledFor < today));
-  const todayActions = actions.filter((action) => action.status !== "blocked" && isActionInTodayProjection(action, today));
+  const todayActions = actions.filter((action) => action.status !== "blocked" && isActionInTodayProjection(action, today)).sort((a,b) => compareRecommendedActions(a,b,priorityGoalIds));
   const blockedActions = actions.filter((action) => action.status === "blocked");
   const counts: ProjectSignalCounts = {
     currentGoals: currentGoals.length,
@@ -85,7 +86,7 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
     };
   };
 
-  const blocked = blockedActions[0];
+  const blocked = blockedActions.filter((action) => blockerTiming(action, today) === "due").sort((a, b) => a.reviewOn!.localeCompare(b.reviewOn!))[0];
   if (blocked) {
     const reason = blocked.blocker?.trim() || "To Działanie czeka na odblokowanie.";
     const review = blocked.reviewOn ? ` Wróć do niego ${formatSignalDate(blocked.reviewOn)}.` : "";
@@ -101,7 +102,7 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
     return signal("today", todayAction, "Na dziś", `${stateLabel}${todayAction.scheduledFor ? ` · termin: ${formatSignalDate(todayAction.scheduledFor)}.` : " · przypięte na dziś."}`);
   }
 
-  const next = actions.find((action) => action.isNext && ["ready", "in_progress"].includes(action.status));
+  const next = [...actions].sort((a,b) => compareRecommendedActions(a,b,priorityGoalIds)).find((action) => action.isNext && ["ready", "in_progress"].includes(action.status) && (!action.scheduledFor || action.scheduledFor <= today));
   if (next) {
     const timing = next.scheduledFor && next.scheduledFor > today ? ` · zaplanowane na ${formatSignalDate(next.scheduledFor)}.` : ".";
     return signal("next", next, "Następny krok", `${statusDescription(next)}${timing}`);
@@ -110,14 +111,20 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
   const available = actions.find((action) => ["ready", "in_progress"].includes(action.status) && !action.scheduledFor);
   if (available) return signal("available", available, "Możesz zrobić teraz", `${statusDescription(available)} · bez wyznaczonego terminu.`);
 
-  const testing = actions.find((action) => action.status === "testing");
+  const testing = actions.find((action) => action.status === "testing" && (!action.scheduledFor || action.scheduledFor <= today));
   if (testing) {
     const timing = testing.scheduledFor ? ` · termin: ${formatSignalDate(testing.scheduledFor)}.` : ".";
     return signal("testing", testing, "Do sprawdzenia", `${statusDescription(testing)}${timing}`);
   }
 
-  const scheduled = actions.find((action) => Boolean(action.scheduledFor && action.scheduledFor > today));
+  const undatedBlocked = blockedActions.find((action) => blockerTiming(action, today) === "undated");
+  if (undatedBlocked) return signal("blocked", undatedBlocked, "Ustal termin powrotu", undatedBlocked.blocker ?? "Ustal, kiedy wrócić do blokady.");
+
+  const scheduled = actions.find((action) => action.status !== "blocked" && Boolean(action.scheduledFor && action.scheduledFor > today));
   if (scheduled) return signal("scheduled", scheduled, `Najbliższy termin ${formatSignalDate(scheduled.scheduledFor!)}`, `${statusDescription(scheduled)} · zaplanowane na ${formatSignalDate(scheduled.scheduledFor!)}.`);
+
+  const futureBlocked = blockedActions.filter((action) => blockerTiming(action, today) === "future").sort((a, b) => a.reviewOn!.localeCompare(b.reviewOn!))[0];
+  if (futureBlocked) return signal("scheduled", futureBlocked, `Powrót ${formatSignalDate(futureBlocked.reviewOn!)}`, futureBlocked.blocker ?? "Blokada została odłożona.");
 
   if (normalizeProjectPreset(project.preset) === "reading") {
     const emptyState = projectPresets.reading.emptyState;

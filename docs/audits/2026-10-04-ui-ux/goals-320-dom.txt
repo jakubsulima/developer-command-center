@@ -1,0 +1,21 @@
+- banner:
+  - generic: Command
+  - button "Otwórz wyszukiwanie" [disabled]:
+  - text: Dodaj
+- main:
+  - status "Ładowanie widoku"
+- navigation "Nawigacja mobilna":
+  - link "Start":
+    - /url: /
+    - generic: Start
+  - link "Projekty":
+    - /url: /projects
+    - generic: Projekty
+  - button "Otwórz centrum dodawania" [disabled]:
+    - generic: Dodaj
+  - link "Działania":
+    - /url: /actions
+    - generic: Działania
+  - button "Otwórz menu Więcej" [disabled]:
+    - generic: Więcej
+- generic "Wyniki operacji"
