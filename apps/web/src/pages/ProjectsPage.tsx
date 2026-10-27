@@ -119,7 +119,7 @@ export function ProjectsPage() {
         {!grouped ? <div className="project-card-categories">{categories.filter((category) => project.categoryIds?.includes(category.id)).map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
         {signal ? <div className={`project-card-signal project-card-signal-${signal.kind}`} aria-label={`Najbliższy ruch: ${projectSignalText(signal)}${signal.actionId ? ` — ${signal.title}` : ""}`}>
           <ProjectSignalIcon signal={signal} />
-          <span><strong>{projectSignalText(signal)}</strong>{signal.actionId ? <small className="line-clamp-1">{signal.title}</small> : null}</span>
+          <span>{signal.actionId ? <><strong className="line-clamp-2">{signal.title}</strong><small>{projectSignalText(signal)}</small></> : <strong>{projectSignalText(signal)}</strong>}</span>
         </div> : null}
         {view !== "active" && project.description?.trim() ? <p className="line-clamp-1 project-card-description">{project.description.trim()}</p> : null}
         <div className="project-context-metrics">

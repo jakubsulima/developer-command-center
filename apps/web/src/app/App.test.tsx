@@ -34,7 +34,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
-    const navigation = await screen.findByRole("banner");
+    const navigation = await screen.findByRole("main");
     await user.click(within(navigation).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("radio", { name: /Materiał/ }));
@@ -60,7 +60,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/goals");
     await screen.findByRole("heading", { name: "Cele" });
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowy Cel" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowy Cel" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
     expect(within(dialog).getByText("Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.")).toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("Nazwa Celu"));
@@ -89,7 +89,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/projects");
     await screen.findByRole("heading", { name: "Projekty" });
-    await user.click(within(await screen.findByRole("banner")).getByRole("button", { name: "Dodaj nowy Projekt" }));
+    await user.click(within(await screen.findByRole("main")).getByRole("button", { name: "Dodaj nowy Projekt" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy projekt" });
     await user.type(within(dialog).getByLabelText("Nazwa Projektu"), "Zdrowie");
     await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, Działania i wiedza o zdrowiu");
@@ -144,15 +144,14 @@ describe("goal-centric workspace", () => {
 
     renderApp("/projects/project-history");
     await screen.findByRole("heading", { name: "Projekt z historią" });
-    const overview = screen.getByRole("region", { name: "Co jest teraz najważniejsze" });
-    expect(within(overview).getByRole("button", { name: "Otwórz Cele — 1 bieżący" })).toBeInTheDocument();
-    expect(within(overview).getByRole("button", { name: "Otwórz Działania — 1 otwarte" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cele" })).toHaveTextContent("1");
+    expect(screen.getByRole("tab", { name: "Działania" })).toHaveTextContent("1");
     expect(screen.queryByRole("region", { name: "Cele" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Działania" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Cele" }));
     const goals = screen.getByRole("region", { name: "Cele" });
-    const mobileNavigation = screen.getByRole("banner");
+    const mobileNavigation = screen.getByRole("main");
 
     expect(within(goals).getByText("Bieżący Cel")).toBeInTheDocument();
     expect(within(goals).queryByText("Osiągnięty Cel")).not.toBeInTheDocument();
@@ -375,7 +374,7 @@ describe("goal-centric workspace", () => {
     const user = userEvent.setup();
     renderApp("/routines");
     await screen.findByRole("heading", { name: "Rutyny" });
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nową Rutynę" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nową Rutynę" }));
     const create = screen.getByRole("dialog", { name: "Nowe Działanie cykliczne" });
     expect(within(create).getByText("Tak zapiszesz Rutynę")).toBeInTheDocument();
     expect(within(create).getByRole("button", { name: /Co tydzień/ })).toHaveAttribute("aria-pressed", "true");
@@ -396,12 +395,12 @@ describe("goal-centric workspace", () => {
     expect(recurringAction.closest(".today-action")).toHaveTextContent("Rutyna: Plan posiłków i zakupów");
   });
 
-  it("dodaje Działanie ze Startu wyłącznie przez centralny przycisk", async () => {
+  it("dodaje Działanie ze Startu przez przycisk w nagłówku strony", async () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = screen.getByRole("dialog", { name: "Nowe Działanie" });
     await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
@@ -415,8 +414,8 @@ describe("goal-centric workspace", () => {
     expect(screen.queryByRole("link", { name: "Zobacz wszystkie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/capture");
-    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
-    expect(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
   });
 
   it("pokazuje propozycję AI i nie zmienia Skrzynki przed zatwierdzeniem", async () => {

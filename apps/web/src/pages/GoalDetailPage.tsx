@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, FolderKanban, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { AppShell } from "../components/AppShell";
+import { AppShell, PageActions } from "../components/AppShell";
 import { ActionOverflowButton, ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
@@ -216,15 +216,15 @@ export function GoalDetailPage() {
   };
 
   return <AppShell appearance="focus-detail" addAction={{ label: "Nowe Działanie", shortLabel: "Działanie", ariaLabel: `Dodaj Działanie do Celu ${goal.title}`, quickAdd: { mode: "action", goalId: goal.id, areaId: goal.areaId, pinnedToToday: false, draftKey: `goal-${goal.id}` } }}>
-    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} showBack /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
+    <div className="goal-detail-toolbar"><ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={project ? `/projects/${encodeURIComponent(project.id)}` : "/goals"} fallbackReturnLabel={project ? `Projekt: ${project.name}` : "Wszystkie Cele"} showBack /><PageActions search={false} /><details className="goal-more-menu"><summary aria-label="Opcje Celu" title="Opcje Celu"><MoreHorizontal /><span className="sr-only">Opcje Celu</span></summary><div>
       <div className="goal-menu-context"><span>{goalKindLabels[goal.kind]}</span><strong>{project?.name ?? "Bez Projektu"}</strong><small>{priorityLabel} · {goal.targetDate ? `Termin ${new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${goal.targetDate}T12:00:00Z`))}` : "Bez daty docelowej"}</small></div>
       <label className="goal-menu-field" htmlFor="goal-status"><span>Stan Celu</span><select id="goal-status" value={goal.status} disabled={goalStatusSaving} aria-busy={goalStatusSaving} onChange={(event) => { const status = event.target.value as typeof goal.status; closeGoalMenu(event.currentTarget); if (status === "achieved" || status === "abandoned") { setGoalStatusError(""); setPendingGoalStatus(status); } else void changeGoalStatus(status); }}><option value="active">Aktywny</option><option value="paused">Wstrzymany</option><option value="achieved">Osiągnięty</option><option value="abandoned">Porzucony</option></select></label>
-      <Button onClick={(event) => { closeGoalMenu(event.currentTarget); openGoalEditor(); }}><Pencil />Edytuj Cel</Button>
+      <AIContextExport target={{ type: "goal", id: goal.id }} /><Button onClick={(event) => { closeGoalMenu(event.currentTarget); openGoalEditor(); }}><Pencil />Edytuj Cel</Button>
       <Button loading={visibilitySaving} onClick={() => void changeGoalVisibility("archived")}><Archive />Archiwizuj</Button>
       <Button variant="danger" disabled={visibilitySaving} onClick={(event) => { closeGoalMenu(event.currentTarget); setVisibilityError(""); setTrashOpen(true); }}><Trash2 />Przenieś do kosza</Button>
     </div></details></div>
     <section className="goal-overview">
-      <div className="goal-overview-main"><h1>{goal.title}</h1><AIContextExport target={{ type: "goal", id: goal.id }} />{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}<p><span className="goal-outcome-label">Oczekiwany rezultat</span>{goal.outcome}</p></div>
+      <div className="goal-overview-main"><h1>{goal.title}</h1>{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Cel: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}<p><span className="goal-outcome-label">Oczekiwany rezultat</span>{goal.outcome}</p></div>
     </section>
     {goalStatusError && !pendingGoalStatus ? <p className="inline-mutation-error" role="alert">{goalStatusError}</p> : null}
     {visibilityError && !trashOpen ? <p className="inline-mutation-error" role="alert">{visibilityError} <button type="button" onClick={() => void changeGoalVisibility("archived")}>Spróbuj ponownie</button></p> : null}

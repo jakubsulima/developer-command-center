@@ -1,13 +1,15 @@
 import { IPhoneCaptureSetup } from "../components/IPhoneCaptureSetup";
 import { ReturnReminderSettings } from "../components/ReturnReminderSettings";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { ChevronDown, Smartphone, Bell, Sparkles } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Button, Panel } from "../components/ui";
 import { DEFAULT_AI_REVIEW_SETTINGS, type AIReviewCacheHours, type AIReviewWindowDays } from "../domain/aiReviewSettings";
 
 export function SettingsPage() {
+  const { hash } = useLocation();
   const { state, mode, saveAIReviewSettings } = useStore();
   const savedSettings = state.aiReviewSettings ?? DEFAULT_AI_REVIEW_SETTINGS;
   const [windowDays, setWindowDays] = useState<AIReviewWindowDays>(savedSettings.windowDays);
@@ -40,9 +42,10 @@ export function SettingsPage() {
 
   return <AppShell>
     <PageHeading title="Ustawienia" eyebrow="Preferencje przestrzeni pracy" />
-    <IPhoneCaptureSetup />
-    <ReturnReminderSettings />
-    <p className="page-lead">Zdecyduj, jaki okres danych obejmuje Przegląd Celów z AI i jak długo można ponownie użyć zapisanego wyniku.</p>
+    <div className="settings-sections">
+    <details className="settings-section" open={hash === "#quick-capture"}><summary><Smartphone /><span><strong>Szybki zapis</strong><small>Skrót na iPhonie i dostęp do zapisu jednym dotknięciem</small></span><ChevronDown /></summary><div className="settings-section-content"><IPhoneCaptureSetup /></div></details>
+    <details className="settings-section"><summary><Bell /><span><strong>Przypomnienia</strong><small>Wybierz dni i porę powrotu do aplikacji</small></span><ChevronDown /></summary><div className="settings-section-content"><ReturnReminderSettings /></div></details>
+    <details className="settings-section"><summary><Sparkles /><span><strong>Przegląd z AI</strong><small>Ostatnie {savedSettings.windowDays} dni · wynik zachowany przez {savedSettings.cacheHours / 24} dni</small></span><ChevronDown /></summary><div className="settings-section-content">
     <Panel className="ai-review-settings-panel">
       <div className="section-heading"><div><span className="section-kicker">Przegląd Celów z AI</span><h2>Zakres i ponowne użycie wyniku</h2></div></div>
       <form onSubmit={(event) => void submit(event)}>
@@ -60,12 +63,13 @@ export function SettingsPage() {
             </select>
           </label>
         </div>
-        <p className="ai-review-settings-note">Zmiana zakresu oznacza poprzedni wynik jako nieaktualny, ale nie uruchamia analizy. Skrócenie czasu cache działa również na zapisany wynik. Wydłużenie nie przedłuża jego pierwotnego terminu ważności.</p>
+        <p className="ai-review-settings-note">Zmiana zakresu oznacza poprzedni wynik jako nieaktualny, ale nie uruchamia analizy. Krótszy czas przechowywania działa również na zapisany wynik. Wydłużenie nie przedłuża jego pierwotnego terminu ważności.</p>
         <p className="ai-review-settings-note">{mode === "demo" ? "W trybie demo ustawienia są zapisywane lokalnie w tej przeglądarce." : "Ustawienia są wspólne dla urządzeń w tym Workspace."}</p>
         {error ? <p className="inline-mutation-error" role="alert">{error}</p> : null}
         {success ? <p className="ai-review-settings-success" role="status">Ustawienia zostały zapisane.</p> : null}
         <div className="ai-review-settings-actions"><Button type="submit" disabled={saving || !dirty} loading={saving}>Zapisz ustawienia</Button><Link to="/review?tab=ai">Wróć do Przeglądu AI</Link></div>
       </form>
-    </Panel>
+    </Panel></div></details>
+    </div>
   </AppShell>;
 }

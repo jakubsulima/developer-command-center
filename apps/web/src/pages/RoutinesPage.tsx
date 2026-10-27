@@ -58,12 +58,7 @@ export function RoutinesPage() {
 
   return <AppShell addAction={{ label: "Nowa Rutyna", shortLabel: "Rutyna", ariaLabel: "Dodaj nową Rutynę", active: formOpen && !editingTemplateId, quickAdd: { mode: "routine", pinnedToToday: false, draftKey: "routines-list" }, onClick: openNew }}>
     <PageHeading title="Rutyny" eyebrow="Wszystkie powtarzalne działania w jednym miejscu" />
-    <div className="routine-overview" aria-label="Podsumowanie Rutyn">
-      <div><Repeat2 /><span><strong>{activeCount}</strong><small>aktywne</small></span></div>
-      <div><Pause /><span><strong>{pausedCount}</strong><small>wstrzymane</small></span></div>
-      <div><CalendarClock /><span><strong>{state.recurringActionTemplates.filter((item) => item.status !== "archived").length}</strong><small>wszystkich</small></span></div>
-    </div>
-    <div className="routine-toolbar"><div className="filter-pills" role="group" aria-label="Stan Rutyn">{([{"value":"all","label":"Wszystkie"},{"value":"active","label":"Aktywne"},{"value":"paused","label":"Wstrzymane"}] as const).map((option) => <Button key={option.value} variant={filter === option.value ? "primary" : "ghost"} aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}>{option.label}</Button>)}</div><span>{polishCount(routines.length, "rutyna", "rutyny", "rutyn")}</span></div>
+    <div className="routine-toolbar"><div className="filter-pills" role="group" aria-label="Stan Rutyn">{([{"value":"all","label":"Wszystkie"},{"value":"active","label":"Aktywne"},{"value":"paused","label":"Wstrzymane"}] as const).map((option) => <Button key={option.value} variant={filter === option.value ? "primary" : "ghost"} aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}>{option.label}<span className="routine-filter-count">{option.value === "active" ? activeCount : option.value === "paused" ? pausedCount : activeCount + pausedCount}</span></Button>)}</div><span>{polishCount(routines.length, "rutyna", "rutyny", "rutyn")}</span></div>
     {routines.length ? <div className="routine-grid">{routines.map((routine) => {
       const key = `routine:${routine.id}`;
       const goal = state.goals.find((item) => item.id === routine.goalId);
@@ -84,7 +79,7 @@ export function RoutinesPage() {
         {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" onClick={() => void mutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}
         <div className="routine-card-actions"><Link className="button button-secondary" to={`/routines?editSeries=${encodeURIComponent(routine.id)}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
       </Panel>;
-    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku Dodaj na dole, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
+    })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku + w nagłówku, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
     <RecurringActionForm open={formOpen} templateId={editingTemplateId} onClose={closeForm} />
   </AppShell>;
 }

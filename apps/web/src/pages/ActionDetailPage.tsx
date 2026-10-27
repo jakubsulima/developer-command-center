@@ -1,7 +1,7 @@
 import { AIContextExport } from "../components/AIContextExport";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
-import { CalendarDays, Check, Flag, FolderKanban, Pin, PinOff, ChevronRight, LockKeyhole, Pencil } from "lucide-react";
+import { CalendarDays, Check, Flag, FolderKanban, Pin, PinOff, ChevronRight, LockKeyhole, MoreHorizontal, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
@@ -88,7 +88,7 @@ export function ActionDetailPage() {
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
     <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} showBack />
-    <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><div className="action-heading-tools"><AIContextExport target={{ type: "action", id: action.id }} /><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div></div>
+    <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><div className="action-heading-tools"><details className="detail-tools-menu"><summary aria-label="Więcej opcji Działania"><MoreHorizontal aria-hidden="true" /></summary><div><AIContextExport target={{ type: "action", id: action.id }} /></div></details><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div></div>
       {parentLabel && context.name ? <NavigationLink className="action-parent-link" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><span className="action-parent-icon">{parentIcon}</span><span>{parentLabel}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
       <div className="action-status-row"><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="detail" disabled={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusView("statuses")} /></div>
     </header>
