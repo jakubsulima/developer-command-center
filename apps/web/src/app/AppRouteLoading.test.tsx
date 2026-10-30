@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { demoState } from "../data/demo";
-import { AppShell } from "../components/AppShell";
+import { AppShell, PageHeading } from "../components/AppShell";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
@@ -30,13 +30,15 @@ describe("ekran ładowania widoku", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<MemoryRouter initialEntries={["/actions"]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 
-    const loadingStatus = await screen.findByRole("status", { name: "Ładowanie widoku" });
-    const loadingShell = loadingStatus.closest(".app-shell") as HTMLElement;
-    expect(loadingShell.querySelector(".topbar-add-button")).toBeDisabled();
-    expect(loadingShell.querySelector(".capture-fab")).toBeDisabled();
-    expect(loadingShell.querySelector(".mobile-search-trigger")).toBeDisabled();
-    expect(loadingShell.querySelector(".mobile-more-trigger")).toBeDisabled();
-    expect(loadingShell.querySelector<HTMLInputElement>("#global-search")).toBeDisabled();
+    expect(await screen.findByRole("status", { name: "Ładowanie widoku" })).toBeInTheDocument();
+    const captureButtons = screen.getAllByRole("button", { name: /Szybki zapis/ });
+    expect(captureButtons).toHaveLength(2);
+    for (const button of captureButtons) expect(button).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Otwórz menu Więcej" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Otwórz menu profilu" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Dodaj nowe Działanie" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Otwórz wyszukiwanie" })).not.toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "j", metaKey: true });
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
@@ -50,12 +52,12 @@ describe("ekran ładowania widoku", () => {
         shortLabel: "Działanie",
         ariaLabel: "Dodaj nowe Działanie",
         quickAdd: { mode: "action", goalId: "goal-budget", areaId: "area-finanse", pinnedToToday: false, draftKey: "slow-actions" }
-      }}><h1>Załadowane Działania</h1></AppShell> });
+      }}><PageHeading title="Załadowane Działania" /></AppShell> });
     });
 
     expect(await screen.findByRole("heading", { name: "Załadowane Działania" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(document.querySelector<HTMLButtonElement>(".topbar-add-button")!);
+    await user.click(screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
     const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
     expect(dialog).toHaveTextContent("Cel: Zbudować spokojny budżet domowy");
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Krok po załadowaniu");
