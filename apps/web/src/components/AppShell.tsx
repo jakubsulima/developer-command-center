@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Box, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
+import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
+import { PageActionsContext } from "./page-actions-context";
 import { QuickCapture } from "./QuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
@@ -164,6 +165,10 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   if (loading) return <AppLoading label="Ładowanie przestrzeni pracy…" />;
 
   return (
+    <PageActionsContext.Provider value={{
+      add: addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
+      search: <button className="icon-button page-search-button" disabled={loadingView} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
+    }}>
     <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></div>
@@ -190,17 +195,13 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       </aside>
 
       <header className="topbar">
-        <span className="mobile-brand" aria-hidden="true"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></span>
         <div className="desktop-global-search"><GlobalSearch disabled={loadingView} /></div>
-        <button className="icon-button mobile-search-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
         <div className="top-actions">
-          <Button className="desktop-capture-button" disabled={loadingView} onClick={() => setCaptureOpen(true)}>Szybki zapis<kbd>⌘J</kbd></Button>
-          <Button className={`topbar-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-label={addAction?.ariaLabel ?? "Otwórz szybkie dodawanie"} title={addAction?.label ?? "Dodaj"} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span className="topbar-add-label">{addAction?.label ?? "Dodaj"}</span></Button>
-          {mode === "demo" ? <span className="demo-pill"><Box /> Tryb demo</span> : <span className={`demo-pill ${error || freshnessError ? "sync-error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}{error ? "Błąd synchronizacji" : freshnessError ? "Nie udało się odświeżyć" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</span>}
+          <Button className="desktop-capture-button" disabled={loadingView} onClick={() => setCaptureOpen(true)}><Plus />Szybki zapis<kbd>⌘J</kbd></Button>
         </div>
       </header>
 
-      <main className="main-content">{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
+      <main className="main-content">{error || freshnessError ? <div className="shell-sync-alert" role="status"><CloudOff /><span>{error ? "Nie udało się zsynchronizować zmian." : "Nie udało się odświeżyć danych."}</span><Button variant="ghost" onClick={() => void reload().catch(() => undefined)}>Spróbuj ponownie</Button></div> : null}{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
       {aside && <aside className="context-rail">{aside}</aside>}
 
       <nav className="bottom-nav" aria-label="Nawigacja mobilna">
@@ -225,7 +226,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Ostatnie zapisy</small></span></NavLink>
           <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
-          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Przegląd Celów z AI</small></span><ChevronRight /></NavLink>
+          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Zapis, przypomnienia i AI</small></span><ChevronRight /></NavLink>
         </nav></section>
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
           {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}
@@ -236,14 +237,21 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         </div></section>
       </div></Sheet>
     </div>
+    </PageActionsContext.Provider>
   );
+}
+
+export function PageActions({ search = true }: { search?: boolean }) {
+  const actions = useContext(PageActionsContext);
+  return <div className="page-actions">{search ? actions.search : null}{actions.add}</div>;
 }
 
 export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
   return (
     <div className={`page-heading ${className}`.trim()}>
-      <div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h1>{title}</h1></div>
-      {action}
+      <div className="page-heading-copy"><h1>{title}</h1>{eyebrow && <span className="eyebrow">{eyebrow}</span>}</div>
+      <PageActions />
+      {action ? <div className="page-heading-secondary">{action}</div> : null}
     </div>
   );
 }

@@ -131,7 +131,7 @@ export function StartPage() {
     : summary.recommendation.kind === "goal_without_next_action" ? "Ustal następny krok" : "Przejdź do decyzji";
 
   return <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie na Starcie", quickAdd: { mode: "action", scheduledFor: currentDate, draftKey: "start" } }}>
-    <PageHeading title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} />
+    <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} />
 
     <Link className="start-capture-link" to="/capture"><span className="start-capture-icon"><Plus /></span><span><strong>Zapisz myśl lub link</strong><small>Resztę uporządkujesz później.</small></span><ChevronRight /></Link>
     {actionDraft.dirty ? <Button variant="ghost" onClick={() => setActionOpen(true)}>Otwórz poprzedni szkic Działania</Button> : null}

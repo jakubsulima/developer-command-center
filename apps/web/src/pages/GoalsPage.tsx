@@ -132,15 +132,14 @@ export function GoalsPage() {
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
         const overdue = state.actions.some((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status));
         const card = <>
-          <div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{kindLabels[goal.kind]}</Badge><span>{statusLabels[goal.status]}</span></div>
-          <h2 className="line-clamp-2">{goal.title}</h2>
+          <h2 className="line-clamp-2">{goal.title}</h2><div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{kindLabels[goal.kind]}</Badge><span>{statusLabels[goal.status]}</span></div>
           {areaName || next ? <div className="goal-card-context">{areaName ? <span><Layers3 />{areaName}</span> : null}{next ? <span><Flag />{next.title}</span> : null}</div> : null}
           <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
         </>;
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
           : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku Dodaj na dole i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku + w nagłówku i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <Modal open={newOpen} closeDisabled={loading} title="Nowy Cel" onClose={() => setNewOpen(false)}>
         <form className="guided-form" onSubmit={submitGoal} noValidate>

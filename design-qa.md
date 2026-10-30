@@ -109,3 +109,28 @@ Kontrola wizualna w lokalnym trybie demo objęła Start, Projekty, Cele, Działa
 Dowody: [Start na telefonie](docs/design/polish-2026-10-25/start-mobile.jpg), [Start na desktopie](docs/design/polish-2026-10-25/start-desktop.jpg), [szybki zapis](docs/design/polish-2026-10-25/capture-mobile.jpg), [Biblioteka](docs/design/polish-2026-10-25/knowledge-mobile.jpg). Zmiany są lokalne; bez publikacji na produkcji.
 
 Weryfikacja kodu: typecheck, lint, produkcyjny build demo i `git diff --check` zakończyły się poprawnie. Build nadal sygnalizuje istniejący chunk powyżej 500 kB. Pełny przebieg 531 testów miał 24 niepowodzenia przy wolnym wykonaniu (507 przeszło). Powtórzenie czterech plików pojedynczo dało 119/121; końcowe dwa pliki dały 44/44 po ustawieniu limitu testu SQL na 30 s w poleceniu oraz jawnego oczekiwania 5 s na pierwszy leniwie ładowany widok w teście Celu. Asercje zachowania pozostały bez zmian. Testy wejścia do formularzy wskazują teraz przycisk w nagłówku zamiast usuniętego mobilnego duplikatu w treści.
+
+
+## 2026-10-27 — nagłówki i pozostałe widoki
+
+Na telefonie usunięto oddzielny pasek z logo; wyszukiwanie i kontekstowe dodawanie są przy tytule strony. Na desktopie globalny pasek zawiera wyszukiwanie i szybki zapis, a dodawanie należy do bieżącego widoku. Błąd synchronizacji nadal ma widoczny komunikat z ponowieniem.
+
+Uproszczono hierarchię kart Projektów i Celów, przeniesiono zapisane widoki Działań do rozwijanego menu, a szczegółowe rodzaje Wiedzy do filtrów. Skrzynka skraca długą treść z możliwością rozwinięcia. Zniknęły powielone statystyki Projektu i Rutyn; liczby znajdują się przy zakładkach lub filtrach. Eksport kontekstu AI przeniesiono do menu szczegółów. Ustawienia mają trzy zwijane sekcje; bezpośredni link `/settings#quick-capture` otwiera instrukcję iPhone.
+
+Kontrola wizualna w lokalnym demo objęła Start, Projekty, Cele, Działania, Wiedzę, Skrzynkę, Rutyny, Podsumowanie, Ustawienia i szczegóły Projektu/Celu/Działania. Sprawdzono mobilne wyszukiwanie, desktopowy szybki zapis, filtr rodzaju Wiedzy, zapisane widoki oraz link do instrukcji iPhone. Rozmiary: 390 × 844 i 1440 × 1000; dodatkowo Podsumowanie, Rutyny i instrukcja ustawień przy 320 px. Poprawiono wykryte przepełnienie paska filtrów Działań i pozycję menu Działania na telefonie. To kontrola responsywnego interfejsu, nie test fizycznego urządzenia iOS.
+
+Weryfikacja: 97 testów w sześciu plikach przeszło; po dodaniu regresji linku do instrukcji iPhone ponowny przebieg `App.regression.test.tsx` przeszedł 59/59 (łącznie 98 różnych testów). Typecheck, lint, build produkcyjny i `git diff --check` poprawne. Build nadal zgłasza ostrzeżenie o istniejącym chunku ponad 500 kB.
+
+Dowody: [Start](docs/design/polish-2026-10-27/start-mobile.png), [Ustawienia](docs/design/polish-2026-10-27/settings-mobile.png), [Skrzynka](docs/design/polish-2026-10-27/inbox-mobile.png), [Projekty na desktopie](docs/design/polish-2026-10-27/projects-desktop.png). Zmiany w lokalnej gałęzi `dev`, bez publikacji na produkcji.
+
+## 2026-10-30 — wybrany wariant A na mobile
+
+Użytkownik wybrał wariant A jako kierunek spójniejszego wyglądu, z priorytetem dla telefonu. Włączono go do właściwych ekranów aplikacji i usunięto tymczasowy przełącznik prototypów A/B/C.
+
+Start i Działania używają wspólnych powierzchni list, delikatnych separatorów, spokojniejszej nawigacji i jednolitej skali odstępów. Data na Starcie poprzedza tytuł. Formularz Działania skupia opcjonalny opis, powiązanie i przypięcie w sekcji „Opis i powiązania”; wybór terminu oraz przycisk zapisu pozostają bezpośrednio dostępne. Zachowano statusy, dowolne daty, obsługę szkiców i błędów oraz kontekstowe dodawanie.
+
+Weryfikacja: 99 różnych testów w sześciu plikach, TypeScript, ESLint i build demo przeszły. Build zgłasza wcześniejsze ostrzeżenia o chunku ponad 500 kB i mieszanych importach repozytorium danych. Kontrola wizualna objęła Start i Działania przy 390 × 844, rozwinięte filtry przy 320 × 700, formularz przy 390 × 844 i 320 × 480 oraz Start na desktopie 1440 × 1000. Filtry przy 320 px nie powodują poziomego przepełnienia. Przy wysokości 480 px dodatkowe pola formularza przewijają się, a zapis pozostaje widoczny. Nie testowano fizycznego iPhone'a ani jego klawiatury.
+
+Podczas końcowej kontroli nieaktywny serwer podglądu spowodował błąd pobrania modułu Działań. Ponowne uruchomienie Vite i przeładowanie strony przywróciły działanie widoku. Zmiany pozostają lokalne, bez publikacji.
+
+Dowody (folder rozpoczęty 29 października): [Start](docs/design/mobile-a-2026-10-29/start-390.png), [Działania](docs/design/mobile-a-2026-10-29/actions-390.png), [Nowe Działanie](docs/design/mobile-a-2026-10-29/new-action-390.png), [formularz 320 × 480](docs/design/mobile-a-2026-10-29/form-320x480.png).

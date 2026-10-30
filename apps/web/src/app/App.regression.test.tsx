@@ -103,7 +103,7 @@ describe("regresje nowego modelu Celów", () => {
       const user = userEvent.setup();
       renderApp(path);
       await screen.findByRole("heading", { name: heading, level: 1 });
-      await user.click(within(screen.getByRole("banner")).getByRole("button", { name: trigger }));
+      await user.click(within(screen.getByRole("main")).getByRole("button", { name: trigger }));
       const dialog = await screen.findByRole("dialog", { name: title });
       if (path.includes("/projects/fintrack-api")) expect(dialog).toHaveTextContent("Projekt: FinTrack API");
       await user.keyboard("{Control>}j{/Control}");
@@ -155,10 +155,21 @@ describe("regresje nowego modelu Celów", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("otwiera instrukcję iPhone po wejściu bezpośrednim linkiem ze skrótu", async () => {
+    const user = userEvent.setup();
+    renderApp("/settings#quick-capture");
+    const heading = await screen.findByRole("heading", { name: "Szybki zapis na iPhonie" });
+    expect(heading.closest("details")).toHaveAttribute("open");
+    expect(screen.getByRole("link", { name: "Otwórz szybki zapis" })).toHaveAttribute("href", "/capture");
+    await user.click(screen.getByText("Szybki zapis", { exact: true, selector: "strong" }));
+    expect(heading.closest("details")).not.toHaveAttribute("open");
+  });
+
   it("zapisuje ustawienia Przeglądu AI jawnie i zachowuje je w eksporcie demo", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
     await screen.findByRole("heading", { name: "Ustawienia" });
+    await user.click(screen.getByText("Przegląd z AI", { exact: true }));
     expect(screen.getByLabelText("Zakres danych analizowanych przez AI")).toHaveValue("28");
     expect(screen.getByLabelText("Maksymalny czas ponownego użycia wyniku")).toHaveValue("72");
     await user.selectOptions(screen.getByLabelText("Zakres danych analizowanych przez AI"), "7");
@@ -168,13 +179,13 @@ describe("regresje nowego modelu Celów", () => {
     await waitFor(() => expect(localStorage.getItem("command-center-local-workspace-v2")).toContain('"aiReviewSettings":{"windowDays":7,"cacheHours":24}'));
   });
 
-  it("prowadzi tworzenie przez centralny przycisk i oddziela je od centrum profilu", async () => {
+  it("prowadzi tworzenie przez przycisk przy tytule i oddziela je od centrum profilu", async () => {
     const user = userEvent.setup();
     renderApp();
 
     await screen.findByRole("heading", { name: "Start" });
     expect(screen.queryByRole("button", { name: "Otwórz szybkie akcje" })).not.toBeInTheDocument();
-    await user.click(await within(screen.getByRole("banner")).findByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
+    await user.click(await within(screen.getByRole("main")).findByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const createCenter = screen.getByRole("dialog");
     const quickAdd = createCenter.querySelector(".quick-add");
     expect(quickAdd).not.toHaveClass("mobile-chooser");
@@ -184,7 +195,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus();
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
-    await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
+    await user.click(within(createCenter).getByText("Opis i powiązania"));
     const dateChoices = within(createCenter).getByRole("radiogroup", { name: "Kiedy?" });
     await user.click(within(dateChoices).getByRole("radio", { name: "Dzisiaj" }));
     expect(within(dateChoices).getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
@@ -317,7 +328,7 @@ describe("regresje nowego modelu Celów", () => {
   it("pokazuje walidację nowego Celu przy konkretnych polach", async () => {
     const user = userEvent.setup();
     renderApp("/goals");
-    await user.click(within(await screen.findByRole("banner")).getByRole("button", { name: "Dodaj nowy Cel" }));
+    await user.click(within(await screen.findByRole("main")).getByRole("button", { name: "Dodaj nowy Cel" }));
     const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
     await user.type(within(dialog).getByLabelText("Nazwa Celu"), "   ");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
@@ -329,7 +340,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
     const dialog = screen.getByRole("dialog", { name: "Dodaj do Biblioteki" });
     await user.type(within(dialog).getByLabelText("Treść notatki"), "Uzgodniony kierunek modelu danych.");
     await user.click(within(dialog).getByText("Więcej", { exact: true }));
@@ -434,7 +445,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = await screen.findByRole("dialog");
     const input = within(dialog).getByLabelText("Co chcesz zrobić?");
     await user.type(input, "/cel Uporządkować dokumentację");
@@ -448,7 +459,7 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp();
     await screen.findByRole("heading", { name: "Start" });
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByText("Zmień", { exact: true }));
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));

@@ -3,7 +3,7 @@ import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { localDateForTimeZone } from "../domain/activity";
 import { readingPositionLabel } from "../domain/readingProgress";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
-import { Archive, BookMarked, Box, FileText, GitBranch, Inbox, Library, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, BookMarked, Inbox, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -42,13 +42,6 @@ type KnowledgeCreateForm = { kind: CreatableKnowledgeKind; title: string; detail
 function createKnowledgeForm(): KnowledgeCreateForm {
   return { kind: "note", title: "", detail: "", goalIds: [], areaId: "", sourceUrl: "", isBook: false, resourceAuthor: "", readingStatus: "to_read", sourceBookId: "", idempotencyKey: crypto.randomUUID() };
 }
-
-const knowledgeKindIcons = {
-  note: FileText,
-  resource: Library,
-  decision: GitBranch,
-  artifact: Box
-} as const;
 
 export function KnowledgePage() {
   const { state, loading, createKnowledge, setVisibility } = useStore();
@@ -93,7 +86,7 @@ export function KnowledgePage() {
   const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { revisitOnOrBefore, resourceFormat: booksOnly ? "book" : undefined, readingStatus, knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind, searchText: normalized, projectId: areaFilter || undefined, knowledgeGoalId: goalFilter || undefined, knowledgeVisibility: view });
   const booksPage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { resourceFormat: "book" });
   const bookOptions = [...new Map([...(booksPage.data?.items ?? []), ...state.knowledge].filter((item) => item.resourceFormat === "book" && !item.archivedAt && !item.trashedAt).map((item) => [item.id, item])).values()];
-  const advancedFilterCount = Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(Boolean(readingStatus)) + Number(booksOnly) + Number(view !== "active");
+  const advancedFilterCount = Number(kind !== "all") + Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(Boolean(readingStatus)) + Number(booksOnly) + Number(view !== "active");
   useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
     const next = new URLSearchParams(params); let changed = false;
@@ -220,12 +213,10 @@ export function KnowledgePage() {
           <button type="button" aria-pressed={kind === "all" && !booksOnly} onClick={() => { params.delete("kind"); params.delete("format"); params.delete("readingStatus"); setParams(params); }}><BookMarked /><span>Wszystkie</span></button>
           <button type="button" aria-pressed={Boolean(revisitOnOrBefore)} onClick={() => { if (revisitOnOrBefore) params.delete("revisit"); else { params.set("revisit", "due"); params.delete("visibility"); } setParams(params); }}>Do powrotu</button>
           <button type="button" aria-pressed={booksOnly} onClick={() => { params.delete("kind"); params.delete("readingStatus"); params.set("format", "book"); setParams(params); }}><BookMarked /><span>Książki</span></button>
-          {filterableKnowledgeKinds.map((value) => {
-            const Icon = knowledgeKindIcons[value];
-            return <button key={value} type="button" aria-pressed={!booksOnly && kind === value} onClick={() => { params.delete("format"); params.delete("readingStatus"); params.set("kind", value); setParams(params); }}><Icon /><span>{knowledgeKindLabels[value]}</span></button>;
-          })}
+          {kind !== "all" ? <button type="button" aria-pressed="true" onClick={() => setFiltersOpen(true)}>{knowledgeKindLabels[kind]}</button> : null}
         </div>
         {filtersOpen ? <div className="knowledge-advanced-filters" id="knowledge-advanced-filters">
+          <label className="knowledge-kind-select"><span>Rodzaj</span><select aria-label="Rodzaj Wiedzy" value={kind} onChange={(event) => { params.delete("format"); params.delete("readingStatus"); if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{filterableKnowledgeKinds.map((value) => <option key={value} value={value}>{knowledgeKindLabels[value]}</option>)}</select></label>
           <div className="knowledge-filter-fields">
             <label><span>Cel</span><select aria-label="Filtr Celu" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Cel</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
             <label><span>Projekt</span><select aria-label="Filtr Projektu" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Projekt</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
@@ -239,7 +230,7 @@ export function KnowledgePage() {
               <button type="button" aria-pressed={view === "trashed"} onClick={() => { params.set("visibility", "trashed"); setParams(params); }}><Trash2 />Kosz</button>
             </div>
           </div>
-          {advancedFilterCount ? <Button className="knowledge-clear-advanced" variant="ghost" onClick={() => { params.delete("goal"); params.delete("area"); params.delete("readingStatus"); params.delete("format"); params.delete("visibility"); setParams(params); }}>Wyczyść dodatkowe filtry</Button> : null}
+          {advancedFilterCount ? <Button className="knowledge-clear-advanced" variant="ghost" onClick={() => { params.delete("goal"); params.delete("area"); params.delete("kind"); params.delete("readingStatus"); params.delete("format"); params.delete("visibility"); setParams(params); }}>Wyczyść dodatkowe filtry</Button> : null}
         </div> : null}
       </div>
       <div className="knowledge-view-row">
@@ -272,7 +263,7 @@ export function KnowledgePage() {
             );
           })}
         </div></div>
-      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku Dodaj na dole, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "revisit", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
+      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku + w nagłówku, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "revisit", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
       {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
       {results.length && knowledgePage.data && !knowledgePage.hasNextPage && !knowledgePage.isFetching && !knowledgePage.isError ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {

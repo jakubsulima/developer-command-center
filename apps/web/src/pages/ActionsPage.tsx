@@ -228,7 +228,6 @@ export function ActionsPage() {
   return (
     <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", quickAdd: { mode: "action", pinnedToToday: false, draftKey: "actions-list" } }}>
       <PageHeading title="Działania" eyebrow="Jedna lista wszystkich bieżących kroków" />
-      <SavedActionViews />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-toolbar-topline">
           <div className="actions-view-tabs" role="group" aria-label="Szybkie widoki Działań">
@@ -238,7 +237,7 @@ export function ActionsPage() {
               </button>
             ))}
           </div>
-          <Button className="actions-filter-toggle" variant="ghost" aria-label={filterCount ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} aria-expanded={filtersOpen} aria-controls="actions-context-filters" onClick={() => setFiltersOpen((open) => !open)}><Filter /><span>Filtry</span>{filterCount ? <small aria-hidden="true">{filterCount}</small> : null}<ChevronDown className={filtersOpen ? "expanded" : ""} aria-hidden="true" /></Button>
+          <SavedActionViews /><Button className="actions-filter-toggle" variant="ghost" aria-label={filterCount ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} aria-expanded={filtersOpen} aria-controls="actions-context-filters" onClick={() => setFiltersOpen((open) => !open)}><Filter /><span>Filtry</span>{filterCount ? <small aria-hidden="true">{filterCount}</small> : null}<ChevronDown className={filtersOpen ? "expanded" : ""} aria-hidden="true" /></Button>
         </div>
         {filtersOpen ? <div className="actions-filter-panel" id="actions-context-filters">
           <div className="actions-filter-section"><label className="actions-filter-label" htmlFor="actions-status-filter">Status</label><select id="actions-status-filter" aria-label="Status Działań" value={statusView} onChange={(event) => setStatusView(event.target.value as ActionStatusView)}>
