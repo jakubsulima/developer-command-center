@@ -50,7 +50,7 @@ describe("Dodaj — formularze i kontekst", () => {
     render(<QuickAdd open request={{ mode: "action", goalId: "goal" }} onClose={vi.fn()} />);
     expect(screen.getByLabelText("Co chcesz zrobić?")).toBeVisible();
     expect(screen.getByLabelText("Opis")).not.toBeVisible();
-    await user.click(screen.getByText("Dodaj opis").closest("summary")!);
+    await user.click(screen.getByText("Opis i powiązania").closest("summary")!);
     await user.type(screen.getByLabelText(/Opis/), "Opis rezultatu");
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "/cel Nowy wynik");
     expect(screen.getByLabelText(/Projekt opcjonalnie/)).toHaveValue("area:project");
@@ -132,7 +132,7 @@ describe("Dodaj — formularze i kontekst", () => {
     await switchType(user, "Projekt");
     expect(screen.getByText("Nowy samodzielny Projekt")).toBeInTheDocument();
     await switchType(user, "Działanie");
-    await user.click(screen.getByText("Powiązania i ustawienia"));
+    await user.click(screen.getByText("Opis i powiązania"));
     expect(screen.getByLabelText("Cel lub Projekt")).toHaveValue("goal:goal");
     expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
     expect(screen.queryByLabelText(/Dokładna data/)).not.toBeInTheDocument();
@@ -144,7 +144,7 @@ describe("Dodaj — formularze i kontekst", () => {
     const user = userEvent.setup();
     const customDate = shiftActionDate(workspaceToday(), 16);
     render(<QuickAdd open request={{ mode: "action", scheduledFor: customDate, pinnedToToday: true }} onClose={vi.fn()} />);
-    await user.click(screen.getByText("Powiązania i ustawienia"));
+    await user.click(screen.getByText("Opis i powiązania"));
     expect(screen.getByRole("radio", { name: "Inna data" })).toBeChecked();
     expect(screen.getByLabelText(/Dokładna data/)).toHaveValue(customDate);
     await user.click(screen.getByRole("radio", { name: "Bez terminu" }));

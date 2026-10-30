@@ -195,7 +195,7 @@ describe("regresje nowego modelu Celów", () => {
     expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus();
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
-    await user.click(within(createCenter).getByText("Powiązania i ustawienia"));
+    await user.click(within(createCenter).getByText("Opis i powiązania"));
     const dateChoices = within(createCenter).getByRole("radiogroup", { name: "Kiedy?" });
     await user.click(within(dateChoices).getByRole("radio", { name: "Dzisiaj" }));
     expect(within(dateChoices).getByRole("radio", { name: "Dzisiaj" })).toBeChecked();

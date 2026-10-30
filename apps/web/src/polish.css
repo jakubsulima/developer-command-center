@@ -408,3 +408,121 @@ textarea { line-height: 1.6; }
   .actions-toolbar .actions-filter-toggle > span { display: inline; }
   .actions-toolbar .actions-filter-toggle > svg:last-child { display: none; }
 }
+
+/* Mobile direction A (selected 2026-10-28): shared list surfaces and quiet chrome.
+   Status, scheduling, mutation feedback and navigation remain fully functional. */
+.quick-add-action-hint { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
+.quick-add-action-options .quick-add-field { margin-bottom: 16px; }
+
+@media (max-width: 767px) {
+  :root {
+    --background: #0e1521;
+    --card: #151f2e;
+    --popover: #192539;
+    --foreground: #eef2f8;
+    --muted-foreground: #a7b5c9;
+    --secondary-foreground: #becce0;
+    --border: #29364a;
+    --input: #40506a;
+    --surface-selected: #213552;
+    --mobile-primary: #679cf0;
+    --mobile-primary-foreground: #081a33;
+  }
+  .app-shell .main-content, .app-shell.focus-detail .main-content { padding-inline: 20px; padding-top: max(28px, env(safe-area-inset-top)); }
+  .page-heading h1 { font-size: 28px; font-weight: 600; letter-spacing: -.035em; }
+  .page-heading .page-actions { gap: 6px; }
+  .page-search-button { color: var(--muted-foreground); }
+  .page-add-button { border: 0; color: #bfd6ff; background: var(--surface-selected); }
+  .start-page-heading .page-heading-copy { display: flex; flex-direction: column; gap: 8px; }
+  .start-page-heading .eyebrow { order: -1; margin: 0; }
+  .start-page-heading h1 { padding: 0; }
+  .start-page-heading .page-actions { align-self: center; }
+  .main-content:has(.start-layout) .page-heading { margin-bottom: 26px; }
+  .start-capture-link { grid-template-columns: 36px minmax(0, 1fr) 16px; padding: 16px; gap: 12px; margin-bottom: 28px; background: #17263b; border-color: #2d4260; border-radius: 16px; }
+  .start-capture-icon { width: 36px; height: 36px; border-radius: 10px; background: #243c5d; color: #bad4ff; }
+  .start-capture-link strong { font-size: 15px; font-weight: 500; }
+  .start-capture-link > svg { width: 16px; }
+
+  /* The section title sits outside the shared list surface. */
+  .start-layout .start-today-panel { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .start-today-panel .start-section-heading { padding: 0; margin-bottom: 12px; }
+  .start-today-panel .start-section-heading h2, .actions-group > h2 { font-size: 17px; font-weight: 550; letter-spacing: -.02em; color: var(--foreground); }
+  .start-today-panel .count-chip, .actions-group > h2 small { padding: 0; border: 0; background: transparent; color: var(--muted-foreground); font-size: 13px; font-weight: 400; }
+  .actions-group > h2 { justify-content: space-between; }
+  .start-today-panel .today-list, .actions-group > .actions-list { display: grid; gap: 0; padding: 0 12px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; }
+  .start-today-panel .today-action, .actions-list .actions-list-row { grid-template-columns: 44px minmax(0, 1fr); align-items: start; gap: 4px; padding: 16px 0; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .start-today-panel .today-list > div + div, .actions-list .actions-list-row + .actions-list-row { border-top: 1px solid var(--border); }
+  .actions-list .actions-list-row::before, .actions-list .actions-list-row::after { display: none; }
+  .start-today-panel .today-action .action-copy { display: flex; flex-direction: column; gap: 4px; padding: 0; }
+  .start-today-panel .action-title-row { order: 0; }
+  .start-today-panel .today-action .action-copy > .action-context-compact { order: 1; margin: 0; }
+  .start-today-panel .action-signals { order: 2; }
+  .start-today-panel .action-copy > .action-relation-summary { order: 3; }
+  .actions-list .actions-list-copy { gap: 4px; }
+  .actions-list-title { order: 0; }
+  .actions-list-context { order: 1; }
+  .actions-list-copy > .action-signals { order: 2; }
+  .actions-list-detail { order: 3; }
+  .start-today-panel .action-title-row strong, .actions-list-title strong { font-size: 15px; line-height: 1.45; font-weight: 500; }
+  .actions-list-context, .actions-list-detail, .start-today-panel .today-action .action-copy > .action-context-compact { font-size: 12px; line-height: 1.5; color: var(--muted-foreground); }
+  .start-today-panel .today-action-complete, .actions-list-complete { margin-top: -9px; }
+  :is(.start-today-panel, .actions-groups) .action-check { width: 44px; height: 44px; min-width: 44px; min-height: 44px; color: var(--muted-foreground); }
+  :is(.start-today-panel, .actions-groups) .action-signals { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; margin-top: 2px; }
+  :is(.start-today-panel, .actions-groups) .action-signals .action-status-trigger { min-height: 44px; margin: 0; padding: 0; font-size: 12px; font-weight: 400; background: transparent; }
+  :is(.start-today-panel, .actions-groups) .action-status-trigger.ready { color: var(--muted-foreground); }
+  :is(.start-today-panel, .actions-groups) .action-signal { font-size: 12px; }
+  .start-today-panel .section-link { min-height: 44px; margin-top: 8px; }
+  .return-to-work { padding: 16px; margin-top: 20px; border-radius: 14px; background: transparent; }
+  .return-to-work > svg:first-child { display: none; }
+  .return-to-work strong { font-size: 14px; line-height: 1.5; }
+  .start-overdue > summary, .start-ai-help > summary { font-size: 13px; }
+  .actions-groups { gap: 24px; }
+  .actions-group { gap: 12px; }
+  .actions-view-tabs { display: flex; gap: 4px; padding: 4px; border: 0; border-radius: 12px; background: var(--card); mask-image: none; }
+  .actions-toolbar .actions-view-tabs button { flex: 1; min-width: 0; min-height: 44px; padding: 8px 6px; border: 0; border-radius: 8px; color: var(--muted-foreground); background: transparent; font-size: 12px; }
+  .actions-toolbar .actions-view-tabs button[aria-pressed="true"] { color: var(--foreground); background: #2a3b54; }
+  .bottom-nav { background: var(--background); }
+  .bottom-nav > a.active, .bottom-nav > .mobile-more-trigger.active { background: transparent; color: #a7c8ff; }
+  .bottom-nav > a > svg, .bottom-nav .mobile-nav-icon { box-sizing: content-box; padding: 6px 11px; border-radius: 10px; }
+  .bottom-nav > a.active > svg, .bottom-nav > .mobile-more-trigger.active .mobile-nav-icon { background: var(--surface-selected); }
+  .capture-fab-icon { background: var(--mobile-primary); color: var(--mobile-primary-foreground); }
+
+  /* Preserve the visualViewport-aware shell: only the body scrolls with a keyboard. */
+  .modal.creation-hub-modal, .modal.quick-capture-modal { --creation-surface: var(--background); background: var(--background); }
+  .modal.creation-hub-modal { padding-inline: max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-left)); padding-top: max(20px, env(safe-area-inset-top)); }
+  .creation-hub-modal .modal-head { padding-bottom: 24px; align-items: center; }
+  .creation-hub-modal .modal-head h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.035em; }
+  .creation-hub-modal .quick-add-body { padding-inline: 0; gap: 20px; }
+  .creation-hub-modal .quick-add-form-fields { gap: 16px; }
+  .creation-hub-modal .quick-add-field { gap: 8px; }
+  .creation-hub-modal .quick-add-field .field-label { margin: 0; font-size: 14px; font-weight: 500; color: var(--foreground); }
+  .creation-hub-modal :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) { min-height: 50px; padding: 12px 14px; border: 1px solid var(--input); border-radius: 12px; background: var(--card); font-size: 16px; }
+  .creation-hub-modal .quick-add-options > summary { min-height: 60px; }
+  .creation-hub-modal .quick-add-action-options { border-block: 1px solid var(--border); }
+  .quick-add-action-options .quick-add-options-leading { flex: 1; }
+  .quick-add-action-options .quick-add-options-leading > span:last-child { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .creation-hub-modal .quick-add-action-options .quick-add-options-leading small { display: block; font-size: 12px; color: var(--muted-foreground); }
+  .quick-add-action-options .quick-add-options-leading strong { font-size: 14px; font-weight: 500; }
+  .creation-hub-modal .quick-add-context-summary { padding: 0; line-height: 1.5; }
+  .creation-hub-modal .quick-add-date-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--card); }
+  .creation-hub-modal .quick-add-date-choices > label { min-height: 44px; padding: 6px; border: 0; border-radius: 8px; background: transparent; font-size: 12px; color: var(--muted-foreground); }
+  .creation-hub-modal .quick-add-date-choices > label:has(input:checked) { background: #2a3b54; color: var(--foreground); }
+  .creation-hub-modal .quick-add-date-choices > label:last-child { grid-column: 1 / -1; min-height: 44px; }
+  .creation-hub-modal .quick-add-footer { border: 0; padding-top: 16px; }
+  .creation-hub-modal .quick-add-footer > .button-primary, .capture-composer-actions > .button-primary { min-height: 50px; border: 0; border-radius: 12px; color: var(--mobile-primary-foreground); background: var(--mobile-primary); font-size: 15px; font-weight: 600; }
+  .creation-hub-modal .quick-add-footer > .button-primary:hover, .capture-composer-actions > .button-primary:hover { background: #83b0ff; }
+  .capture-workspace { padding: 24px 0; border: 0; background: transparent; }
+  .capture-page { width: calc(100% - 40px); }
+}
+@media (max-width: 350px) {
+  .app-shell .main-content, .app-shell.focus-detail .main-content { padding-inline: 16px; }
+  .start-capture-link { padding: 12px; gap: 8px; grid-template-columns: 32px minmax(0, 1fr) 16px; }
+  .start-capture-icon { width: 32px; height: 32px; }
+  .start-capture-link strong { font-size: 14px; }
+  .modal.creation-hub-modal { padding-inline: 16px; }
+  .creation-hub-modal .modal-head h2 { font-size: 21px; }
+}
+@container (max-height: 500px) {
+  .modal.creation-hub-modal .modal-head { padding-bottom: 8px; }
+  .modal.creation-hub-modal .quick-add-body { gap: 12px; }
+}

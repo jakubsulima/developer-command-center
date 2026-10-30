@@ -122,3 +122,15 @@ Kontrola wizualna w lokalnym demo objęła Start, Projekty, Cele, Działania, Wi
 Weryfikacja: 97 testów w sześciu plikach przeszło; po dodaniu regresji linku do instrukcji iPhone ponowny przebieg `App.regression.test.tsx` przeszedł 59/59 (łącznie 98 różnych testów). Typecheck, lint, build produkcyjny i `git diff --check` poprawne. Build nadal zgłasza ostrzeżenie o istniejącym chunku ponad 500 kB.
 
 Dowody: [Start](docs/design/polish-2026-10-27/start-mobile.png), [Ustawienia](docs/design/polish-2026-10-27/settings-mobile.png), [Skrzynka](docs/design/polish-2026-10-27/inbox-mobile.png), [Projekty na desktopie](docs/design/polish-2026-10-27/projects-desktop.png). Zmiany w lokalnej gałęzi `dev`, bez publikacji na produkcji.
+
+## 2026-10-30 — wybrany wariant A na mobile
+
+Użytkownik wybrał wariant A jako kierunek spójniejszego wyglądu, z priorytetem dla telefonu. Włączono go do właściwych ekranów aplikacji i usunięto tymczasowy przełącznik prototypów A/B/C.
+
+Start i Działania używają wspólnych powierzchni list, delikatnych separatorów, spokojniejszej nawigacji i jednolitej skali odstępów. Data na Starcie poprzedza tytuł. Formularz Działania skupia opcjonalny opis, powiązanie i przypięcie w sekcji „Opis i powiązania”; wybór terminu oraz przycisk zapisu pozostają bezpośrednio dostępne. Zachowano statusy, dowolne daty, obsługę szkiców i błędów oraz kontekstowe dodawanie.
+
+Weryfikacja: 99 różnych testów w sześciu plikach, TypeScript, ESLint i build demo przeszły. Build zgłasza wcześniejsze ostrzeżenia o chunku ponad 500 kB i mieszanych importach repozytorium danych. Kontrola wizualna objęła Start i Działania przy 390 × 844, rozwinięte filtry przy 320 × 700, formularz przy 390 × 844 i 320 × 480 oraz Start na desktopie 1440 × 1000. Filtry przy 320 px nie powodują poziomego przepełnienia. Przy wysokości 480 px dodatkowe pola formularza przewijają się, a zapis pozostaje widoczny. Nie testowano fizycznego iPhone'a ani jego klawiatury.
+
+Podczas końcowej kontroli nieaktywny serwer podglądu spowodował błąd pobrania modułu Działań. Ponowne uruchomienie Vite i przeładowanie strony przywróciły działanie widoku. Zmiany pozostają lokalne, bez publikacji.
+
+Dowody (folder rozpoczęty 29 października): [Start](docs/design/mobile-a-2026-10-29/start-390.png), [Działania](docs/design/mobile-a-2026-10-29/actions-390.png), [Nowe Działanie](docs/design/mobile-a-2026-10-29/new-action-390.png), [formularz 320 × 480](docs/design/mobile-a-2026-10-29/form-320x480.png).
