@@ -28,6 +28,66 @@ function renderApp(path = "/") {
 }
 
 describe("goal-centric workspace", () => {
+  it.each([767, 768])("kontynuuje szkic Działania inline w panelu i wraca do Celu przy %s px", async (width) => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    try {
+      const state = structuredClone(emptyState);
+      state.areas = [{ id: "shared-project", name: "Wspólny Projekt", description: "", visibility: "active", createdAt: "2026-11-03", updatedAt: "2026-11-03" }];
+      state.goals = [{ id: "shared-goal", title: "Wspólny Cel", outcome: "Wynik", areaId: "shared-project", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+      localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+      const user = userEvent.setup();
+      renderApp("/goals/shared-goal");
+      await screen.findByRole("heading", { name: "Wspólny Cel", level: 1 }, { timeout: 5_000 });
+      await user.click(screen.getByText("Pozostałe Działania").closest("summary")!);
+      await user.type(screen.getByRole("textbox", { name: "Nowe Działanie" }), "Wspólny szkic");
+      const date = screen.getByLabelText("Termin Działania");
+      await user.type(date, "2026-12-08");
+      await user.click(screen.getByRole("button", { name: "Więcej szczegółów" }));
+      const panel = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+      expect(within(panel).getByLabelText("Co chcesz zrobić?")).toHaveValue("Wspólny szkic");
+      expect(within(panel).getByLabelText(/Dokładna data/)).toHaveValue("2026-12-08");
+      await user.click(within(panel).getByText("Opis i powiązania"));
+      await user.type(within(panel).getByLabelText("Opis"), "Pełny opis");
+      await user.click(within(panel).getByRole("button", { name: "Zamknij okno" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(screen.getByRole("textbox", { name: "Nowe Działanie" })).toHaveValue("Wspólny szkic");
+      await user.click(screen.getByRole("button", { name: "Więcej szczegółów" }));
+      const resumed = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+      expect(within(resumed).getByLabelText("Opis")).toHaveValue("Pełny opis");
+      await user.click(within(resumed).getByRole("button", { name: "Dodaj Działanie" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(JSON.parse(screen.getByTestId("location-state").textContent!).pathname).toBe("/goals/shared-goal");
+      await user.type(screen.getByRole("textbox", { name: "Nowe Działanie" }), "Drugi krok");
+      await user.click(screen.getByRole("button", { name: "Dodaj" }));
+      await waitFor(() => expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state.actions).toHaveLength(2));
+      const actions = JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state.actions;
+      expect(actions[0]).toMatchObject({ title: "Wspólny szkic", detail: "Pełny opis", scheduledFor: "2026-12-08", goalId: "shared-goal", areaId: "shared-project" });
+      expect(actions[0].id).not.toBe(actions[1].id);
+    } finally { Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth }); }
+  });
+
+  it("Dodaj materiał otwiera Materiał, a notatka przy Działaniu wymaga tylko treści", async () => {
+    const state = structuredClone(emptyState);
+    state.actions = [{ id: "related-action", version: 1, title: "Krok z Wiedzą", detail: "", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [] }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp("/actions/related-action");
+    await screen.findByRole("heading", { name: "Krok z Wiedzą" });
+    await user.click(screen.getByText("Połącz wiedzę"));
+    await user.click(screen.getByRole("button", { name: "Dodaj materiał" }));
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj do Biblioteki" });
+    expect(within(dialog).getByRole("radio", { name: /Materiał/ })).toBeChecked();
+    await user.click(within(dialog).getByRole("radio", { name: /Notatka/ }));
+    await user.type(within(dialog).getByLabelText("Treść notatki"), "Sama treść notatki");
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz notatkę" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state;
+      expect(saved.knowledge).toEqual(expect.arrayContaining([expect.objectContaining({ title: "Sama treść notatki", detail: "Sama treść notatki" })]));
+      expect(saved.knowledgeLinks).toEqual(expect.arrayContaining([expect.objectContaining({ actionId: "related-action", meaning: "reference" })]));
+    });
+  });
   it("na telefonie dodaje książkę przez pełny formularz Wiedzy", async () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query.includes("max-width"), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     localStorage.setItem("command-center-state-v1", JSON.stringify(emptyState));
@@ -36,7 +96,7 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Wiedza" });
     const navigation = await screen.findByRole("main");
     await user.click(within(navigation).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
-    const dialog = screen.getByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj do Biblioteki" });
     await user.click(within(dialog).getByRole("radio", { name: /Materiał/ }));
     await user.click(within(dialog).getByLabelText("To książka"));
     await user.type(within(dialog).getByLabelText("Nazwa materiału"), "Książka mobilna");
@@ -51,8 +111,8 @@ describe("goal-centric workspace", () => {
     const capture = await screen.findByPlaceholderText("Zapisz myśl, zadanie albo wklej link…");
     await user.type(capture, "Sprawdzić indeks na tabeli transakcji");
     await user.click(screen.getByRole("button", { name: "Zapisz" }));
-    expect(screen.getAllByText("Sprawdzić indeks na tabeli transakcji").length).toBeGreaterThanOrEqual(1);
-    expect(capture).toHaveValue("");
+    expect(await screen.findByText("Sprawdzić indeks na tabeli transakcji")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("tworzy Cel z pierwszym Działaniem bez mechaniki Focus", async () => {
@@ -61,13 +121,16 @@ describe("goal-centric workspace", () => {
     renderApp("/goals");
     await screen.findByRole("heading", { name: "Cele" });
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowy Cel" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
-    expect(within(dialog).getByText("Cel to prosty rezultat do wykonania. Wystarczy nazwa — resztę możesz dopisać później.")).toBeInTheDocument();
-    await user.click(within(dialog).getByLabelText("Nazwa Celu"));
+    const dialog = await screen.findByRole("dialog", { name: "Nowy Cel" });
+    await user.click(within(dialog).getByLabelText("Co chcesz osiągnąć?"));
     await user.paste("Uruchomić nowy produkt");
+    await user.click(within(dialog).getByText("Więcej opcji"));
     await user.click(within(dialog).getByLabelText(/Jaki jest pierwszy krok/));
     await user.paste("Zbudować formularz startowy");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(JSON.parse(screen.getByTestId("location-state").textContent!).pathname).toBe("/goals");
+    await user.click(screen.getByRole("button", { name: "Otwórz" }));
     expect(await screen.findByRole("heading", { name: "Uruchomić nowy produkt", level: 1 })).toBeInTheDocument();
     expect(screen.getAllByText("Zbudować formularz startowy").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/timer|rozpocznij fokus/i)).not.toBeInTheDocument();
@@ -90,9 +153,10 @@ describe("goal-centric workspace", () => {
     renderApp("/projects");
     await screen.findByRole("heading", { name: "Projekty" });
     await user.click(within(await screen.findByRole("main")).getByRole("button", { name: "Dodaj nowy Projekt" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowy projekt" });
-    await user.type(within(dialog).getByLabelText("Nazwa Projektu"), "Zdrowie");
-    await user.type(within(dialog).getByLabelText(/Krótki kontekst/), "Cele, Działania i wiedza o zdrowiu");
+    const dialog = await screen.findByRole("dialog", { name: "Nowy Projekt" });
+    await user.type(within(dialog).getByLabelText("Jaki Projekt utworzyć?"), "Zdrowie");
+    await user.click(within(dialog).getByText("Dodaj opis"));
+    await user.type(within(dialog).getByLabelText("Opis"), "Cele, Działania i wiedza o zdrowiu");
     await user.click(within(dialog).getByRole("button", { name: "Utwórz Projekt" }));
     expect(await screen.findByRole("heading", { name: "Zdrowie" })).toBeInTheDocument();
   });
@@ -156,7 +220,7 @@ describe("goal-centric workspace", () => {
     expect(within(goals).getByText("Bieżący Cel")).toBeInTheDocument();
     expect(within(goals).queryByText("Osiągnięty Cel")).not.toBeInTheDocument();
     await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Cel do Projektu Projekt z historią" }));
-    expect(screen.getByRole("dialog", { name: "Nowy Cel w Projekcie" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Nowy Cel" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(goals).getByText("Więcej opcji Celów"));
     await user.click(within(goals).getByRole("button", { name: /Pokaż historię/ }));
@@ -178,7 +242,7 @@ describe("goal-centric workspace", () => {
     await user.click(within(statusDialog).getByRole("button", { name: /W toku/ }));
     await waitFor(() => expect(actions.querySelector('[data-action-id="action-current"]')).toHaveClass("in_progress"));
     await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Działanie do Projektu Projekt z historią" }));
-    expect(screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Nowe Działanie" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(actions).getByLabelText(/Filtruj Działania/));
     expect(within(actions).getByRole("menuitemradio", { name: "Otwarte: 1" })).toHaveAttribute("aria-checked", "true");
@@ -202,11 +266,11 @@ describe("goal-centric workspace", () => {
     const app = renderApp("/projects/project-create-action");
     await screen.findByRole("heading", { name: "Projekt tworzenia" });
     await user.click(screen.getByRole("button", { name: /^Dodaj Działanie$/ }));
-    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" });
-    expect(within(dialog).getByText("Projekt tworzenia")).toBeInTheDocument();
-    await user.click(within(dialog).getByText("Szczegóły i przypisanie"));
-    await user.selectOptions(within(dialog).getByLabelText("Cel opcjonalnie"), "goal-create-action");
-    await user.type(within(dialog).getByLabelText("Co trzeba zrobić?"), "Przygotować pierwszy krok");
+    const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+    expect(within(dialog).getByText("Projekt: Projekt tworzenia")).toBeInTheDocument();
+    await user.click(within(dialog).getByText("Opis i powiązania"));
+    await user.selectOptions(within(dialog).getByLabelText("Cel lub Projekt"), "goal:goal-create-action");
+    await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować pierwszy krok");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
 
     expect(await screen.findByRole("link", { name: "Otwórz Działanie: Przygotować pierwszy krok" })).toBeInTheDocument();
@@ -229,11 +293,11 @@ describe("goal-centric workspace", () => {
     renderApp("/projects/project-cancel-action");
     await screen.findByRole("heading", { name: "Projekt bez zapisu" });
     await user.click(screen.getByRole("button", { name: /^Dodaj Działanie$/ }));
-    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie w Projekcie" });
-    await user.type(within(dialog).getByLabelText("Co trzeba zrobić?"), "Tylko szkic");
-    await user.click(within(dialog).getByRole("button", { name: "Anuluj" }));
+    const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+    await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Tylko szkic");
+    await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
 
-    expect(screen.queryByRole("dialog", { name: "Nowe Działanie w Projekcie" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Nowe Działanie" })).not.toBeInTheDocument());
     await waitFor(() => expect(JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state.actions).toHaveLength(0));
     expect(screen.getByRole("button", { name: /^Dodaj Działanie$/ })).toBeInTheDocument();
   });
@@ -375,12 +439,12 @@ describe("goal-centric workspace", () => {
     renderApp("/routines");
     await screen.findByRole("heading", { name: "Rutyny" });
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nową Rutynę" }));
-    const create = screen.getByRole("dialog", { name: "Nowe Działanie cykliczne" });
-    expect(within(create).getByText("Tak zapiszesz Rutynę")).toBeInTheDocument();
-    expect(within(create).getByRole("button", { name: /Co tydzień/ })).toHaveAttribute("aria-pressed", "true");
-    await user.type(within(create).getByLabelText("Nazwa"), "Cotygodniowy plan posiłków");
+    const create = await screen.findByRole("dialog", { name: "Nowa Rutyna" });
+    expect(within(create).getByLabelText("Powtarzaj")).toHaveValue("week");
+    await user.type(within(create).getByLabelText("Co ma się powtarzać?"), "Cotygodniowy plan posiłków");
+    await user.click(within(create).getByText("Dodaj opis"));
     await user.type(within(create).getByLabelText("Opis"), "Ustal menu i listę zakupów");
-    await user.click(within(create).getByRole("button", { name: "Utwórz serię" }));
+    await user.click(within(create).getByRole("button", { name: "Utwórz Rutynę" }));
     const routine = await screen.findByRole("heading", { name: "Cotygodniowy plan posiłków" });
     expect(routine).toBeInTheDocument();
     expect(within(routine.closest("section") as HTMLElement).getByText("Najbliższe wykonania")).toBeInTheDocument();
@@ -401,7 +465,7 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Start" });
     expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowe Działanie" });
+    const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
     await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Przygotować plan rozmowy");
     await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
     expect(await screen.findByText("Przygotować plan rozmowy")).toBeInTheDocument();

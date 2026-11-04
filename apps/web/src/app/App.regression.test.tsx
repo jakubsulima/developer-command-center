@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -91,9 +91,9 @@ describe("regresje nowego modelu Celów", () => {
     ["/projects", "Projekty", "Dodaj nowy Projekt", "Nowy Projekt"],
     ["/routines", "Rutyny", "Dodaj nową Rutynę", "Nowa Rutyna"],
     ["/knowledge", "Wiedza", "Dodaj nowy element Wiedzy", "Dodaj do Biblioteki"],
-    ["/knowledge?section=inbox", "Wiedza", "Dodaj do Skrzynki", "Dodaj do Skrzynki"],
+    ["/knowledge?section=inbox", "Wiedza", "Dodaj do Skrzynki", "Szybki zapis"],
     ["/goals/fintrack-api", "FinTrack API", "Dodaj Działanie do Celu FinTrack API", "Nowe Działanie"],
-    ["/projects/fintrack-api", "FinTrack API", "Dodaj w Projekcie FinTrack API", "Nowe Działanie"],
+    ["/projects/fintrack-api", "FinTrack API", "Dodaj w Projekcie FinTrack API", "Dodaj"],
     ["/projects/fintrack-api?view=actions", "FinTrack API", "Dodaj Działanie do Projektu FinTrack API", "Nowe Działanie"],
     ["/projects/fintrack-api?view=goals", "FinTrack API", "Dodaj Cel do Projektu FinTrack API", "Nowy Cel"],
     ["/projects/fintrack-api?view=knowledge", "FinTrack API", "Dodaj Wiedzę do Projektu FinTrack API", "Dodaj do Biblioteki"]
@@ -329,9 +329,9 @@ describe("regresje nowego modelu Celów", () => {
     const user = userEvent.setup();
     renderApp("/goals");
     await user.click(within(await screen.findByRole("main")).getByRole("button", { name: "Dodaj nowy Cel" }));
-    const dialog = screen.getByRole("dialog", { name: "Nowy Cel" });
-    await user.type(within(dialog).getByLabelText("Nazwa Celu"), "   ");
-    await user.click(within(dialog).getByRole("button", { name: "Utwórz Cel" }));
+    const dialog = await screen.findByRole("dialog", { name: "Nowy Cel" });
+    await user.type(within(dialog).getByLabelText("Co chcesz osiągnąć?"), "   ");
+    fireEvent.submit(within(dialog).getByRole("button", { name: "Utwórz Cel" }).closest("form")!);
     expect(within(dialog).getByText("Podaj nazwę Celu.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Opisz obserwowalny rezultat.")).not.toBeInTheDocument();
   });
@@ -463,9 +463,9 @@ describe("regresje nowego modelu Celów", () => {
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByText("Zmień", { exact: true }));
     await user.click(within(dialog).getByRole("button", { name: "Do Skrzynki" }));
-    await user.type(within(dialog).getByLabelText("Co chcesz zachować?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
-    await user.click(within(dialog).getByRole("button", { name: "Zapisz do Skrzynki" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Zapisano do Skrzynki. Element czeka w Wiedza → Skrzynka.");
+    await user.type(within(dialog).getByLabelText("Co chcesz zapamiętać lub zrobić?"), "Wzorzec adaptera\nOddziela integrację od domeny.");
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Zapisano w Skrzynce.");
   });
 
   it("pokazuje kolejkę decyzji i zapis tygodnia tylko w kontekście Tygodnia i Planu", async () => {

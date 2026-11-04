@@ -1,5 +1,16 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Spójne dodawanie z 3 listopada 2026
+
+[Plan ujednolicenia dodawania](./2026-11-03-creation-flows-consistency-plan.md)
+obejmuje wszystkie wejścia tworzenia, Szybki zapis, lokalne formularze,
+szkice, kontekst, zapis i klawiaturę telefonu. Wskazuje różnice między mobile
+i desktopem, priorytety, sześć etapów zmian oraz kryteria odbioru zgodne
+z wariantem A. Status: etapy 1–5 oraz automatyczna część etapu 6 wykonane
+lokalnie. Wyniki i pozostałe ograniczenia opisano w planie oraz `design-qa.md`.
+Migracja triage nie została wdrożona; odbiór urządzeń i żywego UI pozostaje
+otwarty ze względu na wyłączony dostęp do lokalnej przeglądarki.
+
 ## Szybki zapis i regularny powrót z 24 października 2026
 
 [Plan szybkiego zapisu i powrotu do Command](./2026-10-24-easy-capture-and-return-plan.md)
@@ -8,7 +19,9 @@ przy zapisie. Obejmuje jeden prosty Capture, skrót na iPhonie, spokojniejszy St
 odnajdywanie wpisów bez obowiązkowego porządkowania oraz opcjonalne przypomnienie.
 Wskazuje elementy do usunięcia lub ukrycia, kolejność sześciu etapów, reguły danych,
 ochronę szkiców, odbiór na telefonie i mierniki pilotażu.
-Status: plan do wdrożenia; bez zmian kodu i bez włączania przypomnień.
+Status: Capture ma już lokalną implementację, ujednoliconą w ramach planu
+z 3 listopada. Odbiór fizycznego telefonu i pilotaż regularnego powrotu
+pozostają otwarte; w tym zadaniu nie włączano ani nie wysyłano przypomnień.
 
 ## Poprawki Startu i rozwój Wiedzy z 4 października 2026
 

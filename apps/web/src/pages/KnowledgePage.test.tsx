@@ -1,28 +1,27 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { emptyState } from "../data/empty";
-import type { AppState, KnowledgeItem } from "../domain/types";
+import type { AppState, CreateKnowledgeInput, KnowledgeItem } from "../domain/types";
 import { KnowledgePage } from "./KnowledgePage";
 
 const mocks = vi.hoisted(() => ({ store: vi.fn(), page: vi.fn() }));
 vi.mock("../app/useStore", () => ({ useStore: mocks.store }));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { id: "user" }, mode: "demo" }) }));
 vi.mock("../hooks/useWorkspaceInfinitePage", () => ({ useWorkspaceInfinitePage: mocks.page }));
-vi.mock("../components/AppShell", () => ({
-  AppShell: ({ children, addAction }: { children: ReactNode; addAction: { onClick: () => void } }) => <><button onClick={addAction.onClick}>Dodaj test</button>{children}</>,
-  PageHeading: () => null
-}));
-vi.mock("../components/action-feedback-context", async (original) => ({ ...await original<typeof import("../components/action-feedback-context")>(), useActionFeedback: () => ({ notifyUndo: vi.fn() }) }));
+vi.mock("../components/AppShell", async () => ({ AppShell: (await import("../test/CreationTestShell")).CreationTestShell, PageHeading: () => null }));
+vi.mock("../components/action-feedback-context", async (original) => ({ ...await original<typeof import("../components/action-feedback-context")>(), useActionFeedback: () => ({ notifyUndo: vi.fn(), notifySuccess: vi.fn() }) }));
 
 let state: AppState;
 let pageItems: KnowledgeItem[];
+let createdInputs: CreateKnowledgeInput[];
 beforeEach(() => {
   state = { ...structuredClone(emptyState), workspaceId: "workspace" };
   pageItems = [];
+  createdInputs = [];
   mocks.page.mockImplementation(() => ({ data: { items: pageItems, totalCount: state.knowledge.length }, isPending: false, isError: false, hasNextPage: true }));
 });
 
@@ -30,7 +29,8 @@ function Harness() {
   const [current, setCurrent] = useState(state);
   const location = useLocation();
   const navigate = useNavigate();
-  mocks.store.mockReturnValue({ state: current, loading: false, createKnowledge: async (input: { title: string; detail: string }) => {
+  mocks.store.mockReturnValue({ state: current, loading: false, createKnowledge: async (input: CreateKnowledgeInput) => {
+    createdInputs.push(input);
     const item: KnowledgeItem = { id: "new-note", type: "note", title: input.title, detail: input.detail, createdAt: "2026-09-27", version: 1 };
     setCurrent((previous) => ({ ...previous, knowledge: [...previous.knowledge, item] }));
     return item.id;
@@ -67,7 +67,7 @@ it("pokazuje nową notatkę poza pierwszą stroną, deduplikuje ją i respektuje
   pageItems = state.knowledge.slice(0, 50);
   start("/knowledge");
   await user.click(screen.getByText("Dodaj test"));
-  await user.type(screen.getByLabelText("Treść notatki"), "Nowa myśl");
+  await user.type(await screen.findByLabelText("Treść notatki"), "Nowa myśl");
   await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
   expect(await screen.findByRole("link", { name: "Nowa myśl" })).toBeInTheDocument();
   await user.click(screen.getByText("Doładuj stronę test"));
@@ -75,4 +75,18 @@ it("pokazuje nową notatkę poza pierwszą stroną, deduplikuje ją i respektuje
   await user.click(screen.getByRole("button", { name: "Więcej opcji: Nowa myśl" }));
   await user.click(screen.getByRole("button", { name: "Archiwizuj" }));
   await waitFor(() => expect(screen.queryByRole("link", { name: "Nowa myśl" })).not.toBeInTheDocument());
+});
+
+it("wybiera źródłową książkę spoza początkowo załadowanej Wiedzy", async () => {
+  const user = userEvent.setup();
+  const book: KnowledgeItem = { id: "off-page-book", type: "resource", resourceFormat: "book", title: "Książka z osobnej strony", detail: "" };
+  mocks.page.mockImplementation((_collection, _size, options) => ({ data: { items: options?.resourceFormat === "book" ? [book] : [], totalCount: 1 }, isPending: false, isError: false, hasNextPage: false }));
+  start("/knowledge");
+  await user.click(screen.getByText("Dodaj test"));
+  await user.type(await screen.findByLabelText("Treść notatki"), "Notatka do źródła");
+  await user.click(screen.getByText("Więcej", { exact: true }));
+  await user.selectOptions(screen.getByLabelText(/Źródłowa książka/), "off-page-book");
+  await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
+  await waitFor(() => expect(createdInputs).toHaveLength(1));
+  expect(createdInputs[0].relations).toContainEqual({ meaning: "source", target: { targetKnowledgeItemId: "off-page-book" } });
 });

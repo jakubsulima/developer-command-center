@@ -15,6 +15,7 @@ function readViewportMetrics(): ViewportMetrics {
 }
 
 function isFocusable(element: HTMLElement) {
+  if (element.matches(":disabled")) return false;
   if (element.hasAttribute("hidden") || element.getAttribute("aria-hidden") === "true") return false;
   // The summary is the control that opens a closed details section. Its
   // descendants remain hidden, but the summary itself must stay tabbable.
@@ -134,7 +135,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
       setClosing(false);
       return;
     }
-    if (!present || exitDurationMs <= 0) {
+    if (!present || exitDurationMs <= 0 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setPresent(false);
       setClosing(false);
       return;
@@ -176,7 +177,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     const frame = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
       if (!dialog || dialog.contains(document.activeElement)) return;
-      if (initialFocus === "none") return;
+      if (initialFocus === "none") { dialog.focus({ preventScroll: true }); return; }
       // Prefer the interaction model over a width breakpoint. The narrow
       // fallback covers embedded mobile browsers that do not expose pointer
       // capabilities to automation or standalone webviews.

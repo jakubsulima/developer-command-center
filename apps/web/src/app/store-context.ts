@@ -55,9 +55,9 @@ export interface WeeklyReviewSaveMetadata {
 }
 
 export type NewInboxTriageIntent =
-  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
+  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; templateId?: string; criteria?: string[] }
   | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
-  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
+  | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus; sourceBookId?: string };
 
 export interface AppStore {
   state: AppState;

@@ -1,0 +1,22 @@
+.creation-dialog { min-height: 0; }
+.creation-dialog .creation-fields { min-inline-size: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 12px; }
+.creation-dialog .creation-fields:disabled { opacity: .7; }
+.creation-dialog .guided-section { padding: 0; border: 0; background: transparent; }
+.creation-dialog .guided-section-title > span,
+.creation-dialog .creation-summary { display: none; }
+.creation-dialog .creation-fields input,
+.creation-dialog .creation-fields textarea,
+.creation-dialog .creation-fields select { max-width: 100%; }
+.creation-dialog .draft-recovery { padding-block: 12px; border-block: 1px solid var(--border); overflow-wrap: anywhere; }
+.creation-dialog .draft-recovery pre { white-space: pre-wrap; max-height: 160px; overflow: auto; }
+.creation-dialog .quick-add-body { align-content: start; }
+.creation-dialog .quick-add-footer { flex-wrap: wrap; }
+.creation-dialog .quick-add-footer > .button-primary { margin-left: auto; }
+.creation-dialog .capture-composer { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+.creation-dialog .capture-composer > .quick-add-body { flex: 1; min-height: 0; overflow-y: auto; }
+.capture-composer > .quick-add-footer { position: sticky; bottom: 0; z-index: 2; background: var(--background); }
+.capture-composer > .quick-add-footer > .capture-composer-actions { position: static; width: 100%; padding: 0; background: transparent; }
+.creation-dialog .capture-composer > .quick-add-footer { position: static; flex: 0 0 auto; background: var(--creation-surface); }
+@media (max-width: 767px) {
+  .creation-dialog .creation-fields :is(input, textarea, select) { font-size: 16px; min-height: 44px; }
+}

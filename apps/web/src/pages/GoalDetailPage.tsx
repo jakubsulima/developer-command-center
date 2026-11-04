@@ -1,7 +1,10 @@
+import type { CreationReceipt } from "../components/creationDraft";
+import { useCreationReceipt } from "../components/useCreationReceipt";
+import { InlineGoalAction } from "../components/InlineGoalAction";
 import { AIContextExport } from "../components/AIContextExport";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, FolderKanban, History, Link2, ListTodo, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -43,8 +46,8 @@ function ActionChecklist({ action, busy, onToggle }: { action: GoalAction; busy:
 }
 
 export function GoalDetailPage() {
-  const { state, createAction, updateAction, setActionStatus, undoActionCompletion, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
-  const { notifyUndo } = useActionFeedback();
+  const { state, updateAction, setActionStatus, undoActionCompletion, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
+  const { notifyUndo, notifySuccess } = useActionFeedback();
   const actionMutation = useKeyedMutation();
   const { goalId } = useParams();
   const progressPage = useWorkspaceInfinitePage<GoalProgressPageItem>("goal-progress", 25, { goalId });
@@ -52,10 +55,9 @@ export function GoalDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const goal = state.goals.find((item) => item.id === goalId);
-  const actionDraft = usePersistentDraft("goal-action", { title: "", detail: "", scheduledFor: "" }, 450, { targetId: goalId ?? "new", enabled: Boolean(goalId) });
-  const progressDraft = usePersistentDraft("goal-progress", { kind: "note" as "note" | "decision" | "result" | "evidence" | "blocker", content: "" }, 450, { targetId: goalId ?? "new", enabled: Boolean(goalId) });
+  const initialProgress = useMemo(() => ({ goalId, commandId: crypto.randomUUID() }), [goalId]);
+  const progressDraft = usePersistentDraft("goal-progress", { kind: "note" as "note" | "decision" | "result" | "evidence" | "blocker", content: "", commandId: initialProgress.commandId, receipt: undefined as CreationReceipt | undefined }, 450, { targetId: goalId ?? "new", enabled: Boolean(goalId) });
   const statusReasonDraft = usePersistentDraft("goal-status-reason", { content: "" }, 450, { targetId: goalId ?? "new", baseVersion: goal?.version, enabled: Boolean(goalId) });
-  const [actionForm, setActionForm] = [actionDraft.value, actionDraft.setValue] as const;
   const [progress, setProgress] = [progressDraft.value, progressDraft.setValue] as const;
   const [blockActionId, setBlockActionId] = useState<string>();
   const blockerDraft = usePersistentDraft("action-blocker", { content: "", reviewOn: "" }, 450, { targetId: blockActionId ?? "new", enabled: Boolean(blockActionId) });
@@ -84,7 +86,8 @@ export function GoalDetailPage() {
   const [visibilityError, setVisibilityError] = useState("");
   const actionsSectionRef = useRef<HTMLDetailsElement>(null);
   const newActionInputRef = useRef<HTMLInputElement>(null);
-  const progressIntentRef = useRef(crypto.randomUUID());
+  const progressCompletion = useCreationReceipt(progressDraft.storageKey, { value: progressDraft.value.receipt, save: (receipt) => { progressDraft.setValue((current) => ({ ...current, receipt })); return progressDraft.flush(); } });
+  const progressLocked = useRef(false);
   const progressContentRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (progressDraft.restored) setProgressOpen(true); }, [progressDraft.restored]);
   useEffect(() => { const id = searchParams.get("action"); if (id) requestAnimationFrame(() => { const target = document.querySelector<HTMLElement>(`[data-action-id="${CSS.escape(id)}"]`); target?.scrollIntoView?.({ block: "center", behavior: "auto" }); target?.focus(); }); }, [searchParams, state.actions]);
@@ -113,13 +116,6 @@ export function GoalDetailPage() {
     setEditGoal(true);
   };
   const closeGoalMenu = (target: HTMLElement) => target.closest("details")?.removeAttribute("open");
-  const addAction = async (event: FormEvent) => {
-    event.preventDefault();
-    await actionMutation.run("goal-create-action", async () => {
-      await createAction({ title: actionForm.title, detail: actionForm.detail, goalId: goal.id, areaId: goal.areaId, scheduledFor: actionForm.scheduledFor || undefined });
-      actionDraft.clear();
-    });
-  };
   const changeActionStatus = (action: typeof actions[number], status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => actionMutation.run(`goal-action-status:${action.id}`, async () => {
     const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     await setActionStatus(action.id, status, blocker, action.version, reviewOn);
@@ -208,10 +204,18 @@ export function GoalDetailPage() {
   const historicalActions = actions.filter((action) => ["completed", "cancelled", "skipped"].includes(action.status));
   const saveProgress = (event: FormEvent) => {
     event.preventDefault();
+    if (progressLocked.current || progressCompletion.receipt || !progress.content.trim() || !progressDraft.flush()) return;
+    const snapshot = { ...progress, commandId: progress.commandId || crypto.randomUUID() };
+    progressDraft.setValue(snapshot); progressDraft.flush();
+    progressLocked.current = true;
     void actionMutation.run("goal-progress", async () => {
-      await addProgress(goal.id, progress.kind, progress.content, undefined, undefined, progressIntentRef.current);
-      progressIntentRef.current = crypto.randomUUID();
-      setProgress({ kind: "note", content: "" });
+      try {
+        if (progressCompletion.receipt) return;
+        await addProgress(goal.id, snapshot.kind, snapshot.content, undefined, undefined, snapshot.commandId);
+        progressCompletion.remember({ id: goal.id, url: goalRoute, message: "Postęp zapisano." });
+        if (!progressCompletion.finish(() => progressDraft.clear({ kind: "note", content: "", commandId: crypto.randomUUID(), receipt: undefined }))) throw new Error("Postęp zapisano. Usuń zapisany szkic.");
+        notifySuccess("Postęp zapisano.");
+      } finally { progressLocked.current = false; }
     });
   };
 
@@ -240,7 +244,7 @@ export function GoalDetailPage() {
           <summary><span className="goal-secondary-icon"><ListTodo /></span><span className="goal-secondary-label"><strong>Pozostałe Działania</strong><small>Otwarte kroki poza następnym, dodawanie i historia</small></span><span className="goal-secondary-count">{remainingActions.length}</span><ChevronDown /></summary>
           <div className="goal-secondary-content">
             <div className="action-list">{remainingActions.length ? remainingActions.map((action) => renderAction(action)) : <p className="muted-copy action-list-empty">Brak pozostałych otwartych Działań.</p>}</div>
-            <form className="inline-create" onSubmit={addAction}><input ref={newActionInputRef} aria-label="Nowe Działanie" placeholder="Dodaj konkretny krok…" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /><input aria-label="Termin Działania" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /><Button type="submit" loading={actionMutation.isBusy("goal-create-action")} disabled={!actionForm.title.trim()}>Dodaj</Button>{actionMutation.error("goal-create-action") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-create-action")} <button type="button" onClick={() => void actionMutation.retry("goal-create-action")?.()}>Spróbuj ponownie</button></p> : null}</form>
+            <InlineGoalAction goal={goal} inputRef={newActionInputRef} />
             {historicalActions.length ? <details className="goal-action-history"><summary><History />Historia Działań <span>{historicalActions.length}</span></summary><div className="action-list">{historicalActions.map((action) => renderAction(action))}</div></details> : null}
           </div>
         </details>
@@ -256,7 +260,7 @@ export function GoalDetailPage() {
         <h3 className="sr-only">Szybki wpis postępu</h3>
         <details className="goal-secondary-section goal-progress-section" open={progressOpen} onToggle={(event) => { const open = event.currentTarget.open; setProgressOpen(open); if (open) progressContentRef.current?.focus(); }}>
           <summary><span className="goal-secondary-icon"><Plus /></span><span className="goal-secondary-label"><strong>Dodaj wpis postępu</strong><small>{progressDraft.restored ? "Odtworzono niezapisany szkic" : "Zachowaj ważną zmianę przy tym Celu"}</small></span><ChevronDown /></summary>
-          <div className="goal-secondary-content"><form className="progress-form" onSubmit={saveProgress}><label className="progress-form-field" htmlFor="goal-progress-kind"><span>Rodzaj aktualizacji</span><select id="goal-progress-kind" aria-label="Rodzaj aktualizacji" value={progress.kind} onChange={(event) => setProgress((current) => ({ ...current, kind: event.target.value as typeof current.kind }))}>{Object.entries(progressKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="progress-form-field progress-form-content" htmlFor="goal-progress-content"><span>Treść aktualizacji</span><textarea ref={progressContentRef} id="goal-progress-content" aria-label="Treść aktualizacji" placeholder="Co się zmieniło?" rows={3} value={progress.content} onChange={(event) => setProgress((current) => ({ ...current, content: event.target.value }))} required /></label><div className="progress-form-feedback"><DraftStatus status={progressDraft.status} errorMessage={progressDraft.errorMessage} onRetry={() => void progressDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(progress.content)} />{actionMutation.error("goal-progress") ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-progress")} <button type="button" onClick={() => void actionMutation.retry("goal-progress")?.()}>Spróbuj ponownie</button></p> : null}</div><Button type="submit" loading={actionMutation.isBusy("goal-progress")} disabled={!progress.content.trim()}>Zapisz postęp</Button></form></div>
+          <div className="goal-secondary-content"><form className="progress-form" onSubmit={saveProgress}><label className="progress-form-field" htmlFor="goal-progress-kind"><span>Rodzaj aktualizacji</span><select disabled={actionMutation.isBusy("goal-progress") || Boolean(progressCompletion.receipt)} id="goal-progress-kind" aria-label="Rodzaj aktualizacji" value={progress.kind} onChange={(event) => setProgress((current) => ({ ...current, kind: event.target.value as typeof current.kind }))}>{Object.entries(progressKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="progress-form-field progress-form-content" htmlFor="goal-progress-content"><span>Treść aktualizacji</span><textarea ref={progressContentRef} disabled={actionMutation.isBusy("goal-progress") || Boolean(progressCompletion.receipt)} id="goal-progress-content" aria-label="Treść aktualizacji" placeholder="Co się zmieniło?" rows={3} value={progress.content} onChange={(event) => setProgress((current) => ({ ...current, content: event.target.value }))} required /></label><div className="progress-form-feedback"><DraftStatus status={progressDraft.status} errorMessage={progressDraft.errorMessage} onRetry={() => void progressDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(progress.content)} />{actionMutation.error("goal-progress") && !progressCompletion.receipt ? <p className="inline-mutation-error" role="alert">{actionMutation.error("goal-progress")} <button type="button" onClick={() => void actionMutation.retry("goal-progress")?.()}>Spróbuj ponownie</button></p> : null}</div>{progressCompletion.receipt ? <Button type="button" onClick={() => progressCompletion.finish(() => progressDraft.clear({ kind: "note", content: "", commandId: crypto.randomUUID(), receipt: undefined }))}>Usuń zapisany szkic</Button> : null}<Button type="submit" loading={actionMutation.isBusy("goal-progress")} disabled={!progress.content.trim() || Boolean(progressCompletion.receipt)}>Zapisz postęp</Button></form></div>
         </details>
       </div>
     </Panel>

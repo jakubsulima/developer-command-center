@@ -2,9 +2,8 @@ import { formatActionDate } from "../domain/actionPresentation";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { localDateForTimeZone } from "../domain/activity";
 import { readingPositionLabel } from "../domain/readingProgress";
-import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import { Archive, BookMarked, Inbox, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -12,39 +11,25 @@ import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
 import type { KnowledgeItem, KnowledgeKind, ReadingStatus } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
-import { MultiCombobox } from "../components/MultiCombobox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
-import { knowledgeDefaultRelationMeaning, readingStatusLabels } from "../domain/labels";
+import { readingStatusLabels } from "../domain/labels";
 import { entityCardVariants } from "../components/ui-variants";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
 import { createKnowledgeFilter } from "../domain/knowledgeFilters";
-import { filterableKnowledgeKinds, isFilterableKnowledgeKind, knowledgeKindGuidance, type CreatableKnowledgeKind } from "../domain/knowledge-kinds";
+import { filterableKnowledgeKinds, isFilterableKnowledgeKind } from "../domain/knowledge-kinds";
 import { knowledgeKindLabels } from "../domain/labels";
-import { FormTransition } from "../components/FormTransition";
-import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
-import { normalizeHttpUrl } from "../domain/http-url";
-import { KnowledgeNoteFields } from "../components/KnowledgeNoteFields";
-import { DraftStatus } from "../components/DraftStatus";
-import { usePersistentDraft } from "../hooks/usePersistentDraft";
-import { useDraftCloseGuard } from "../components/DraftCloseGuard";
-import { prepareKnowledgeNote } from "../domain/knowledgeNote";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
 
 type View = "active" | "archived" | "trashed";
-type KnowledgeCreateForm = { kind: CreatableKnowledgeKind; title: string; detail: string; goalIds: string[]; areaId: string; sourceUrl: string; isBook: boolean; resourceAuthor: string; readingStatus: ReadingStatus; sourceBookId: string; idempotencyKey: string };
-
-function createKnowledgeForm(): KnowledgeCreateForm {
-  return { kind: "note", title: "", detail: "", goalIds: [], areaId: "", sourceUrl: "", isBook: false, resourceAuthor: "", readingStatus: "to_read", sourceBookId: "", idempotencyKey: crypto.randomUUID() };
-}
 
 export function KnowledgePage() {
-  const { state, loading, createKnowledge, setVisibility } = useStore();
+  const { state, loading, setVisibility } = useStore();
   const { user, mode } = useAuth();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -58,7 +43,6 @@ export function KnowledgePage() {
     return next;
   }, { replace: true });
   const section = params.get("section") === "inbox" ? "inbox" : "library";
-  const captureOpen = params.get("capture") === "true";
   const kind = (params.get("kind") ?? "all") as KnowledgeKind | "all";
   const now = useWorkspaceClock();
   const revisitOnOrBefore = params.get("revisit") === "due" ? localDateForTimeZone(now, state.workspaceTimezone) : undefined;
@@ -70,22 +54,11 @@ export function KnowledgePage() {
   const viewParam = params.get("visibility");
   const view: View = viewParam === "archived" || viewParam === "trashed" ? viewParam : "active";
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [createSaving, setCreateSaving] = useState(false);
-  const [createError, setCreateError] = useState("");
   const [actionsItemId, setActionsItemId] = useState<string>();
   const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
   const [debouncedQuery, setDebouncedQuery] = useState(() => params.get("q") ?? "");
   const normalized = debouncedQuery.trim().toLocaleLowerCase("pl");
-  const initialForm = useMemo(createKnowledgeForm, []);
-  const formDraft = usePersistentDraft<KnowledgeCreateForm>("knowledge-create", initialForm, 450, { targetId: "global" });
-  const form = formDraft.value;
-  const setForm = formDraft.setValue;
-  const closeGuard = useDraftCloseGuard({ dirty: formDraft.dirty, status: formDraft.status, formName: "nowa Wiedza", discard: formDraft.discard, onClose: () => setModalOpen(false), copyText: [form.title, form.detail].filter(Boolean).join("\n") });
-  const requestCreateClose = () => { if (formDraft.flush()) closeGuard.requestClose(); };
   const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { revisitOnOrBefore, resourceFormat: booksOnly ? "book" : undefined, readingStatus, knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind, searchText: normalized, projectId: areaFilter || undefined, knowledgeGoalId: goalFilter || undefined, knowledgeVisibility: view });
-  const booksPage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { resourceFormat: "book" });
-  const bookOptions = [...new Map([...(booksPage.data?.items ?? []), ...state.knowledge].filter((item) => item.resourceFormat === "book" && !item.archivedAt && !item.trashedAt).map((item) => [item.id, item])).values()];
   const advancedFilterCount = Number(kind !== "all") + Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(Boolean(readingStatus)) + Number(booksOnly) + Number(view !== "active");
   useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
@@ -102,6 +75,7 @@ export function KnowledgePage() {
     const timer = window.setTimeout(() => setDebouncedQuery(query), 250);
     return () => window.clearTimeout(timer);
   }, [query]);
+  useEffect(() => { const receive = (event: Event) => { const { id, mode } = (event as CustomEvent<{ id: string; mode: string }>).detail; if (mode === "library") setCreatedItems((current) => ({ workspaceId: state.workspaceId, ids: [...current.ids, id] })); }; window.addEventListener("creation:succeeded", receive); return () => window.removeEventListener("creation:succeeded", receive); }, [state.workspaceId]);
   const knowledgeItems = useMemo(() => {
     const localById = new Map(state.knowledge.map((item) => [item.id, item]));
     const merged = new Map((knowledgePage.data?.items ?? (knowledgePage.isPending ? [] : state.knowledge)).map((pageItem) => {
@@ -136,35 +110,6 @@ export function KnowledgePage() {
     visibility: view
   }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, revisitOnOrBefore, state, view]);
   const results = knowledgeItems.filter(matches).sort((left, right) => (revisitOnOrBefore ? left.revisitOn ?? "" : left.updatedAt ?? left.createdAt ?? "").localeCompare(revisitOnOrBefore ? right.revisitOn ?? "" : right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
-  const create = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const guidance = knowledgeKindGuidance[form.kind];
-    if ((form.kind === "note" ? !form.detail.trim() : !form.title.trim()) || (guidance.detailRequired && !form.detail.trim()) || createSaving) return;
-    setCreateSaving(true);
-    setCreateError("");
-    try {
-      const sourceUrl = form.kind === "resource" ? normalizeHttpUrl(form.sourceUrl) : undefined;
-      const relations = [
-        ...(form.areaId ? [{ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { areaId: form.areaId } }] : []),
-        ...form.goalIds.map((goalId) => ({ meaning: knowledgeDefaultRelationMeaning(form.kind), target: { goalId } })),
-        ...(form.kind === "note" && form.sourceBookId ? [{ meaning: "source" as const, target: { targetKnowledgeItemId: form.sourceBookId } }] : [])
-      ];
-      const resourceFormat = form.kind === "resource" && form.isBook ? "book" : undefined;
-      const note = form.kind === "note" ? prepareKnowledgeNote(form.detail, form.title) : undefined;
-      const createdId = await createKnowledge({ kind: form.kind, title: note?.title ?? form.title, detail: note?.detail ?? form.detail, sourceUrl, relations, resourceFormat, resourceAuthor: resourceFormat ? form.resourceAuthor : undefined, readingStatus: resourceFormat ? form.readingStatus : undefined, ...(note ? { idempotencyKey: form.idempotencyKey } : {}) });
-      setCreatedItems((current) => ({ workspaceId: state.workspaceId, ids: [...new Set([...(current.workspaceId === state.workspaceId ? current.ids : []), createdId])] }));
-      if (!formDraft.clear(createKnowledgeForm())) {
-        setCreateError("Zapis się udał, ale szkic pozostał na tym urządzeniu. Ponów zapis szkicu lub skopiuj treść przed zamknięciem.");
-        return;
-      }
-      setCreateError("");
-      setModalOpen(false);
-    } catch (caught) {
-      setCreateError(caught instanceof Error ? caught.message : "Nie udało się zapisać elementu Wiedzy.");
-    } finally {
-      setCreateSaving(false);
-    }
-  };
   const changeVisibility = async (item: KnowledgeItem, visibility: "archived" | "trashed") => {
     const previous = item.trashedAt ? "trashed" : item.archivedAt ? "archived" : "active";
     await setVisibility("knowledge", item.id, visibility);
@@ -173,29 +118,11 @@ export function KnowledgePage() {
       undo: () => setVisibility("knowledge", item.id, previous)
     });
   };
-  const openContextualAdd = () => {
-    if (section === "library") {
-      if (!formDraft.dirty) {
-        const contextualKind: CreatableKnowledgeKind = booksOnly || kind === "resource" ? "resource" : kind === "decision" ? "decision" : "note";
-        setForm((current) => ({ ...current, kind: contextualKind, isBook: booksOnly, areaId: areaFilter, goalIds: goalFilter ? [goalFilter] : [] }));
-      }
-      setModalOpen(true);
-      return;
-    }
-    const next = new URLSearchParams(params);
-    if (captureOpen) next.delete("capture"); else next.set("capture", "true");
-    setParams(next);
-  };
+  const creationRequest = { mode: section === "library" ? "library" as const : "inbox" as const, libraryKind: booksOnly || kind === "resource" ? "resource" as const : kind === "decision" ? "decision" as const : "note" as const, isBook: booksOnly, readingStatus, areaId: areaFilter || undefined, goalId: goalFilter || undefined, draftKey: section === "library" ? "knowledge-library" : "knowledge-inbox" };
 
   return (
-    <AppShell addAction={{
-      label: section === "library" ? "Nowa Wiedza" : captureOpen ? "Zamknij Skrzynkę" : "Do Skrzynki",
-      shortLabel: section === "library" ? "Wiedza" : "Skrzynka",
-      ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : captureOpen ? "Zamknij dodawanie do Skrzynki" : "Dodaj do Skrzynki",
-      active: section === "library" ? modalOpen : captureOpen,
-      quickAdd: captureOpen || section === "library" ? undefined : { mode: "inbox", pinnedToToday: false, draftKey: "knowledge-inbox" },
-      onClick: openContextualAdd
-    }}>
+    <AppShell addAction={{ label: section === "library" ? "Nowa Wiedza" : "Do Skrzynki", shortLabel: section === "library" ? "Wiedza" : "Skrzynka", ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : "Dodaj do Skrzynki", quickAdd: creationRequest }}>
+
       <div className="knowledge-page-heading"><PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" /></div>
       <div className="knowledge-section-bar">
         <div className="knowledge-section-tabs" role="tablist" aria-label="Widoki Wiedzy">
@@ -278,43 +205,7 @@ export function KnowledgePage() {
           {mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}
         </div>;
       })()}</Modal>
-      <Modal open={modalOpen} closeDisabled={createSaving} className="knowledge-create-modal" title="Dodaj do Biblioteki" onClose={requestCreateClose}>
-        <form className="knowledge-create-form" noValidate onSubmit={(event) => void create(event)}>
-        <div className="knowledge-create-body" data-modal-scroll-body>
-        <p className="modal-intro">{kind === "artifact" ? "Rezultat zapisuje się przy ukończeniu Działania. Tutaj możesz utworzyć Notatkę, Materiał lub Decyzję." : form.kind === "note" ? "Zapisz samą myśl. Tytuł i powiązania są opcjonalne." : form.kind === "resource" && form.isBook ? "Dodajesz książkę jako Materiał. Autor, status czytania i powiązania są dostępne niżej." : "Wybierz szczegóły, które pomogą później odnaleźć ten wpis."}</p>
-        <KnowledgeKindPicker
-          value={form.kind}
-          onChange={(kind) => setForm((current) => ({ ...current, kind, isBook: kind === "resource" ? current.isBook : false }))}
-          name="new-knowledge-kind"
-        />
-        <FormTransition stateKey={form.kind}>
-        {form.kind === "note" ? <KnowledgeNoteFields idPrefix="knowledge-create" content={form.detail} onContentChange={(detail) => setForm((current) => ({ ...current, detail }))} title={form.title} onTitleChange={(title) => setForm((current) => ({ ...current, title }))} context={`Biblioteka${form.areaId ? ` · ${state.areas.find((area) => area.id === form.areaId)?.name ?? "Projekt"}` : ""}${form.sourceBookId ? ` · źródło: ${bookOptions.find((book) => book.id === form.sourceBookId)?.title ?? "Książka"}` : ""}`} disabled={createSaving}>
-          <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
-          <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={form.goalIds} onChange={(goalIds) => setForm((current) => ({ ...current, goalIds }))} />
-          <label className="field-label" htmlFor="knowledge-project">Powiązany Projekt <span className="optional-label">opcjonalnie</span></label>
-          <select id="knowledge-project" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
-          <label className="field-label" htmlFor="knowledge-source-book">Źródło: książka <span className="optional-label">opcjonalnie</span></label>
-          <select id="knowledge-source-book" value={form.sourceBookId} onChange={(event) => setForm((current) => ({ ...current, sourceBookId: event.target.value }))}><option value="">Bez źródłowej książki</option>{bookOptions.map((book) => <option key={book.id} value={book.id}>{book.title}{book.resourceAuthor ? ` · ${book.resourceAuthor}` : ""}</option>)}</select>
-          {booksPage.hasNextPage ? <Button type="button" variant="ghost" loading={booksPage.isFetchingNextPage} onClick={() => void booksPage.fetchNextPage()}>Załaduj starsze książki</Button> : null}
-        </KnowledgeNoteFields> : <>
-          <label className="field-label" htmlFor="knowledge-title">{knowledgeKindGuidance[form.kind].titleLabel}</label>
-          <input id="knowledge-title" placeholder={knowledgeKindGuidance[form.kind].titlePlaceholder} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
-          {form.kind === "resource" ? <><label className="field-label" htmlFor="knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="knowledge-url" type="url" placeholder="https://…" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} /><KnowledgeSuggestions url={form.sourceUrl} target={form.areaId ? { areaId: form.areaId } : form.goalIds[0] ? { goalId: form.goalIds[0] } : undefined} /><label className="checkbox-field"><input type="checkbox" checked={form.isBook} onChange={(event) => setForm((current) => ({ ...current, isBook: event.target.checked }))} /><span>To książka</span></label>{form.isBook ? <><label className="field-label" htmlFor="knowledge-author">Autor <span className="optional-label">opcjonalnie</span></label><input id="knowledge-author" value={form.resourceAuthor} onChange={(event) => setForm((current) => ({ ...current, resourceAuthor: event.target.value }))} /><label className="field-label" htmlFor="knowledge-reading-status">Status czytania</label><select id="knowledge-reading-status" value={form.readingStatus} onChange={(event) => setForm((current) => ({ ...current, readingStatus: event.target.value as ReadingStatus }))}>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></> : null}</> : null}
-          <label className="field-label" htmlFor="knowledge-detail">{knowledgeKindGuidance[form.kind].detailLabel}{!knowledgeKindGuidance[form.kind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label>
-          <textarea id="knowledge-detail" rows={4} required={knowledgeKindGuidance[form.kind].detailRequired} placeholder={knowledgeKindGuidance[form.kind].detailPlaceholder} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} />
-          <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
-          <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={form.goalIds} onChange={(goalIds) => setForm((current) => ({ ...current, goalIds }))} />
-          <label className="field-label" htmlFor="knowledge-project">Powiązany Projekt <span className="optional-label">opcjonalnie</span></label>
-          <select id="knowledge-project" value={form.areaId} onChange={(event) => setForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
-        </>}
-        {form.kind === "note" ? <DraftStatus status={formDraft.status} restored={formDraft.restored} errorMessage={formDraft.errorMessage} onRetry={() => void formDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} /> : null}
-        {form.kind === "note" && formDraft.dirty ? <Button type="button" variant="ghost" onClick={formDraft.discard}>Odrzuć szkic</Button> : null}
-        {createError ? <p className="auth-message error" role="alert">{createError}</p> : null}
-        </FormTransition>
-        </div>
-        <div className="modal-actions">{closeGuard.dialog}<Button type="button" disabled={createSaving} onClick={requestCreateClose}>Zamknij</Button><Button type="submit" variant="primary" loading={createSaving} disabled={(form.kind === "note" ? !form.detail.trim() : !form.title.trim()) || (knowledgeKindGuidance[form.kind].detailRequired && !form.detail.trim())}>{form.kind === "note" ? "Zapisz notatkę" : form.kind === "resource" && form.isBook ? "Dodaj książkę" : knowledgeKindGuidance[form.kind].saveLabel}</Button></div>
-        </form>
-      </Modal>
+
       </>}
     </AppShell>
   );

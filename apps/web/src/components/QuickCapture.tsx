@@ -11,14 +11,14 @@ import { Button } from "./ui";
 
 const PreviousQuickAdd = lazy(() => import("./QuickAdd").then(module => ({ default: module.QuickAdd })));
 
-export function QuickCapture({ onClose, closeGuard }: { onClose?: () => void; closeGuard?: RefObject<(() => boolean) | null> }) {
+export function QuickCapture({ onClose, closeGuard, onSavingChange }: { onClose?: () => void; closeGuard?: RefObject<(() => boolean) | null>; onSavingChange?: (saving: boolean) => void }) {
   const { capture, undoCapture, state } = useStore();
   const { user } = useAuth();
   const [hasPreviousDraft] = useState(() => {
     if (!user) return false;
     try {
       const workspace = state.workspaceId ?? "demo-workspace";
-      const raw = localStorage.getItem(draftStorageKey(user.id, workspace, "global-quick-add")) ?? localStorage.getItem(`command-center-draft-v1:${user.id}:${workspace}:global-quick-add`);
+      const raw = localStorage.getItem(draftStorageKey(user.id, workspace, "global-quick-add", "new")) ?? localStorage.getItem(draftStorageKey(user.id, workspace, "global-quick-add")) ?? localStorage.getItem(`command-center-draft-v1:${user.id}:${workspace}:global-quick-add`);
       const value = raw ? JSON.parse(raw).value : undefined;
       return Boolean(value && [value.title, value.content, value.detail].some((text) => typeof text === "string" && text.trim()));
     } catch { return false; }
@@ -31,7 +31,7 @@ export function QuickCapture({ onClose, closeGuard }: { onClose?: () => void; cl
   return <>
     {previousOpen ? <Suspense fallback={<p role="status">Otwieranie szkicu…</p>}><PreviousQuickAdd open onClose={() => setPreviousOpen(false)} /></Suspense> : null}
     {hasPreviousDraft ? <p>Masz wcześniejszy szkic. <Button variant="ghost" onClick={() => { if (closeGuard?.current && !closeGuard.current()) return; if (onClose) { onClose(); requestAppQuickAdd(); } else setPreviousOpen(true); }}>Otwórz poprzedni formularz</Button></p> : null}
-    <CaptureComposer id="quick-capture-content" draftKey="quick-capture" closeGuard={closeGuard} onSubmit={capture} onClose={onClose} onSuccess={(item) => {
+    <CaptureComposer id="quick-capture-content" draftKey="quick-capture" closeGuard={closeGuard} onSavingChange={onSavingChange} onSubmit={capture} onClose={onClose} onSuccess={(item) => {
       if (!item) return;
       setReceipt(item);
       notifyUndo({ message: "Zapisano w Skrzynce.", undo: () => undoCapture(item.id), action: { label: "Otwórz", onClick: () => navigate(address(item)) } });

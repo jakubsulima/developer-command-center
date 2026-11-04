@@ -1024,18 +1024,19 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
       });
     },
     async triageInboxIntent(inboxItemId, input) {
+      if (input.kind === "knowledge" && input.sourceBookId) await hydrateKnowledge([input.sourceBookId]);
       const decidedAt = new Date().toISOString();
       const intent: InboxTriageIntent = input.kind === "goal" ? {
-        ...input, goalId: crypto.randomUUID(), actionId: input.firstActionTitle?.trim() ? crypto.randomUUID() : undefined
+        ...input, goalId: crypto.randomUUID(), actionId: input.firstActionTitle?.trim() ? crypto.randomUUID() : undefined, criteria: (input.criteria ?? []).map((title) => ({ id: crypto.randomUUID(), title, completed: false }))
       } : input.kind === "action" ? { ...input, actionId: crypto.randomUUID() } : {
-        ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId || input.projectId ? crypto.randomUUID() : undefined
+        ...input, knowledgeId: crypto.randomUUID(), linkId: input.goalId || input.projectId ? crypto.randomUUID() : undefined, projectLinkId: input.goalId && input.projectId ? crypto.randomUUID() : undefined, sourceLinkId: input.sourceBookId ? crypto.randomUUID() : undefined
       };
       const current = await ensureWorkspaceState();
       if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const scopes: MutationScope[] = [{ collection: "inbox", ids: [inboxItemId] }];
-      if (intent.kind === "goal") scopes.push({ collection: "goals", ids: [intent.goalId] }, { collection: "actions", ids: intent.actionId ? [intent.actionId] : [] });
+      if (intent.kind === "goal") scopes.push({ collection: "goals", ids: [intent.goalId] }, { collection: "actions", ids: intent.actionId ? [intent.actionId] : [] }, { collection: "goalCriteria", ids: (intent.criteria ?? []).map((item) => item.id) });
       if (intent.kind === "action") scopes.push({ collection: "actions", ids: [intent.actionId] });
-      if (intent.kind === "knowledge") scopes.push({ collection: "knowledge", ids: [intent.knowledgeId] }, { collection: "knowledgeLinks", ids: intent.linkId ? [intent.linkId] : [] });
+      if (intent.kind === "knowledge") scopes.push({ collection: "knowledge", ids: [intent.knowledgeId] }, { collection: "knowledgeLinks", ids: [intent.linkId, intent.projectLinkId, intent.sourceLinkId].filter((id): id is string => Boolean(id)) });
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `inbox:${inboxItemId}`, { type: "triage_inbox_intent", inboxItemId, intent, decidedAt }, scopes, async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).triageInboxIntentRemote(stateRef.current.workspaceId!, inboxItemId, intent, inboxItemId), `inbox:${inboxItemId}`);
       });

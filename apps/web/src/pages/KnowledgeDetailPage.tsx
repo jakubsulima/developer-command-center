@@ -27,50 +27,7 @@ import { DraftConflictNotice } from "../components/DraftConflictNotice";
 import { isDraftVersionConflict } from "../components/draftConflict";
 import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
-import { KnowledgeNoteFields } from "../components/KnowledgeNoteFields";
-import { prepareKnowledgeNote } from "../domain/knowledgeNote";
 
-type BookNoteDraft = { content: string; title: string; projectId: string; goalIds: string[]; idempotencyKey: string };
-
-function BookNoteComposer({ book, defaultProjectId, onClose }: { book: KnowledgeItem; defaultProjectId: string; onClose: () => void }) {
-  const { state, createKnowledge } = useStore();
-  const initial = useMemo<BookNoteDraft>(() => ({ content: "", title: "", projectId: defaultProjectId, goalIds: [], idempotencyKey: crypto.randomUUID() }), [defaultProjectId]);
-  const draft = usePersistentDraft<BookNoteDraft>("book-knowledge-note", initial, 450, { targetId: book.id });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const close = () => { if (draft.flush()) onClose(); };
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!draft.value.content.trim() || saving || book.trashedAt) return;
-    setSaving(true); setError("");
-    try {
-      const note = prepareKnowledgeNote(draft.value.content, draft.value.title);
-      await createKnowledge({ idempotencyKey: draft.value.idempotencyKey, kind: "note", title: note.title, detail: note.detail, relations: [
-        { meaning: "source", target: { targetKnowledgeItemId: book.id } },
-        ...(draft.value.projectId ? [{ meaning: "reference" as const, target: { areaId: draft.value.projectId } }] : []),
-        ...draft.value.goalIds.map((goalId) => ({ meaning: "reference" as const, target: { goalId } }))
-      ] });
-      if (!draft.clear({ content: "", title: "", projectId: draft.value.projectId, goalIds: [], idempotencyKey: crypto.randomUUID() })) {
-        setError("Notatka została zapisana, ale jej szkic pozostał na tym urządzeniu. Ponów zapis lub skopiuj treść.");
-        return;
-      }
-      setError("");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Nie udało się zapisać notatki."); }
-    finally { setSaving(false); }
-  };
-  return <form className="book-note-composer" onSubmit={(event) => void save(event)}>
-    <KnowledgeNoteFields idPrefix={`book-note-${book.id}`} content={draft.value.content} onContentChange={(content) => draft.setValue((current) => ({ ...current, content }))} title={draft.value.title} onTitleChange={(title) => draft.setValue((current) => ({ ...current, title }))} context={`Źródło · ${book.title}`} disabled={saving}>
-      <label className="field-label" htmlFor={`book-note-project-${book.id}`}>Projekt <span className="optional-label">opcjonalnie</span></label>
-      <select id={`book-note-project-${book.id}`} value={draft.value.projectId} disabled={saving} onChange={(event) => draft.setValue((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select>
-      <span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span>
-      <MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={draft.value.goalIds} onChange={(goalIds) => draft.setValue((current) => ({ ...current, goalIds }))} />
-    </KnowledgeNoteFields>
-    <DraftStatus status={draft.status} restored={draft.restored} errorMessage={draft.errorMessage} onRetry={() => void draft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${draft.value.title}\n${draft.value.content}`)} />
-    {draft.dirty ? <Button type="button" variant="ghost" disabled={saving} onClick={() => draft.discard()}>Odrzuć szkic</Button> : null}
-    {error ? <p className="inline-mutation-error" role="alert">{error}</p> : null}
-    <div className="button-row"><Button type="button" disabled={saving} onClick={close}>Zamknij</Button><Button type="submit" variant="primary" loading={saving} disabled={!draft.value.content.trim() || Boolean(book.trashedAt)}>Zapisz notatkę</Button></div>
-  </form>;
-}
 
 export function KnowledgeDetailPage() {
   const { knowledgeId } = useParams();
@@ -96,7 +53,6 @@ export function KnowledgeDetailPage() {
   const [conflict, setConflict] = useState(false);
   const [supportingId, setSupportingId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [noteOpen, setNoteOpen] = useState(false);
   const [sourceNoteQuery, setSourceNoteQuery] = useState("");
   const [sourceNoteToLink, setSourceNoteToLink] = useState("");
   const navigationReturn = readNavigationState(location.state)?.returnTo;
@@ -211,8 +167,8 @@ export function KnowledgeDetailPage() {
         <div className="modal-actions"><DraftStatus status={formDraft.status} errorMessage={formDraft.errorMessage} onRetry={() => void formDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${form.title}\n${form.detail}`)} />{formDraft.dirty ? <Button type="button" variant="ghost" onClick={formDraft.discard}>Odrzuć szkic</Button> : null}<Button type="button" disabled={saving} onClick={() => setEditing(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!form.title.trim() || Boolean(editGuidance?.detailRequired && !form.detail.trim())}>Zapisz zmiany</Button></div>
       </form> : <><div className="knowledge-body">{item.detail || <span className="muted-copy">{item.type === "resource" && sourceHref ? "Opis nie został dodany." : "Brak treści."}</span>}</div>{sourceHref ? <a className="source-link" href={sourceHref} target="_blank" rel="noopener noreferrer">Otwórz źródło <ExternalLink /></a> : null}</>}
     </Panel>
-      {item.resourceFormat === "book" ? <Panel className="book-reading-notes" aria-labelledby="book-notes-heading"><div className="section-heading"><div><h2 id="book-notes-heading">Notatki do książki</h2><span>Każda notatka zachowuje link do tej książki.</span></div>{!item.trashedAt && !noteOpen ? <Button onClick={() => setNoteOpen(true)}><Plus />Zapisz myśl</Button> : null}</div>
-        {noteOpen && !item.trashedAt ? <BookNoteComposer key={item.id} book={item} defaultProjectId={activeContextProjectId} onClose={() => setNoteOpen(false)} /> : null}
+      {item.resourceFormat === "book" ? <Panel className="book-reading-notes" aria-labelledby="book-notes-heading"><div className="section-heading"><div><h2 id="book-notes-heading">Notatki do książki</h2><span>Każda notatka zachowuje link do tej książki.</span></div>{!item.trashedAt ? <Button onClick={() => requestAppQuickAdd({ mode: "library", libraryKind: "note", sourceBookId: item.id, sourceBookTitle: item.title, areaId: activeContextProjectId || undefined, draftKey: `book-${item.id}-note` })}><Plus />Zapisz myśl</Button> : null}</div>
+
         <label className="knowledge-search book-note-search"><span className="sr-only">Szukaj w notatkach książki</span><input type="search" aria-label="Szukaj w notatkach książki" placeholder="Szukaj w notatkach…" value={sourceNoteQuery} onChange={(event) => setSourceNoteQuery(event.target.value)} /></label>
         {sourceNotesQuery.isLoading ? <p className="muted-copy">Ładowanie notatek…</p> : null}
         {sourceNotesQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać notatek. <button type="button" onClick={() => void sourceNotesQuery.refetch()}>Spróbuj ponownie</button></p> : null}

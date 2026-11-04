@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,8 +9,8 @@ import { KnowledgeDetailPage } from "./KnowledgeDetailPage";
 const mocks = vi.hoisted(() => ({ store: vi.fn(), loadItems: vi.fn(), createKnowledge: vi.fn(), updateKnowledge: vi.fn(), linkKnowledge: vi.fn(), unlinkKnowledge: vi.fn(), setVisibility: vi.fn() }));
 vi.mock("../app/useStore", () => ({ useStore: mocks.store }));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { id: "user" }, mode: "supabase" }) }));
-vi.mock("../components/AppShell", () => ({ AppShell: ({ children }: { children: ReactNode }) => children }));
-vi.mock("../components/action-feedback-context", async (importOriginal) => ({ ...await importOriginal<typeof import("../components/action-feedback-context")>(), useActionFeedback: () => ({ notifyUndo: vi.fn() }) }));
+vi.mock("../components/AppShell", async () => ({ AppShell: (await import("../test/CreationTestShell")).CreationTestShell, PageHeading: () => null }));
+vi.mock("../components/action-feedback-context", async (importOriginal) => ({ ...await importOriginal<typeof import("../components/action-feedback-context")>(), useActionFeedback: () => ({ notifyUndo: vi.fn(), notifySuccess: vi.fn() }) }));
 vi.mock("../data/supabaseWorkspaceRepository", () => ({ createSupabaseWorkspaceRepository: () => ({
   loadKnowledgeItems: mocks.loadItems,
   loadPage: async () => ({ items: [] })
@@ -52,16 +51,16 @@ it("po błędzie pozwala ponownie pobrać źródło", async () => {
   expect(await screen.findByRole("link", { name: "Źródło: Źródłowa książka" })).toBeInTheDocument();
 });
 
-it("dodaje notatkę do książki z samej treści i zachowuje źródło", async () => {
+it.each([undefined, "2026-11-03"])("dodaje notatkę do książki z samej treści i zachowuje źródło (archiwum: %s)", async (archivedAt) => {
   const user = userEvent.setup();
   mocks.store.mockReturnValue({ mode: "supabase", loading: false, state: {
     ...structuredClone(emptyState), workspaceId: "workspace",
-    knowledge: [{ id: "book-1", version: 3, type: "resource", title: "Książka testowa", detail: "", resourceFormat: "book", readingStatus: "reading" }],
+    knowledge: [{ id: "book-1", version: 3, type: "resource", title: "Książka testowa", detail: "", resourceFormat: "book", readingStatus: "reading", archivedAt }],
     knowledgeLinks: []
   }, createKnowledge: mocks.createKnowledge, updateKnowledge: mocks.updateKnowledge, linkKnowledge: mocks.linkKnowledge, unlinkKnowledge: mocks.unlinkKnowledge, setVisibility: mocks.setVisibility });
   renderKnowledge("/knowledge/book-1");
   await user.click(await screen.findByRole("button", { name: "Zapisz myśl" }));
-  await user.type(screen.getByLabelText("Treść notatki"), "Ważna myśl\nSzczegół");
+  await user.type(await screen.findByLabelText("Treść notatki"), "Ważna myśl\nSzczegół");
   await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
   expect(mocks.createKnowledge).toHaveBeenCalledWith(expect.objectContaining({
     kind: "note", title: "Ważna myśl", detail: "Ważna myśl\nSzczegół",

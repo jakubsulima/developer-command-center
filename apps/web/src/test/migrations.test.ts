@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { emptyDraft, forkCreationDraft } from "../components/creationDraft";
 
 const bootstrapUrl = new URL("../../../../supabase/tests/bootstrap.sql", import.meta.url);
 const migrationUrls = [
@@ -63,11 +64,82 @@ describe("migracje Supabase", () => {
     for (const name of ["20261004105434_knowledge_discovery", "20261004105437_saved_action_views", "20261004105439_knowledge_reading_progress", "20261004110925_ai_context_export", "20261024175333_easy_capture_and_reminders", "20261026050255_correct_context_function_volatility"]) {
       await database.exec(await readFile(new URL(`../../../../supabase/migrations/${name}.sql`, import.meta.url), "utf8"));
     }
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20261103200435_creation_triage_goal_options.sql", import.meta.url), "utf8"));
   }, 30_000);
 
   afterEach(async () => {
     await database.exec("reset role");
     await database.query("select set_config('request.jwt.claim.sub', '', false)");
+  });
+
+  it("Działanie → Notatka → Działanie zachowuje odrębne audyty i bezpieczne retry", async () => {
+    const user = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    const action = { ...emptyDraft, title: "Wspólna treść", knowledgeIdempotencyKey: crypto.randomUUID() };
+    const note = forkCreationDraft({ ...action, mode: "library", title: "", detail: action.title });
+    const noteKey = note.knowledgeIdempotencyKey, actionKey = action.knowledgeIdempotencyKey;
+    await database.query("select public.create_knowledge_with_relations($1,$2,'note','Notatka',$3,null,null,null,'[]'::jsonb,$2)", [workspace, noteKey, note.detail]);
+    const saveAction = () => scalar<string>("select (public.create_action_item($1,$2,null,null,$3,'',null,false,$2)).id::text", [workspace, actionKey, action.title]);
+    expect(await saveAction()).toBe(actionKey);
+    expect(await saveAction()).toBe(actionKey);
+    expect(await scalar<number>("select count(*)::int from public.actions where id=$1", [actionKey])).toBe(1);
+    const audit = await database.query("select command_name,correlation_id::text,entity_ids[1]::text as entity_id from public.activity_events where workspace_id=$1 and correlation_id in ($2,$3) order by command_name", [workspace, actionKey, noteKey]);
+    expect(audit.rows).toEqual([
+      { command_name: "create_action_item", correlation_id: actionKey, entity_id: actionKey },
+      { command_name: "create_knowledge_with_relations", correlation_id: noteKey, entity_id: noteKey }
+    ]);
+  });
+
+  it("triage saves Goal kind, template, criteria and first action atomically within the workspace", async () => {
+    const user = crypto.randomUUID(), other = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1),($2)", [user, other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    const foreignWorkspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [other]);
+    const template = crypto.randomUUID(), foreignTemplate = crypto.randomUUID();
+    await database.query("insert into public.goal_templates(id,workspace_id,name,kind,outcome_prompt) values ($1,$2,'Template','learning','Outcome'),($3,$4,'Foreign','custom','Outcome')", [template, workspace, foreignTemplate, foreignWorkspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    const inbox = await scalar<string>("select (public.capture_item($1,'Original capture','text',$2)).id", [workspace, crypto.randomUUID()]);
+    const goal = crypto.randomUUID(), action = crypto.randomUUID(), criterion = crypto.randomUUID(), key = crypto.randomUUID();
+    const input = { kind: "goal", goalId: goal, actionId: action, title: "Outcome", outcome: "Verified", goalKind: "learning", templateId: template, firstActionTitle: "First step", criteria: [{ id: criterion, title: "Demonstrate", completed: false }] };
+    await database.query("select public.triage_inbox_intent($1,$2,$3::jsonb,$4)", [workspace, inbox, JSON.stringify(input), key]);
+    expect(await scalar("select kind from public.goals where id=$1", [goal])).toBe("learning");
+    expect(await scalar("select template_id::text from public.goals where id=$1", [goal])).toBe(template);
+    expect(await scalar("select title from public.goal_criteria where id=$1", [criterion])).toBe("Demonstrate");
+    expect(await scalar("select title from public.actions where id=$1", [action])).toBe("First step");
+    await database.query("select public.triage_inbox_intent($1,$2,$3::jsonb,$4)", [workspace, inbox, JSON.stringify(input), key]);
+    expect(await scalar("select count(*)::int from public.goal_criteria where goal_id=$1", [goal])).toBe(1);
+    const secondInbox = await scalar<string>("select (public.capture_item($1,'Second capture','text',$2)).id", [workspace, crypto.randomUUID()]);
+    const invalidGoal = crypto.randomUUID();
+    await expect(database.query("select public.triage_inbox_intent($1,$2,$3::jsonb,$4)", [workspace, secondInbox, JSON.stringify({ ...input, goalId: invalidGoal, actionId: crypto.randomUUID(), templateId: foreignTemplate, criteria: [] }), crypto.randomUUID()])).rejects.toThrow();
+    expect(await scalar("select status from public.inbox_items where id=$1", [secondInbox])).toBe("unprocessed");
+    expect(await scalar("select count(*)::int from public.goals where id=$1", [invalidGoal])).toBe(0);
+  });
+
+  it("triage keeps note references to Project and Goal separate from its source book", async () => {
+    const user = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    const project = crypto.randomUUID(), goal = crypto.randomUUID(), book = crypto.randomUUID();
+    await database.query("insert into public.areas(id,workspace_id,name) values ($1,$2,'Project')", [project, workspace]);
+    await database.query("insert into public.goals(id,workspace_id,title,outcome,area_id) values ($1,$2,'Goal','Outcome',$3)", [goal, workspace, project]);
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'resource','Book')", [book, workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,detail,resource_format,reading_status) values ($1,$2,'','book','to_read')", [book, workspace]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    const inbox = await scalar<string>("select (public.capture_item($1,'Body only','text',$2)).id", [workspace, crypto.randomUUID()]);
+    const note = crypto.randomUUID();
+    await database.query("select public.triage_inbox_intent($1,$2,$3::jsonb,$4)", [workspace, inbox, JSON.stringify({ kind: "knowledge", knowledgeId: note, knowledgeKind: "note", title: "Body only", detail: "Body only", goalId: goal, projectId: project, sourceBookId: book, linkId: crypto.randomUUID(), projectLinkId: crypto.randomUUID(), sourceLinkId: crypto.randomUUID() }), crypto.randomUUID()]);
+    const links = await database.query("select meaning, goal_id::text, area_id::text, target_knowledge_entity_id::text from public.knowledge_links where knowledge_entity_id=$1", [note]);
+    expect(links.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ meaning: "reference", goal_id: goal }),
+      expect.objectContaining({ meaning: "reference", area_id: project }),
+      expect.objectContaining({ meaning: "source", target_knowledge_entity_id: book })
+    ]));
+    expect(links.rows).toHaveLength(3);
   });
 
   it("filters Inbox before pagination, retrieves an older capture and only undoes unchanged captures", async () => {
@@ -125,7 +197,7 @@ describe("migracje Supabase", () => {
     expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(100);
     expect((await database.query("select public.claim_return_reminders()")).rows).toHaveLength(1);
     await database.query("update public.return_reminders set enabled=false where user_id=any($1::uuid[])",[users]);
-  });
+  }, 30_000);
 
   it("combines action status and date while respecting an explicit independent pin", async () => {
     const user = crypto.randomUUID();

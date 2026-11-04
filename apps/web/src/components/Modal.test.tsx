@@ -71,4 +71,21 @@ describe("Modal", () => {
     act(() => vi.advanceTimersByTime(160));
     expect(container.querySelector(".modal-backdrop")).not.toBeInTheDocument();
   });
+
+  it("przy reduced motion usuwa okno bez oczekiwania na animację", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(prefers-reduced-motion: reduce)" }));
+    const props = { title: "Test", onClose: vi.fn(), exitDurationMs: 160 };
+    const { container, rerender } = render(<Modal open {...props}><input /></Modal>);
+    rerender(<Modal open={false} {...props}><input /></Modal>);
+    expect(container.querySelector(".modal-backdrop")).not.toBeInTheDocument();
+  });
+
+  it("przy 320 × 480 przekazuje geometrię visualViewport bez animacji wysokości", () => {
+    const viewport = Object.assign(new EventTarget(), { height: 480, offsetTop: 0 });
+    vi.stubGlobal("visualViewport", viewport);
+    const { container } = render(<Modal open title="Dodaj" onClose={vi.fn()}><div data-modal-scroll-body><input /></div></Modal>);
+    act(() => { viewport.height = 248; viewport.dispatchEvent(new Event("resize")); });
+    expect(container.querySelector(".modal-backdrop")).toHaveStyle({ "--modal-viewport-height": "248px" });
+    expect(container.querySelectorAll("[data-modal-scroll-body]")).toHaveLength(1);
+  });
 });

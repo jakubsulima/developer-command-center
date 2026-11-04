@@ -7,9 +7,9 @@ import { validateKnowledgeTarget } from "./knowledge";
 import { validateReviewOn } from "./blockerReview";
 
 export type InboxTriageIntent =
-  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string }
+  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; templateId?: string; criteria?: Array<{ id: string; title: string; completed: boolean }> }
   | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
-  | { kind: "knowledge"; knowledgeId: string; linkId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
+  | { kind: "knowledge"; knowledgeId: string; linkId?: string; projectLinkId?: string; sourceLinkId?: string; sourceBookId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
 
 export type DomainCommand =
   { type: "save_action_view"; view: SavedActionView; expectedVersion: number } | { type: "delete_action_view"; id: string; expectedVersion: number } | { type: "save_project_category"; id: string; name: string; color: string; defaultPreset?: ProjectPreset } | { type: "delete_project_category"; id: string } | {
@@ -456,7 +456,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (command.intent.kind === "goal") next = executeDomainCommand(next, {
       type: "create_goal", goalId: command.intent.goalId, actionId: command.intent.actionId,
       title: command.intent.title, outcome: command.intent.outcome, firstActionTitle: command.intent.firstActionTitle, targetDate: command.intent.targetDate,
-      areaId: command.intent.areaId, kind: "custom", createdAt: command.decidedAt
+      areaId: command.intent.areaId, kind: command.intent.goalKind ?? "custom", templateId: command.intent.templateId, criteria: command.intent.criteria, createdAt: command.decidedAt
     });
     if (command.intent.kind === "action") next = executeDomainCommand(next, {
       type: "create_action", id: command.intent.actionId, title: command.intent.title, detail: command.intent.detail,
@@ -472,12 +472,19 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       });
       if (command.intent.goalId) next = executeDomainCommand(next, {
         type: "link_knowledge", id: command.intent.linkId ?? `${command.intent.knowledgeId}-${command.intent.goalId}`,
-        knowledgeItemId: command.intent.knowledgeId, goalId: command.intent.goalId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : "material", createdAt: command.decidedAt
+        knowledgeItemId: command.intent.knowledgeId, goalId: command.intent.goalId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : command.intent.knowledgeKind === "note" ? "reference" : "material", createdAt: command.decidedAt
       });
-      if (!command.intent.goalId && command.intent.projectId) next = executeDomainCommand(next, {
-        type: "link_knowledge", id: command.intent.linkId ?? `${command.intent.knowledgeId}-${command.intent.projectId}`,
-        knowledgeItemId: command.intent.knowledgeId, areaId: command.intent.projectId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : "material", createdAt: command.decidedAt
+      if (command.intent.projectId) next = executeDomainCommand(next, {
+        type: "link_knowledge", id: command.intent.projectLinkId ?? command.intent.linkId ?? `${command.intent.knowledgeId}-${command.intent.projectId}`,
+        knowledgeItemId: command.intent.knowledgeId, areaId: command.intent.projectId, meaning: command.intent.knowledgeKind === "decision" ? "decision" : command.intent.knowledgeKind === "artifact" ? "result" : command.intent.knowledgeKind === "note" ? "reference" : "material", createdAt: command.decidedAt
       });
+    }
+    if (command.intent.kind === "knowledge" && command.intent.sourceBookId) {
+      const sourceBookId = command.intent.sourceBookId;
+      if (command.intent.knowledgeKind !== "note") throw new Error("knowledge_source_requires_note_and_material");
+      const book = state.knowledge.find((item) => item.id === sourceBookId && item.resourceFormat === "book" && !item.trashedAt);
+      if (!book) throw new Error("source_book_not_found");
+      next = executeDomainCommand(next, { type: "link_knowledge", id: command.intent.sourceLinkId ?? `${command.intent.knowledgeId}-source`, knowledgeItemId: command.intent.knowledgeId, targetKnowledgeItemId: book.id, meaning: "source", createdAt: command.decidedAt });
     }
     return { ...next, inbox: next.inbox.map((item) => item.id === source.id ? { ...item, status: "resolved", resolvedToIds: [...(item.resolvedToIds ?? []), targetId], snoozedUntil: undefined } : item) };
   }
