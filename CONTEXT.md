@@ -64,11 +64,25 @@ ją przez relację `source`; jawny Projekt i Cel pozostają odrębnymi powiązan
 
 Szkice nowych notatek są trwałe tylko na bieżącym urządzeniu i rozdzielone
 według kontekstu, takiego jak książka albo Projekt. Retry używa stabilnego
-klucza idempotencji, a potwierdzony zapis czyści tylko właściwy szkic. Filtry
+klucza idempotencji, a potwierdzony zapis czyści tylko właściwy szkic.
+Zmiana typu tworzy niezależny identyfikator operacji; powrót do istniejącego
+szkicu zachowuje jego własny klucz. Jednoznacznie odrzucona pierwsza próba
+Działania lub notatki odblokowuje poprawę pól i powiązań oraz otrzymuje nowy
+klucz. Utrata odpowiedzi zachowuje zamrożoną treść i klucz do ponowienia,
+także po wznowieniu. Późniejsze odrzucenie retry nie rozstrzyga wcześniejszego
+nieznanego wyniku. Niewysłane szkice v2 otrzymują odrębne klucze przy
+migracji; próby wysłane i potwierdzenia zachowują swoje identyfikatory. Filtry
 Biblioteki działają przed kursorem strony: Projekt korzysta z semantyki
 `projectKnowledgeIds` (łącznie z jednokrotnym przejściem od notatki źródłowej
 do książki), a Cel obejmuje bezpośrednie powiązanie i powiązanie przez Działanie
 z tym Celem. Aktywne, archiwalne i usunięte wpisy są osobnymi widokami.
+
+Dawny niewysłany szkic innego typu nie zmienia rodzaju otwieranego formularza:
+przed zastąpieniem trafia do właściwego zakresu, a przy konflikcie do
+odzyskiwania. Nie przekierowujemy nierozstrzygniętej próby ani potwierdzenia.
+Materiały przekazane z książki do nowego Działania lub Celu są widoczne
+w formularzu i można je jawnie odłączyć przed wysłaniem. Relacja `material`
+pozostaje niezależna od Projektu, Celu i notatki źródłowej.
 
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
@@ -87,6 +101,21 @@ porzucenia obiektu. W bieżącym redesignie nie wykonujemy hard delete.
 Goal, Learning Evidence i Review** są terminami historycznymi. Ich rekordy
 pozostają w eksporcie i widokach tylko do odczytu, ale nowe przepływy ich nie
 tworzą i aktywny UI ich nie używa.
+
+**Tworzenie i szkic lokalny**:
+Ten sam typ ma wspólne pola i reguły na telefonie i desktopie. Równoważne
+wejścia w jednym Celu kontynuują ten sam szkic Działania, także przy
+przejściu z inline do panelu. Szkic ma pierwszeństwo przed kontekstem wejścia
+i filtrem; jego powiązania pozostają widoczne. Różne wersje szkicu można
+odzyskać bez nadpisywania wcześniejszej treści.
+
+Termin Działania i jawne przypięcie do Startu są niezależne. Zapis blokuje
+edycję oraz zamknięcie formularza. Potwierdzony sukces pozostawia użytkownika
+w miejscu pracy i daje możliwość otwarcia wyniku; błąd usunięcia szkicu
+wymaga jedynie sprzątania. Częściowy sukces Rutyny ponawia przygotowanie
+wystąpień, bez tworzenia nowej serii. Szybki zapis nadal przechwytuje jedno
+pole tekstu albo link do Skrzynki bez obowiązkowej klasyfikacji. Triage,
+postęp i łączenie istniejącej Wiedzy zachowują własne operacje domenowe.
 
 ## Historical language — schema compatibility only
 

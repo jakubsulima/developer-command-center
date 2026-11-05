@@ -49,7 +49,7 @@ describe("goal-centric experience", () => {
     const actionsSection = within(details).getByText("Pozostałe Działania", { selector: "strong" }).closest("details") as HTMLDetailsElement;
     expect(actionsSection).not.toHaveAttribute("open");
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj Działanie do Celu FinTrack API" }));
-    const quickAdd = screen.getByRole("dialog", { name: "Nowe Działanie" });
+    const quickAdd = await screen.findByRole("dialog", { name: "Nowe Działanie" });
     expect(within(quickAdd).getByLabelText("Co chcesz zrobić?")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(details).getByText("Pozostałe Działania", { selector: "strong" }));

@@ -1,0 +1,6 @@
+import { readingStatusLabels } from "../domain/labels";
+import type { ReadingStatus } from "../domain/types";
+
+export function BookCreationFields({ value, onChange }: { value: { isBook?: boolean; resourceAuthor?: string; readingStatus?: ReadingStatus }; onChange: (changes: { isBook?: boolean; resourceAuthor?: string; readingStatus?: ReadingStatus }) => void }) {
+  return <div className="creation-fields"><label className="checkbox-field"><input type="checkbox" checked={value.isBook ?? false} onChange={(event) => onChange({ isBook: event.target.checked })} /><span>To książka</span></label>{value.isBook ? <><label className="field-label" htmlFor="creation-book-author">Autor <span className="optional-label">opcjonalnie</span></label><input id="creation-book-author" value={value.resourceAuthor ?? ""} onChange={(event) => onChange({ resourceAuthor: event.target.value })} /><label className="field-label" htmlFor="creation-book-status">Status czytania</label><select id="creation-book-status" value={value.readingStatus ?? "to_read"} onChange={(event) => onChange({ readingStatus: event.target.value as ReadingStatus })}>{Object.entries(readingStatusLabels).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></> : null}</div>;
+}

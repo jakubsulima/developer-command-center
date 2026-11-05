@@ -5,7 +5,7 @@ import { CaptureComposer } from "./CaptureComposer";
 import { draftStorageKey } from "../hooks/usePersistentDraft";
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ mode: "demo", user: { id: "capture-user" } }) }));
 vi.mock("../app/useStore", () => ({ useStore: () => ({ state: { workspaceId: "capture-workspace" } }) }));
-const key = draftStorageKey("capture-user", "capture-workspace", "quick-capture");
+const key = draftStorageKey("capture-user", "capture-workspace", "creation:capture");
 it("restores a failed attempt and retries the same payload and command after reopening", async () => {
   const user = userEvent.setup();
   const submit = vi.fn().mockRejectedValueOnce(new Error("connection_lost")).mockResolvedValueOnce({ id: "server-receipt" });
@@ -51,4 +51,17 @@ it("retains a different payload after a cross-tab key conflict and creates a new
   expect(screen.getByRole("textbox")).not.toHaveAttribute("readonly");
   await user.click(screen.getByRole("button", { name: "Zapisz" }));
   expect(submit.mock.calls[0][2]).not.toBe(submit.mock.calls[1][2]);
+});
+
+it("keeps both the existing Capture and text brought from another creation type", async () => {
+  localStorage.setItem(key, JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { content: "Pierwsza myśl", commandId: "previous", attempted: false } }));
+  const user = userEvent.setup();
+  render(<CaptureComposer id="capture" draftKey="quick-capture" initialContent="Tekst przenoszony z Działania" onSubmit={vi.fn()} />);
+  expect(screen.getByRole("textbox")).toHaveValue("Pierwsza myśl");
+  await user.click(screen.getByText(/Inne szkice do odzyskania/));
+  expect(screen.getByText("Tekst przenoszony z Działania")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Wznów szkic 1" }));
+  expect(screen.getByRole("textbox")).toHaveValue("Tekst przenoszony z Działania");
+  const preserved = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((item): item is string => Boolean(item?.startsWith(`${key}:recovery:`))).map((item) => JSON.parse(localStorage.getItem(item)!).value.content);
+  expect(preserved).toContain("Pierwsza myśl");
 });

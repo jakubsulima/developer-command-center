@@ -4,6 +4,7 @@ import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../a
 import type { InboxTriageIntent } from "../domain/commands";
 import { migrateLegacyWorkspaceState } from "../domain/goals";
 import { getSupabase } from "../lib/supabase";
+import { OperationResponseError } from "../lib/operationFailure";
 import { emptyState } from "./empty";
 import { createSupabaseWorkspaceRepository } from "./supabaseWorkspaceRepository";
 import type { WorkspacePageItem } from "./workspaceRepository";
@@ -32,8 +33,11 @@ interface RecurringRow { id: string; title: string; detail: string; goal_id: str
 interface KnowledgeLinkRow { id: string; knowledge_entity_id: string; target_knowledge_entity_id: string | null; area_id: string | null; goal_id: string | null; action_id: string | null; recurring_template_id: string | null; meaning: AppState["knowledgeLinks"][number]["meaning"]; created_at: string }
 interface KnowledgeContentRow { entity_id: string; detail: string; source_url: string | null; source_inbox_item_id: string | null; resource_format?: "book" | null; resource_author?: string | null; reading_status?: AppState["knowledge"][number]["readingStatus"] | null; created_at: string; updated_at: string }
 
-function dataOrThrow<T>(result: { data: T | null; error: { message: string } | null }, label: string): T {
-  if (result.error) throw new Error(`${label}: ${result.error.message}`);
+function dataOrThrow<T>(result: { data: T | null; error: { message: string; code?: string } | null }, label: string): T {
+  if (result.error) {
+    const message = `${label}: ${result.error.message}`;
+    throw new OperationResponseError(message, result.error.code);
+  }
   if (result.data === null) throw new Error(`${label}: brak danych`);
   return result.data;
 }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { isOperationRejected, OperationResponseError } from "../lib/operationFailure";
 import {
   captureRemote, completeReviewRemote, createGoalRemote, createActionRemote, createLearningGoalRemote, createProjectRemote, createRecurringTemplateRemote,
   decideAIProposalRemote, endFocusRemote, exportWorkspaceRemote, loadSupabaseState,
@@ -47,6 +48,24 @@ const workItemId = "10000000-0000-0000-0000-000000000011";
 
 describe("repozytorium Supabase", () => {
   beforeEach(() => { getClient.mockReset(); });
+
+  it.each([
+    ["P0001", "goal_not_found", true],
+    ["23503", "foreign key violation", true],
+    ["42501", "permission denied", true],
+    ["40003", "goal_not_found", false],
+    ["08006", "connection failure", false],
+    ["", "TypeError: Failed to fetch", false],
+    [undefined, "goal_not_found", false]
+  ] as const)("zachowuje rodzaj wyniku RPC %s (%s)", async (code, message, rejected) => {
+    const client = fakeClient();
+    client.rpc.mockResolvedValueOnce({ data: null, error: { code, message } });
+    getClient.mockReturnValue(client);
+    const error = await createActionRemote(workspaceId, workItemId, { title: "Krok" }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(OperationResponseError);
+    expect(error).toMatchObject({ code, message: `Utworzenie Działania: ${message}` });
+    expect(isOperationRejected(error)).toBe(rejected);
+  });
 
   it("przesyła identyfikatory relacji używane przez optymistyczny stan klienta", async () => {
     const client = fakeClient();

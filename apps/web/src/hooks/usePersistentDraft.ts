@@ -17,15 +17,19 @@ interface DraftRead<T> {
   restored: boolean;
   baseVersion?: DraftBaseVersion;
   error?: string;
+  alternatives?: Array<{ key: string; value: T }>;
+  sources?: Array<{ key: string; raw: string }>;
 }
 
 export interface PersistentDraftOptions<T> {
   targetId?: string;
-  migrateFrom?: { kind: string; targetId?: string };
+  migrateFrom?: { kind: string; targetId?: string } | Array<{ kind: string; targetId?: string }>;
   baseVersion?: DraftBaseVersion;
   enabled?: boolean;
   validate?: (value: unknown) => value is T;
   migrate?: (value: unknown) => T | undefined;
+  /** Relocate a valid draft stored in another type's slot before replacing it. */
+  redirect?: (value: T) => string | undefined;
 }
 
 const PREFIX = "command-center-draft-v2";
@@ -49,23 +53,42 @@ function defaultValidate(value: unknown): value is object | string {
   return value !== null && (typeof value === "object" || typeof value === "string");
 }
 
-function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | undefined>, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined): DraftRead<T> {
+function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | undefined>, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined, redirect?: (value: T) => string | undefined): DraftRead<T> {
   if (!key || typeof localStorage === "undefined") return { value: initialValue, restored: false };
   try {
-    let raw = localStorage.getItem(key);
-    if (!raw) {
-      for (const fallbackKey of fallbackKeys) {
-        if (!fallbackKey) continue;
-        raw = localStorage.getItem(fallbackKey);
-        if (raw) break;
-      }
+    const recoveryKeys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((candidate): candidate is string => Boolean(candidate?.startsWith(`${key}:recovery:`)));
+    let result: DraftRead<T> | undefined;
+    let invalid = false;
+    for (const candidate of [...new Set([key, ...fallbackKeys, ...recoveryKeys])]) {
+      if (!candidate) continue;
+      const raw = localStorage.getItem(candidate);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) as Partial<DraftEnvelope<T>>;
+        const migrated = (parsed.version === 1 || parsed.version === 2) ? (validate(parsed.value) ? parsed.value : migrate?.(parsed.value)) : undefined;
+        if (migrated === undefined) { invalid = true; continue; }
+        const destination = redirect?.(migrated);
+        if (destination && !localStorage.getItem(`${candidate}:receipt`)) {
+          try {
+            const existing = localStorage.getItem(destination);
+            if (existing !== raw) {
+              const alreadyPreserved = Object.keys(localStorage).some((storedKey) => storedKey.startsWith(`${destination}:recovery:`) && localStorage.getItem(storedKey) === raw);
+              const occupied = existing !== null || localStorage.getItem(`${destination}:receipt`) !== null;
+              if (!alreadyPreserved) localStorage.setItem(occupied ? `${destination}:recovery:${crypto.randomUUID()}` : destination, raw);
+            }
+          } catch {
+            // Keep the original editor if the copy failed. Returning an empty
+            // form here could overwrite the only surviving draft on autosave.
+            return { ...(result ?? { value: migrated, restored: true, sources: [{ key: candidate, raw }] }), error: "Nie udało się rozdzielić szkiców. Zachowano odczytany formularz; ponów otwarcie po przywróceniu zapisu na urządzeniu." };
+          }
+          continue;
+        }
+        if (!result) result = { value: migrated, restored: true, baseVersion: parsed.baseVersion, alternatives: [], sources: [{ key: candidate, raw }] };
+        else if (JSON.stringify(result.value) === JSON.stringify(migrated)) result.sources!.push({ key: candidate, raw });
+        else result.alternatives!.push({ key: candidate, value: migrated });
+      } catch { invalid = true; }
     }
-    if (!raw) return { value: initialValue, restored: false };
-    const parsed = JSON.parse(raw) as Partial<DraftEnvelope<T>>;
-    if (parsed.version !== 1 && parsed.version !== 2) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
-    const migrated = validate(parsed.value) ? parsed.value : migrate?.(parsed.value);
-    if (migrated === undefined) return { value: initialValue, restored: false, error: "Uszkodzony szkic został pominięty." };
-    return { value: migrated, restored: true, baseVersion: parsed.baseVersion };
+    return result ?? { value: initialValue, restored: false, error: invalid ? "Uszkodzony szkic został pominięty." : undefined };
   } catch {
     return { value: initialValue, restored: false, error: "Nie udało się odczytać szkicu z tego urządzenia." };
   }
@@ -80,34 +103,55 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   const targetId = options.targetId;
   const key = useMemo(() => ready && userId && workspaceId ? draftStorageKey(userId, workspaceId, kind, targetId) : undefined, [kind, ready, targetId, userId, workspaceId]);
   const legacyKey = useMemo(() => ready && userId && workspaceId ? legacyDraftStorageKey(userId, workspaceId, kind) : undefined, [kind, ready, userId, workspaceId]);
-  const migrationKey = useMemo(() => ready && userId && workspaceId && options.migrateFrom
-    ? draftStorageKey(userId, workspaceId, options.migrateFrom.kind, options.migrateFrom.targetId)
-    : undefined, [options.migrateFrom, ready, userId, workspaceId]);
-  const fallbackKeys = useMemo(() => [migrationKey, legacyKey], [legacyKey, migrationKey]);
+  const migrationSignature = JSON.stringify(options.migrateFrom ?? []);
+  const fallbackKeys = useMemo(() => {
+    const sources = JSON.parse(migrationSignature) as PersistentDraftOptions<T>["migrateFrom"];
+    const entries = Array.isArray(sources) ? sources : sources ? [sources] : [];
+    return [...entries.flatMap((source) => ready && userId && workspaceId ? [draftStorageKey(userId, workspaceId, source.kind, source.targetId), legacyDraftStorageKey(userId, workspaceId, source.kind)] : []), legacyKey];
+  }, [legacyKey, migrationSignature, ready, userId, workspaceId]);
   const validate = options.validate ?? defaultValidate as (value: unknown) => value is T;
   // The initial value is intentionally read only when the scoped key changes;
   // the following effect handles late server hydration without resetting edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const loaded = useMemo(() => readDraft(key, fallbackKeys, initialValue, validate, options.migrate), [fallbackKeys, key, options.migrate, validate]);
+  const loaded = useMemo(() => readDraft(key, fallbackKeys, initialValue, validate, options.migrate, options.redirect), [fallbackKeys, key]);
   const [value, setValueState] = useState<T>(loaded.value);
   const [status, setStatus] = useState<DraftSaveStatus>(loaded.error ? "error" : loaded.restored ? "saved" : "idle");
   const [dirty, setDirty] = useState(loaded.restored);
   const [restored, setRestored] = useState(loaded.restored);
   const [errorMessage, setErrorMessage] = useState(loaded.error);
+  const [alternatives, setAlternatives] = useState(loaded.alternatives ?? []);
+  const sourcesRef = useRef(loaded.sources ?? []);
   const valueRef = useRef(value);
   const dirtyRef = useRef(dirty);
   const baseVersionRef = useRef<DraftBaseVersion>(loaded.baseVersion ?? options.baseVersion);
   const initializedKeyRef = useRef(key);
   const generationRef = useRef(0);
   const initialValueRef = useRef(initialValue);
+  const inputValueRef = useRef(initialValue);
+  const instanceRef = useRef(crypto.randomUUID());
 
   valueRef.current = value;
   dirtyRef.current = dirty;
 
   useEffect(() => {
+    if (!kind.startsWith("creation:") || !key) return;
+    const sync = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; origin: string; value: T; cleared?: boolean }>).detail;
+      if (detail.key !== key || detail.origin === instanceRef.current) return;
+      generationRef.current += 1;
+      valueRef.current = detail.value;
+      dirtyRef.current = !detail.cleared;
+      setValueState(detail.value); setDirty(!detail.cleared); setRestored(!detail.cleared); setStatus(detail.cleared ? "idle" : "saved");
+    };
+    window.addEventListener("creation:draft", sync);
+    return () => window.removeEventListener("creation:draft", sync);
+  }, [key, kind]);
+
+  useEffect(() => {
     generationRef.current += 1;
     initializedKeyRef.current = key;
     initialValueRef.current = initialValue;
+    inputValueRef.current = initialValue;
     baseVersionRef.current = loaded.baseVersion ?? options.baseVersion;
     valueRef.current = loaded.value;
     dirtyRef.current = loaded.restored;
@@ -116,6 +160,8 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
     setDirty(loaded.restored);
     setRestored(loaded.restored);
     setErrorMessage(loaded.error);
+    setAlternatives(loaded.alternatives ?? []);
+    sourcesRef.current = loaded.sources ?? [];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, loaded]);
 
@@ -125,7 +171,8 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
 
   useEffect(() => {
     if (!ready || initializedKeyRef.current !== key || dirtyRef.current || restored) return;
-    if (JSON.stringify(initialValueRef.current) === JSON.stringify(initialValue)) return;
+    if (JSON.stringify(inputValueRef.current) === JSON.stringify(initialValue)) return;
+    inputValueRef.current = initialValue;
     initialValueRef.current = initialValue;
     baseVersionRef.current = options.baseVersion;
     setValueState(initialValue);
@@ -139,7 +186,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       try {
         const envelope: DraftEnvelope<T> = { version: 2, savedAt: new Date().toISOString(), value: valueRef.current, baseVersion: baseVersionRef.current };
         localStorage.setItem(key, JSON.stringify(envelope));
-        for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
+        if (kind.startsWith("creation:")) window.dispatchEvent(new CustomEvent("creation:draft", { detail: { key, origin: instanceRef.current, value: valueRef.current } }));
         setErrorMessage(undefined);
         setStatus("saved");
       } catch (caught) {
@@ -148,14 +195,14 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       }
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [delay, dirty, fallbackKeys, key, ready, status, value]);
+  }, [delay, dirty, fallbackKeys, key, kind, ready, status, value]);
 
   const persistNow = useCallback(() => {
     if (!ready || !key || !dirtyRef.current) return true;
     try {
       const envelope: DraftEnvelope<T> = { version: 2, savedAt: new Date().toISOString(), value: valueRef.current, baseVersion: baseVersionRef.current };
       localStorage.setItem(key, JSON.stringify(envelope));
-      for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
+      if (kind.startsWith("creation:")) window.dispatchEvent(new CustomEvent("creation:draft", { detail: { key, origin: instanceRef.current, value: valueRef.current } }));
       setErrorMessage(undefined);
       setStatus("saved");
       return true;
@@ -164,7 +211,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       setStatus("error");
       return false;
     }
-  }, [fallbackKeys, key, ready]);
+  }, [key, kind, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -197,7 +244,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   const clear = useCallback((nextValue?: T) => {
     try {
       if (key) localStorage.removeItem(key);
-      for (const fallbackKey of fallbackKeys) if (fallbackKey) localStorage.removeItem(fallbackKey);
+      for (const source of sourcesRef.current) if (source.key !== key && localStorage.getItem(source.key) === source.raw) localStorage.removeItem(source.key);
       const resetValue = nextValue ?? initialValueRef.current;
       if (nextValue !== undefined) initialValueRef.current = nextValue;
       setValueState(resetValue);
@@ -207,13 +254,35 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
       setRestored(false);
       setErrorMessage(undefined);
       setStatus("idle");
+      if (kind.startsWith("creation:")) window.dispatchEvent(new CustomEvent("creation:draft", { detail: { key, origin: instanceRef.current, value: resetValue, cleared: true } }));
       return true;
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : "Nie udało się odrzucić szkicu.");
       setStatus("error");
       return false;
     }
-  }, [fallbackKeys, key]);
+  }, [key, kind]);
 
-  return { value, setValue, status, dirty, restored, errorMessage, baseVersion: baseVersionRef.current, flush: persistNow, retry: persistNow, clear, discard: () => clear(), storageKey: key };
+  const recover = (sourceKey: string) => {
+    const source = alternatives.find((item) => item.key === sourceKey);
+    if (!source || !key || !persistNow()) return false;
+    try {
+      // Keep both versions available; recovering never overwrites the only copy.
+      localStorage.setItem(`${key}:recovery:${crypto.randomUUID()}`, JSON.stringify({ version: 2, savedAt: new Date().toISOString(), value: valueRef.current }));
+      const raw = localStorage.getItem(source.key);
+      sourcesRef.current = raw ? [{ key: source.key, raw }] : [];
+      setValue(source.value);
+      return persistNow();
+    } catch { setErrorMessage("Nie udało się zachować obu szkiców. Skopiuj treść przed odzyskaniem."); setStatus("error"); return false; }
+  };
+  const preserveAlternative = useCallback((alternative: T) => {
+    if (!key || !ready) return false;
+    try {
+      const recoveryKey = `${key}:recovery:${crypto.randomUUID()}`;
+      localStorage.setItem(recoveryKey, JSON.stringify({ version: 2, savedAt: new Date().toISOString(), value: alternative }));
+      setAlternatives((current) => [...current, { key: recoveryKey, value: alternative }]);
+      return true;
+    } catch { setErrorMessage("Nie udało się zachować obu szkiców. Treść pozostała w poprzednim formularzu."); setStatus("error"); return false; }
+  }, [key, ready]);
+  return { value, setValue, status, dirty, restored, errorMessage, alternatives, recover, preserveAlternative, baseVersion: baseVersionRef.current, flush: persistNow, retry: persistNow, clear, discard: () => clear(), storageKey: key };
 }

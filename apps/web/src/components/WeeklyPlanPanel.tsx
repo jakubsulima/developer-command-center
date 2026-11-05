@@ -1,6 +1,6 @@
 import { actionStatusLabels } from "../domain/labels";
-import { Fragment, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { CalendarDays, Plus, ListChecks, Target } from "lucide-react";
 import type { AppState, GoalAction } from "../domain/types";
 import { localDateForTimeZone } from "../domain/activity";
@@ -32,9 +32,11 @@ interface WeeklyPlanPanelProps {
 const dateLabel = (date: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", year: date.slice(0, 4) !== String(new Date().getFullYear()) ? "numeric" : undefined, timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 
 export function WeeklyPlanPanel({ state, week, value, onChange, updateAction, setActionStatus, createAction }: WeeklyPlanPanelProps) {
+  const navigate = useNavigate();
   const { notifyUndo, notifySuccess } = useActionFeedback();
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
   const [goalSearch, setGoalSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(true);
   const [emptyPickerDismissed, setEmptyPickerDismissed] = useState(false);
@@ -121,20 +123,22 @@ export function WeeklyPlanPanel({ state, week, value, onChange, updateAction, se
   };
   const addStep = async () => {
     const newTitle = value.newActionTitle ?? "";
-    if (creating || !newTitle.trim()) return;
+    if (creatingRef.current || !newTitle.trim()) return;
+    creatingRef.current = true;
     const requestId = value.newActionRequestId ?? crypto.randomUUID();
     if (!value.newActionRequestId) onChange((current) => ({ ...current, newActionRequestId: requestId }));
     setCreating(true);
     setCreateError("");
     try {
       const goal = activeGoals.find((candidate) => candidate.id === selectedNewGoalId);
-      await createAction({ title: newTitle.trim(), goalId: goal?.id, areaId: goal?.areaId, scheduledFor: value.newActionDate || undefined }, requestId);
+      const id = await createAction({ title: newTitle.trim(), goalId: goal?.id, areaId: goal?.areaId, scheduledFor: value.newActionDate || undefined }, requestId);
       onChange((current) => ({ ...current, newActionTitle: "", newActionGoalId: undefined, newActionDate: undefined, newActionRequestId: undefined }));
-      notifySuccess(value.newActionDate ? "Krok dodany i zaplanowany." : "Krok dodany bez terminu.");
+      notifySuccess(value.newActionDate ? "Krok dodany i zaplanowany." : "Krok dodany bez terminu.", { label: "Otwórz", onClick: () => navigate(`/actions/${id}`) });
     } catch {
       setCreateError("Nie potwierdzono zapisu. Tytuł, Cel i dzień są zablokowane; ponów ten szkic, aby uniknąć duplikatu.");
     } finally {
       setCreating(false);
+      creatingRef.current = false;
     }
   };
 

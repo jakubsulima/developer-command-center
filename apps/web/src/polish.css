@@ -136,7 +136,7 @@ textarea { line-height: 1.6; }
 .app-shell.focus-detail .action-detail-heading-row { display: flex; flex-wrap: wrap; gap: 12px; }
 .app-shell.focus-detail .action-detail-heading-row h1 { flex: 1 1 280px; }
 .action-heading-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.app-shell.focus-detail .action-heading-tools .button { width: auto; min-height: 44px; padding: 0 10px; font-size: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.app-shell.focus-detail .action-heading-tools > .button { width: auto; min-height: 44px; padding: 0 10px; font-size: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .knowledge-suggestions { background: var(--card); }
 .knowledge-suggestions > .button-row { flex-wrap: wrap; align-items: center; gap: 10px; padding-block: 8px; }
 .knowledge-suggestions > .button-row > a { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
@@ -268,13 +268,13 @@ textarea { line-height: 1.6; }
 .project-card-categories .project-category-chip { background: transparent; border-color: transparent; padding: 0; }
 .goal-card h2 { margin: 0 0 12px; font-size: 18px; line-height: 1.4; }
 .goal-card .goal-card-top { font-size: 12px; margin-bottom: 12px; color: var(--muted-foreground); }
-.goal-card .goal-card-top .badge { background: var(--secondary); color: var(--muted-foreground); }
+.goal-card .goal-card-top .badge-neutral { background: var(--secondary); color: var(--muted-foreground); }
 .goal-card .goal-card-context { gap: 8px; }
 .goal-card .goal-card-context > span:last-child { color: var(--secondary-foreground); }
 .goal-card-signals:empty { display: none; }
 .actions-toolbar-topline { flex-wrap: wrap; gap: 8px; }
 .actions-toolbar .actions-view-tabs { flex: 1 1 230px; }
-.actions-toolbar .saved-action-views { padding: 0; background: transparent; }
+.actions-toolbar .saved-action-views { margin: 0; padding: 0; border: 0; background: transparent; }
 .saved-views-picker { position: relative; }
 .saved-views-picker > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; list-style: none; cursor: pointer; font-size: 13px; color: var(--secondary-foreground); }
 .saved-views-picker > summary::-webkit-details-marker { display: none; }
@@ -282,7 +282,7 @@ textarea { line-height: 1.6; }
 .saved-views-popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 12; width: min(340px, calc(100vw - 32px)); padding: 16px; background: var(--popover); border: 1px solid var(--input); border-radius: 14px; box-shadow: 0 16px 40px #0005; }
 .saved-views-hint { font-size: 12px; color: var(--muted-foreground); margin: 0 0 12px; }
 .saved-action-view { display: flex; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); gap: 4px; }
-.saved-action-view > .button:first-child { flex: 1 1 100%; justify-content: flex-start; color: var(--foreground); }
+.saved-action-view > .button:first-child { flex: 1 1 100%; min-width: 0; height: auto; justify-content: flex-start; white-space: normal; overflow-wrap: anywhere; text-align: left; color: var(--foreground); }
 .saved-action-view > small { flex-basis: 100%; }
 .knowledge-kind-select { display: grid; gap: 6px; margin-bottom: 12px; }
 .knowledge-kind-select > span { color: var(--muted-foreground); font-size: 13px; }
@@ -305,10 +305,11 @@ textarea { line-height: 1.6; }
 .project-tabs button small { font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .project-overview > .project-now-card { margin-top: 20px; }
 .detail-tools-menu { position: relative; }
-.detail-tools-menu summary { display: grid; place-items: center; min-width: 44px; min-height: 44px; cursor: pointer; list-style: none; font-size: 18px; color: var(--muted-foreground); border-radius: 10px; }
-.detail-tools-menu summary::-webkit-details-marker { display: none; }
-.detail-tools-menu[open] summary { background: var(--secondary); }
+.detail-tools-menu > summary { display: grid; place-items: center; min-width: 44px; min-height: 44px; cursor: pointer; list-style: none; font-size: 18px; color: var(--muted-foreground); border-radius: 10px; }
+.detail-tools-menu > summary::-webkit-details-marker { display: none; }
+.detail-tools-menu[open] > summary { background: var(--secondary); }
 .detail-tools-menu > div { position: absolute; right: 0; top: calc(100% + 6px); z-index: 12; min-width: 230px; padding: 8px; border: 1px solid var(--input); border-radius: 12px; background: var(--popover); box-shadow: 0 12px 30px #0004; }
+.detail-tools-menu > div > .button { width: 100%; white-space: normal; }
 .goal-detail-toolbar .page-actions { margin-left: auto; }
 .focus-detail .action-heading-tools { flex-direction: row-reverse; }
 .weekly-summary-card .weekly-execution-summary, .weekly-summary-card .weekly-goal-results { border: 0; border-top: 1px solid var(--border); background: transparent; border-radius: 0; padding-inline: 0; }
@@ -357,8 +358,8 @@ textarea { line-height: 1.6; }
   .persistent-project-head { flex-wrap: wrap; gap: 12px; }
   .persistent-project-head > div:first-child { flex: 1 1 200px; }
   .project-heading-tools .page-add-button { width: 44px; }
-  .detail-tools-menu > div { left: 0; right: auto; min-width: 0; width: min(230px, calc(100vw - 140px)); }
-  .detail-tools-menu .button { width: 100%; white-space: normal; }
+  .app-shell.focus-detail .action-heading-tools { margin-left: auto; }
+  .detail-tools-menu > div { min-width: 0; width: min(230px, calc(100vw - 40px)); }
   .goal-detail-toolbar { gap: 6px; }
   .goal-detail-toolbar > .context-navigation { min-width: 0; flex: 1; }
   .project-tabs button { gap: 4px; padding-inline: 8px; }
@@ -489,7 +490,7 @@ textarea { line-height: 1.6; }
 
   /* Preserve the visualViewport-aware shell: only the body scrolls with a keyboard. */
   .modal.creation-hub-modal, .modal.quick-capture-modal { --creation-surface: var(--background); background: var(--background); }
-  .modal.creation-hub-modal { padding-inline: max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-left)); padding-top: max(20px, env(safe-area-inset-top)); }
+  .modal.creation-hub-modal { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); padding-top: max(20px, env(safe-area-inset-top)); }
   .creation-hub-modal .modal-head { padding-bottom: 24px; align-items: center; }
   .creation-hub-modal .modal-head h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.035em; }
   .creation-hub-modal .quick-add-body { padding-inline: 0; gap: 20px; }
@@ -519,10 +520,11 @@ textarea { line-height: 1.6; }
   .start-capture-link { padding: 12px; gap: 8px; grid-template-columns: 32px minmax(0, 1fr) 16px; }
   .start-capture-icon { width: 32px; height: 32px; }
   .start-capture-link strong { font-size: 14px; }
-  .modal.creation-hub-modal { padding-inline: 16px; }
+  .modal.creation-hub-modal { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .creation-hub-modal .modal-head h2 { font-size: 21px; }
 }
 @container (max-height: 500px) {
+  .modal.creation-hub-modal { padding-top: max(4px, env(safe-area-inset-top)); }
   .modal.creation-hub-modal .modal-head { padding-bottom: 8px; }
   .modal.creation-hub-modal .quick-add-body { gap: 12px; }
 }

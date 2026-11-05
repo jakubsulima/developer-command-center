@@ -29,7 +29,7 @@ export function KnowledgeNoteFields({
   return <div className="knowledge-note-fields">
     <label className="knowledge-note-content-label" htmlFor={`${idPrefix}-content`}>
       <span className="sr-only">Treść notatki</span>
-      <textarea id={`${idPrefix}-content`} autoFocus required rows={5} placeholder="Zapisz myśl…" value={content} disabled={disabled} onChange={(event) => onContentChange(event.target.value)} onKeyDown={handleKeyDown} />
+      <textarea id={`${idPrefix}-content`} required rows={5} placeholder="Zapisz myśl…" value={content} disabled={disabled} onChange={(event) => onContentChange(event.target.value)} onKeyDown={handleKeyDown} />
     </label>
     <p className="knowledge-note-context">{context}</p>
     <details className="knowledge-note-more">

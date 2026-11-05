@@ -1,3 +1,4 @@
+import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, CalendarDays, Layers3, ListChecks, Pause, Play, Repeat2, Settings2, ShieldCheck } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -33,8 +34,8 @@ export function RoutinesPage() {
     const newRoutine = searchParams.get("newRecurring") === "1";
     const editSeries = searchParams.get("editSeries");
     if (newRoutine || editSeries) {
-      setEditingTemplateId(editSeries ?? undefined);
-      setFormOpen(true);
+      if (newRoutine) requestAppQuickAdd({ mode: "routine", draftKey: "routines-list" });
+      else { setEditingTemplateId(editSeries ?? undefined); setFormOpen(true); }
       const next = new URLSearchParams(searchParams);
       next.delete("newRecurring");
       next.delete("editSeries");
@@ -42,7 +43,7 @@ export function RoutinesPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  const openNew = () => { setEditingTemplateId(undefined); setFormOpen(true); };
+  const openNew = () => requestAppQuickAdd({ mode: "routine", draftKey: "routines-list" });
   const closeForm = () => { setFormOpen(false); setEditingTemplateId(undefined); };
 
   const changeStatus = async (routine: typeof state.recurringActionTemplates[number]) => {
@@ -80,6 +81,6 @@ export function RoutinesPage() {
         <div className="routine-card-actions"><Link className="button button-secondary" to={`/routines?editSeries=${encodeURIComponent(routine.id)}`}><Settings2 />Edytuj ustawienia</Link><Button loading={mutation.isBusy(key)} onClick={() => void changeStatus(routine)}>{routine.status === "active" ? <><Pause />Wstrzymaj</> : <><Play />Wznów</>}</Button></div>
       </Panel>;
     })}</div> : <EmptyState icon={<Repeat2 />} title="Brak Rutyn w tym widoku" detail={filter === "all" ? "Użyj przycisku + w nagłówku, aby dodać pierwsze powtarzalne Działanie." : "Zmień filtr albo utwórz nową Rutynę."} />}
-    <RecurringActionForm open={formOpen} templateId={editingTemplateId} onClose={closeForm} />
+    {formOpen && editingTemplateId ? <RecurringActionForm open templateId={editingTemplateId} onClose={closeForm} /> : null}
   </AppShell>;
 }

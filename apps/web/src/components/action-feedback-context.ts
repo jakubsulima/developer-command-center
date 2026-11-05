@@ -9,7 +9,7 @@ export interface UndoNoticeInput {
 
 export interface ActionFeedbackValue {
   notifyUndo: (input: UndoNoticeInput) => void;
-  notifySuccess: (message: string) => void;
+  notifySuccess: (message: string, action?: UndoNoticeInput["action"]) => void;
   notifyError: (message: string) => void;
 }
 

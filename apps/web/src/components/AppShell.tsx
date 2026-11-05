@@ -1,3 +1,4 @@
+import { CreationDialog } from "./CreationForm";
 import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -56,7 +57,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         ? `Dane odświeżone ${new Date(dataFreshness.lastSuccessfulAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`
         : "Dane nie zostały jeszcze odświeżone";
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddSession, setQuickAddSession] = useState(0);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureSaving, setCaptureSaving] = useState(false);
   const captureCloseGuard = useRef<(() => boolean) | null>(null);
   const [quickAddRequest, setQuickAddRequest] = useState<AppShellQuickAddRequest | undefined>();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -75,6 +78,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
     if (loadingView) return;
     beginPerformanceTiming("quick-add");
     setQuickAddRequest(request);
+    setQuickAddSession((session) => session + 1);
     setQuickAddOpen(true);
   }, [loadingView]);
   useEffect(() => {
@@ -96,9 +100,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const triggerAdd = useCallback(() => {
     if (loadingView) return;
     // Keyboard shortcuts must not open a second editor over an active dialog.
-    if (document.querySelector('[aria-modal="true"]')) return;
+    if (document.querySelector('[data-modal-backdrop]:not(.modal-backdrop-closing) [aria-modal="true"]')) return;
     const contextualAction = addActionRef.current;
-    if (contextualAction?.quickAdd && window.matchMedia?.("(max-width: 767px)").matches) {
+    if (contextualAction?.quickAdd) {
       openQuickAdd(contextualAction.quickAdd);
       return;
     }
@@ -134,13 +138,13 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       if (loadingView) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (document.querySelector('[aria-modal="true"]')) return;
+        if (document.querySelector('[data-modal-backdrop]:not(.modal-backdrop-closing) [aria-modal="true"]')) return;
         if (window.matchMedia("(max-width: 767px)").matches) setMobileSearchOpen(true);
         else document.getElementById("global-search")?.focus();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
-        if (!document.querySelector('[aria-modal="true"]')) setCaptureOpen(true);
+        if (!document.querySelector('[data-modal-backdrop]:not(.modal-backdrop-closing) [aria-modal="true"]')) setCaptureOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -211,8 +215,8 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         <NavLink to="/actions"><CheckSquare /><span>Działania</span></NavLink>
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
-      <Modal open={captureOpen} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}>{captureOpen ? <QuickCapture closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /> : null}</Modal>
-      <Suspense fallback={null}><QuickAdd open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense>
+      <CreationDialog open={captureOpen} closeDisabled={captureSaving} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}><QuickCapture onSavingChange={setCaptureSaving} closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /></CreationDialog>
+      {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={() => setQuickAddOpen(false)}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense> : null}
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
         <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>

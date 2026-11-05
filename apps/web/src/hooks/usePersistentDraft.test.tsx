@@ -20,6 +20,32 @@ function wrapperFor(workspaceId: string, userId = "user-a") {
 }
 
 describe("usePersistentDraft", () => {
+  it("zachowuje oba konfliktujące szkice i usuwa tylko wybraną wersję po sukcesie", () => {
+    const key = draftStorageKey("user-a", "workspace-a", "creation:test", "new");
+    const oldKey = draftStorageKey("user-a", "workspace-a", "old", "new");
+    const envelope = (text: string) => JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { text } });
+    localStorage.setItem(key, envelope("Bieżący")); localStorage.setItem(oldKey, envelope("Dawny"));
+    const draft = renderHook(() => usePersistentDraft("creation:test", initial, 60_000, { targetId: "new", migrateFrom: { kind: "old", targetId: "new" } }), { wrapper: wrapperFor("workspace-a") });
+    expect(draft.result.current.value.text).toBe("Bieżący");
+    expect(draft.result.current.alternatives).toHaveLength(1);
+    act(() => { draft.result.current.setValue({ text: "Bieżący poprawiony" }); draft.result.current.flush(); });
+    expect(JSON.parse(localStorage.getItem(oldKey)!).value.text).toBe("Dawny");
+    act(() => { draft.result.current.recover(oldKey); });
+    expect(draft.result.current.value.text).toBe("Dawny");
+    act(() => { draft.result.current.clear(); });
+    expect(localStorage.getItem(oldKey)).toBeNull();
+    const recovered = renderHook(() => usePersistentDraft("creation:test", initial, 60_000, { targetId: "new" }), { wrapper: wrapperFor("workspace-a") });
+    expect(recovered.result.current.value.text).toBe("Bieżący poprawiony");
+  });
+
+  it("po czyszczeniu nie przywraca starego identyfikatora następnej próby", () => {
+    const start = { text: "", commandId: "first" };
+    const draft = renderHook(() => usePersistentDraft("creation:test", start, 60_000), { wrapper: wrapperFor("workspace-a") });
+    act(() => { draft.result.current.clear({ text: "", commandId: "second" }); });
+    expect(draft.result.current.value.commandId).toBe("second");
+    draft.rerender();
+    expect(draft.result.current.value.commandId).toBe("second");
+  });
   it("flushuje szkic przy szybkim wyjściu i zachowuje wersję bazową", () => {
     const draft = renderHook(() => usePersistentDraft("goal-edit", initial, 60_000, { targetId: "goal-1", baseVersion: 7 }), { wrapper: wrapperFor("workspace-a") });
     act(() => draft.result.current.setValue({ text: "Wpis przed przejściem" }));
@@ -42,7 +68,7 @@ describe("usePersistentDraft", () => {
     const broken = renderHook(() => usePersistentDraft("goal-edit", initial, 0, { targetId: "goal-broken" }), { wrapper: wrapperFor("workspace-a") });
     expect(broken.result.current.value).toEqual(initial);
     expect(broken.result.current.status).toBe("error");
-    expect(broken.result.current.errorMessage).toContain("odczytać");
+    expect(broken.result.current.errorMessage).toContain("szkic");
   });
 
   it("czyta starą kopertę i pozwala ponowić zapis po błędzie storage", async () => {
@@ -70,7 +96,7 @@ describe("usePersistentDraft", () => {
     expect(migrated.result.current.restored).toBe(true);
     act(() => migrated.result.current.setValue({ note: "Zapis tygodnia" }));
     await waitFor(() => expect(migrated.result.current.status).toBe("saved"));
-    expect(localStorage.getItem(oldKey)).toBeNull();
+    expect(localStorage.getItem(oldKey)).not.toBeNull();
     expect(JSON.parse(localStorage.getItem(weekKey) ?? "null").value).toEqual({ note: "Zapis tygodnia" });
   });
 
@@ -82,6 +108,13 @@ describe("usePersistentDraft", () => {
     act(() => hook.result.current.setValue({ text: "Wpisany lokalnie" }));
     hook.rerender({ text: "Wersja z refetchu" });
     expect(hook.result.current.value.text).toBe("Wpisany lokalnie");
+  });
+
+  it("odświeżenie inicjalizacji i funkcji migracji nie zastępuje jeszcze niezapisanego tekstu", () => {
+    const hook = renderHook(({ text }) => usePersistentDraft("creation:hydration", { text }, 60_000, { targetId: "new", migrate: (value) => typeof value === "string" ? { text: `${text}${value}` } : undefined }), { initialProps: { text: "" }, wrapper: wrapperFor("workspace-a") });
+    act(() => hook.result.current.setValue({ text: "Ostatnia litera przed refetchem" }));
+    hook.rerender({ text: "Nowa propozycja z kategorii" });
+    expect(hook.result.current.value.text).toBe("Ostatnia litera przed refetchem");
   });
 
   it("przywraca draft po ponownym montażu i usuwa wyłącznie wskazany formularz", async () => {

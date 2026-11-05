@@ -39,6 +39,10 @@ describe("quick add commands", () => {
     expect(normalizeQuickAddContext({ mode: "library", goalIds: ["gone"], activeGoals: [], activeAreas: [] }).unavailable?.id).toBe("gone");
   });
 
+  it("Wiedza zachowuje możliwość powiązania z osiągniętym, widocznym Celem", () => {
+    expect(normalizeQuickAddContext({ mode: "library", goalIds: ["done"], activeGoals: [{ id: "done", title: "Osiągnięty", visibility: "active", status: "achieved" }], activeAreas: [] })).toMatchObject({ goalIds: ["done"], unavailable: undefined });
+  });
+
   it("Cel dziedziczy Projekt źródłowego Celu również przy komendzie tekstowej", () => {
     expect(normalizeQuickAddContext({ mode: "goal", goalId: "goal", activeGoals: [{ id: "goal", title: "Wynik", areaId: "area", visibility: "active", status: "active" }], activeAreas: [{ id: "area", name: "Projekt", visibility: "active" }] })).toMatchObject({ areaId: "area", goalIds: [], unavailable: undefined });
   });

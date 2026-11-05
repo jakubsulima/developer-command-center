@@ -70,7 +70,7 @@ export type NormalizedQuickAddContext = {
  */
 export function normalizeQuickAddContext(input: QuickAddContextInput): NormalizedQuickAddContext {
   const mode = normalizeQuickAddMode(input.mode);
-  const goals = input.activeGoals.filter((goal) => goal.visibility === "active" && goal.status === "active");
+  const goals = input.activeGoals.filter((goal) => goal.visibility === "active" && (mode === "library" || goal.status === "active"));
   const areas = input.activeAreas.filter((area) => area.visibility === "active");
   const requestedGoal = input.goalId ? goals.find((goal) => goal.id === input.goalId) : undefined;
   const requestedArea = input.areaId ? areas.find((area) => area.id === input.areaId) : undefined;

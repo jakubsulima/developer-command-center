@@ -34,8 +34,8 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       const durationMs = input.durationMs ?? 8_000;
       setNotices((current) => [...current, { ...input, kind: "undo", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
     },
-    notifySuccess(message) {
-      setNotices((current) => [...current, { message, undo: () => undefined, kind: "success", id: crypto.randomUUID(), expiresAt: Date.now() + 5_000, working: false }]);
+    notifySuccess(message, action) {
+      setNotices((current) => [...current, { message, action, undo: () => undefined, kind: "success", id: crypto.randomUUID(), expiresAt: Date.now() + (action ? 12_000 : 5_000), working: false }]);
     },
     notifyError(message) {
       setNotices((current) => [...current, { message, undo: () => undefined, kind: "error", id: crypto.randomUUID(), expiresAt: Date.now() + 8_000, working: false }]);

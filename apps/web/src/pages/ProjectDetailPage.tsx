@@ -1,21 +1,19 @@
+import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { CurrentWeekPlanNotice } from "../components/CurrentWeekPlanNotice";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { useCurrentWeekPlan } from "../hooks/useCurrentWeekPlan";
 import { AIContextExport } from "../components/AIContextExport";
 import { readingPositionLabel } from "../domain/readingProgress";
-import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import { ProjectCategoryPicker } from "../components/ProjectCategoryPicker";
 import { ProjectPresetPicker } from "../components/ProjectPresetPicker";
-import { MultiCombobox } from "../components/MultiCombobox";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Archive, ArrowRight, Beaker, BookMarked, BookOpen, CalendarDays, Check, ChevronDown, Circle, CircleCheck, CircleX, Clock3, FileText, Filter, Flag, FolderKanban, History, Lightbulb, ListChecks, LoaderCircle, MoreHorizontal, Pencil, RotateCcw, ShieldAlert, SkipForward, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageActions } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, Panel } from "../components/ui";
-import { actionStatusLabels, goalStatusLabels, knowledgeDefaultRelationMeaning, knowledgeKindLabels, readingStatusLabels } from "../domain/labels";
-import { knowledgeKindGuidance, type CreatableKnowledgeKind } from "../domain/knowledge-kinds";
+import { actionStatusLabels, goalStatusLabels, knowledgeKindLabels, readingStatusLabels } from "../domain/labels";
 import { routeForEntity } from "../domain/routes";
 import { compactTabsVariants, entityCardVariants } from "../components/ui-variants";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
@@ -25,20 +23,12 @@ import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationB
 import { projectProjection, projectSignal } from "../domain/projectModule";
 import { normalizeProjectPreset, projectPresets } from "../domain/projectPresets";
 import type { KnowledgeItem, ProjectPreset, ReadingStatus } from "../domain/types";
-import { FormTransition } from "../components/FormTransition";
-import { KnowledgeKindPicker } from "../components/KnowledgeKindPicker";
-import { normalizeHttpUrl } from "../domain/http-url";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { isActionInTodayProjection, localDateForTimeZone } from "../domain/activity";
 import { describeActionSchedule, resolveRoutineTitle } from "../domain/actionPresentation";
 import { useProjectKnowledgeItems } from "../hooks/useProjectKnowledgeItems";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
-import { KnowledgeNoteFields } from "../components/KnowledgeNoteFields";
-import { DraftStatus } from "../components/DraftStatus";
-import { usePersistentDraft } from "../hooks/usePersistentDraft";
-import { prepareKnowledgeNote } from "../domain/knowledgeNote";
 
-type ProjectNoteDraft = { content: string; title: string; projectId: string; goalIds: string[]; idempotencyKey: string };
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
 type ProjectHistoryFilter = "current" | "history";
@@ -74,7 +64,7 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { state, createGoal, createAction, createKnowledge, linkKnowledge, updateArea, setAreaVisibility, setActionStatus } = useStore();
+  const { state, linkKnowledge, updateArea, setAreaVisibility, setActionStatus } = useStore();
   const mutation = useKeyedMutation();
   const { notifyUndo } = useActionFeedback();
   const project = projectProjection(state, projectId ?? "");
@@ -87,12 +77,6 @@ export function ProjectDetailPage() {
   const [dialog, setDialog] = useState<"goal" | "action" | "knowledge" | "existing-book" | "edit" | "archive" | "trash">();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [goalForm, setGoalForm] = useState({ title: "", outcome: "", firstAction: "" });
-  const [actionForm, setActionForm] = useState({ title: "", detail: "", goalId: "", scheduledFor: "" });
-  const [knowledgeForm, setKnowledgeForm] = useState({ kind: "note" as CreatableKnowledgeKind, title: "", detail: "", sourceUrl: "", isBook: false, resourceAuthor: "", readingStatus: "to_read" as ReadingStatus });
-  const projectNoteInitial = useMemo<ProjectNoteDraft>(() => ({ content: "", title: "", projectId: projectId ?? "", goalIds: [], idempotencyKey: crypto.randomUUID() }), [projectId]);
-  const projectNoteDraft = usePersistentDraft<ProjectNoteDraft>("project-knowledge-note", projectNoteInitial, 450, { targetId: projectId ?? "missing" });
-  const closeKnowledgeForm = () => { if (projectNoteDraft.flush()) setDialog(undefined); };
   const [projectForm, setProjectForm] = useState({ name: project?.name ?? "", description: project?.description ?? "", categoryIds: project?.categoryIds ?? [], preset: normalizeProjectPreset(project?.preset) as ProjectPreset });
   const [statusActionId, setStatusActionId] = useState<string>();
   const preset = normalizeProjectPreset(project?.preset);
@@ -172,25 +156,6 @@ export function ProjectDetailPage() {
     finally { setSaving(false); }
   };
 
-  const submitGoal = (event: FormEvent) => {
-    event.preventDefault();
-    void run(() => createGoal({ title: goalForm.title, outcome: goalForm.outcome.trim() || goalForm.title, firstActionTitle: goalForm.firstAction || undefined, kind: "custom", areaId: project.id }), () => setGoalForm({ title: "", outcome: "", firstAction: "" }));
-  };
-  const submitAction = (event: FormEvent) => {
-    event.preventDefault();
-    void run(() => createAction({ title: actionForm.title, detail: actionForm.detail, goalId: actionForm.goalId || undefined, areaId: project.id, scheduledFor: actionForm.scheduledFor || undefined }), () => setActionForm({ title: "", detail: "", goalId: "", scheduledFor: "" }));
-  };
-  const submitKnowledge = (event: FormEvent) => {
-    event.preventDefault();
-    const isNote = knowledgeForm.kind === "note";
-    if (isNote ? !projectNoteDraft.value.content.trim() : !knowledgeForm.title.trim() || (knowledgeKindGuidance[knowledgeForm.kind].detailRequired && !knowledgeForm.detail.trim())) return;
-    const resourceFormat = knowledgeForm.kind === "resource" && knowledgeForm.isBook ? "book" : undefined;
-    void run(async () => {
-      const note = isNote ? prepareKnowledgeNote(projectNoteDraft.value.content, projectNoteDraft.value.title) : undefined;
-      await createKnowledge({ kind: knowledgeForm.kind, title: note?.title ?? knowledgeForm.title, detail: note?.detail ?? knowledgeForm.detail, sourceUrl: knowledgeForm.kind === "resource" ? normalizeHttpUrl(knowledgeForm.sourceUrl) : undefined, resourceFormat, resourceAuthor: resourceFormat ? knowledgeForm.resourceAuthor : undefined, readingStatus: resourceFormat ? knowledgeForm.readingStatus : undefined, relations: note ? [...(projectNoteDraft.value.projectId ? [{ meaning: "reference" as const, target: { areaId: projectNoteDraft.value.projectId } }] : []), ...projectNoteDraft.value.goalIds.map((goalId) => ({ meaning: "reference" as const, target: { goalId } }))] : [{ meaning: knowledgeDefaultRelationMeaning(knowledgeForm.kind), target: { areaId: project.id } }], ...(note ? { idempotencyKey: projectNoteDraft.value.idempotencyKey } : {}) });
-      if (note && !projectNoteDraft.clear({ content: "", title: "", projectId: project.id, goalIds: [], idempotencyKey: crypto.randomUUID() })) throw new Error("Notatka została zapisana, ale jej szkic pozostał na tym urządzeniu. Ponów zapis szkicu lub skopiuj treść.");
-    }, () => setKnowledgeForm({ kind: "note", title: "", detail: "", sourceUrl: "", isBook: false, resourceAuthor: "", readingStatus: "to_read" }));
-  };
   const linkExistingBook = (item: KnowledgeItem) => void run(() => linkKnowledge(item.id, { areaId: project.id }, "material"), () => undefined);
   const closeStatusEditor = () => setStatusActionId(undefined);
   const openStatusEditor = (action: typeof actions[number]) => setStatusActionId(action.id);
@@ -203,24 +168,18 @@ export function ProjectDetailPage() {
   };
   const openProjectEditor = () => { setProjectForm({ name: project.name, description: project.description ?? "", categoryIds: project.categoryIds ?? [], preset: normalizeProjectPreset(project.preset) }); setDialog("edit"); };
   const closeProjectMenu = (target: HTMLElement) => target.closest("details")?.removeAttribute("open");
-  const openBookForm = () => { setKnowledgeForm((current) => ({ ...current, kind: "resource", isBook: true, readingStatus: "to_read" })); setDialog("knowledge"); };
-  const changeKnowledgeKind = (kind: CreatableKnowledgeKind) => {
-    if (knowledgeForm.kind === "note" && !projectNoteDraft.flush()) { setError("Nie udało się zapisać szkicu na tym urządzeniu. Skopiuj treść albo ponów zapis szkicu przed zmianą rodzaju."); return; }
-    setError("");
-    setKnowledgeForm((current) => ({ ...current, kind, isBook: kind === "resource" ? current.isBook : false }));
-  };
-
+  const openBookForm = () => requestAppQuickAdd({ mode: "library", libraryKind: "resource", isBook: true, areaId: project.id, draftKey: `project-${project.id}-knowledge` });
   const visibleSections = view === "overview" ? [] : [view];
   const selectedProjectCategories = (state.projectCategories ?? []).filter((category) => project.categoryIds?.includes(category.id));
   const orderedViews = projectPresets[preset].sectionOrder;
   const addAction = view === "goals"
-    ? { label: "Nowy Cel", shortLabel: "Cel", ariaLabel: `Dodaj Cel do Projektu ${project.name}`, active: dialog === "goal", quickAdd: { mode: "goal" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-goals` }, onClick: () => setDialog("goal" as const) }
+    ? { label: "Nowy Cel", shortLabel: "Cel", ariaLabel: `Dodaj Cel do Projektu ${project.name}`, active: dialog === "goal", quickAdd: { mode: "goal" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-goals` }, onClick: () => requestAppQuickAdd({ mode: "goal", areaId: project.id }) }
     : view === "actions"
-      ? { label: "Nowe Działanie", shortLabel: "Działanie", ariaLabel: `Dodaj Działanie do Projektu ${project.name}`, active: dialog === "action", quickAdd: { mode: "action" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-actions` }, onClick: () => setDialog("action" as const) }
+      ? { label: "Nowe Działanie", shortLabel: "Działanie", ariaLabel: `Dodaj Działanie do Projektu ${project.name}`, active: dialog === "action", quickAdd: { mode: "action" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-actions` }, onClick: () => requestAppQuickAdd({ mode: "action", areaId: project.id }) }
       : view === "knowledge"
         ? preset === "reading"
           ? { label: "Dodaj książkę", shortLabel: "Książka", ariaLabel: `Dodaj książkę do Projektu ${project.name}`, active: dialog === "knowledge", onClick: openBookForm }
-          : { label: "Nowa Wiedza", shortLabel: "Wiedza", ariaLabel: `Dodaj Wiedzę do Projektu ${project.name}`, active: dialog === "knowledge", quickAdd: { mode: "library" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-knowledge` }, onClick: () => setDialog("knowledge" as const) }
+          : { label: "Nowa Wiedza", shortLabel: "Wiedza", ariaLabel: `Dodaj Wiedzę do Projektu ${project.name}`, active: dialog === "knowledge", quickAdd: { mode: "library" as const, areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-knowledge` }, onClick: () => requestAppQuickAdd({ mode: "library", areaId: project.id }) }
         : preset === "reading"
           ? { label: projectPresets[preset].mainActionLabel, shortLabel: "Książka", ariaLabel: `${projectPresets[preset].mainActionLabel} w ${project.name}`, active: dialog === "knowledge", onClick: openBookForm }
           : { label: projectPresets[preset].mainActionLabel, shortLabel: "Dodaj", ariaLabel: `Dodaj w Projekcie ${project.name}`, active: false, quickAdd: { areaId: project.id, pinnedToToday: false, draftKey: `project-${project.id}-overview` } };
@@ -242,7 +201,7 @@ export function ProjectDetailPage() {
           <span className="project-now-icon"><ListChecks /></span>
           <div><span className="eyebrow">Najbliższy ruch · {signal.label}</span><h3>{signal.title}</h3><p>{signal.description}</p></div>
           {signal.actionId ? <NavigationLink className="button button-primary" to={routeForEntity({ type: "action", id: signal.actionId })} breadcrumbs={projectBreadcrumbs} returnTo={projectUrl} returnLabel={`Projekt: ${project.name}`} sourceCardId="project-now-card" aria-label={`Otwórz Działanie: ${signal.title}`}>Otwórz Działanie <ArrowRight /></NavigationLink>
-            : currentGoals.length ? <Button variant="primary" onClick={() => setDialog("action")}>Dodaj Działanie <ArrowRight /></Button>
+            : currentGoals.length ? <Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "action", areaId: project.id, draftKey: `project-${project.id}-actions` })}>Dodaj Działanie <ArrowRight /></Button>
               : <Button variant="primary" onClick={() => setView(preset === "reading" ? "knowledge" : "goals")}>{preset === "reading" ? "Otwórz Wiedzę" : "Przejdź do Celów"} <ArrowRight /></Button>}
         </Panel> : <Panel className="project-now-card project-now-card-inactive"><span className="project-now-icon"><ListChecks /></span><div><span className="eyebrow">Projekt poza aktywną przestrzenią</span><h3>{project.visibility === "archived" ? "Projekt w Archiwum" : "Projekt w Koszu"}</h3><p>Jego Działania pozostają zachowane w tym kontekście.</p></div><Button variant="primary" onClick={() => setView("actions")}>Pokaż Działania <ArrowRight /></Button></Panel>}
 
@@ -286,9 +245,9 @@ export function ProjectDetailPage() {
       </section> : null}
     </div>
 
-    <Modal open={dialog === "goal"} title="Nowy Cel w Projekcie" onClose={() => setDialog(undefined)}><form onSubmit={submitGoal}><p className="modal-intro">Cel jest lekkim, konkretnym rezultatem. Szczegóły możesz dopracować później.</p><label className="field-label" htmlFor="project-goal-title">Co chcesz osiągnąć?</label><input id="project-goal-title" value={goalForm.title} onChange={(event) => setGoalForm((current) => ({ ...current, title: event.target.value }))} required /><label className="field-label" htmlFor="project-goal-outcome">Po czym poznasz, że jest gotowe? <span className="optional-label">opcjonalnie</span></label><textarea id="project-goal-outcome" rows={2} value={goalForm.outcome} onChange={(event) => setGoalForm((current) => ({ ...current, outcome: event.target.value }))} /><label className="field-label" htmlFor="project-goal-action">Pierwsze Działanie <span className="optional-label">opcjonalnie</span></label><input id="project-goal-action" value={goalForm.firstAction} onChange={(event) => setGoalForm((current) => ({ ...current, firstAction: event.target.value }))} />{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button type="button" onClick={() => setDialog(undefined)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!goalForm.title.trim()}>Dodaj Cel</Button></div></form></Modal>
-    <Modal open={dialog === "action"} className="project-action-create-modal" title="Nowe Działanie w Projekcie" onClose={() => setDialog(undefined)}><form className="project-action-create-form" onSubmit={submitAction}><div className="project-action-context"><FolderKanban /><span><small>Dodajesz do Projektu</small><strong>{project.name}</strong></span></div><label className="field-label" htmlFor="project-action-title">Co trzeba zrobić?</label><input id="project-action-title" placeholder="Krótki, konkretny następny krok" value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} required /><details className="advanced-options project-action-options"><summary><span><strong>Szczegóły i przypisanie</strong><small>Opis, Cel i termin</small></span><ChevronDown /></summary><div className="project-action-options-content"><label className="field-label" htmlFor="project-action-detail">Opis <span className="optional-label">opcjonalnie</span></label><textarea id="project-action-detail" rows={2} placeholder="Dodatkowy kontekst, jeśli jest potrzebny" value={actionForm.detail} onChange={(event) => setActionForm((current) => ({ ...current, detail: event.target.value }))} /><div className="project-action-options-grid"><div><label className="field-label" htmlFor="project-action-goal">Cel <span className="optional-label">opcjonalnie</span></label><select id="project-action-goal" value={actionForm.goalId} onChange={(event) => setActionForm((current) => ({ ...current, goalId: event.target.value }))}><option value="">Bez Celu</option>{currentGoals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></div><div><label className="field-label" htmlFor="project-action-date">Termin <span className="optional-label">opcjonalnie</span></label><input id="project-action-date" type="date" value={actionForm.scheduledFor} onChange={(event) => setActionForm((current) => ({ ...current, scheduledFor: event.target.value }))} /></div></div></div></details>{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button type="button" onClick={() => setDialog(undefined)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!actionForm.title.trim()}>Dodaj Działanie</Button></div></form></Modal>
-    <Modal open={dialog === "knowledge"} closeDisabled={saving} className="knowledge-create-modal" title={preset === "reading" && knowledgeForm.isBook ? "Dodaj książkę" : "Nowa Wiedza w Projekcie"} onClose={knowledgeForm.kind === "note" ? closeKnowledgeForm : () => setDialog(undefined)}><form className="knowledge-create-form" noValidate onSubmit={submitKnowledge}><div className="knowledge-create-body" data-modal-scroll-body><KnowledgeKindPicker value={knowledgeForm.kind} name="project-knowledge-kind" onChange={changeKnowledgeKind} /><FormTransition stateKey={knowledgeForm.kind}>{knowledgeForm.kind === "note" ? <KnowledgeNoteFields idPrefix="project-knowledge-note" content={projectNoteDraft.value.content} onContentChange={(content) => projectNoteDraft.setValue((current) => ({ ...current, content }))} title={projectNoteDraft.value.title} onTitleChange={(title) => projectNoteDraft.setValue((current) => ({ ...current, title }))} context={`Projekt · ${project.name}`} disabled={saving}><label className="field-label" htmlFor="project-note-context">Projekt <span className="optional-label">możesz zmienić lub usunąć</span></label><select id="project-note-context" value={projectNoteDraft.value.projectId} onChange={(event) => projectNoteDraft.setValue((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select><span className="field-label">Powiązane Cele <span className="optional-label">możesz wybrać kilka</span></span><MultiCombobox label="Powiązane Cele" options={state.goals.filter((goal) => goal.visibility === "active").map((goal) => ({ id: goal.id, label: goal.title }))} value={projectNoteDraft.value.goalIds} onChange={(goalIds) => projectNoteDraft.setValue((current) => ({ ...current, goalIds }))} /></KnowledgeNoteFields> : <><label className="field-label" htmlFor="project-new-knowledge-title">{knowledgeKindGuidance[knowledgeForm.kind].titleLabel}</label><input id="project-new-knowledge-title" placeholder={knowledgeKindGuidance[knowledgeForm.kind].titlePlaceholder} value={knowledgeForm.title} onChange={(event) => setKnowledgeForm((current) => ({ ...current, title: event.target.value }))} required />{knowledgeForm.kind === "resource" ? <><label className="field-label" htmlFor="project-new-knowledge-url">Link do źródła <span className="optional-label">opcjonalnie</span></label><input id="project-new-knowledge-url" type="url" value={knowledgeForm.sourceUrl} onChange={(event) => setKnowledgeForm((current) => ({ ...current, sourceUrl: event.target.value }))} /><KnowledgeSuggestions url={knowledgeForm.sourceUrl} target={{ areaId: project.id }} /><label className="checkbox-field"><input type="checkbox" checked={knowledgeForm.isBook} onChange={(event) => setKnowledgeForm((current) => ({ ...current, isBook: event.target.checked }))} /><span>To książka</span></label>{knowledgeForm.isBook ? <><label className="field-label" htmlFor="project-book-author">Autor <span className="optional-label">opcjonalnie</span></label><input id="project-book-author" value={knowledgeForm.resourceAuthor} onChange={(event) => setKnowledgeForm((current) => ({ ...current, resourceAuthor: event.target.value }))} /><label className="field-label" htmlFor="project-book-status">Status czytania</label><select id="project-book-status" value={knowledgeForm.readingStatus} onChange={(event) => setKnowledgeForm((current) => ({ ...current, readingStatus: event.target.value as ReadingStatus }))}>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></> : null}</> : null}<label className="field-label" htmlFor="project-new-knowledge-detail">{knowledgeKindGuidance[knowledgeForm.kind].detailLabel}{!knowledgeKindGuidance[knowledgeForm.kind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label><textarea id="project-new-knowledge-detail" rows={4} required={knowledgeKindGuidance[knowledgeForm.kind].detailRequired} value={knowledgeForm.detail} onChange={(event) => setKnowledgeForm((current) => ({ ...current, detail: event.target.value }))} /></>}{knowledgeForm.kind === "note" ? <DraftStatus status={projectNoteDraft.status} restored={projectNoteDraft.restored} errorMessage={projectNoteDraft.errorMessage} onRetry={() => void projectNoteDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${projectNoteDraft.value.title}\n${projectNoteDraft.value.content}`)} /> : null}{error ? <p className="auth-message error" role="alert">{error}</p> : null}</FormTransition></div><div className="modal-actions">{knowledgeForm.kind === "note" && projectNoteDraft.dirty ? <Button type="button" variant="ghost" onClick={() => projectNoteDraft.discard()}>Odrzuć szkic</Button> : null}{knowledgeForm.kind === "note" ? <Button type="button" disabled={saving} onClick={closeKnowledgeForm}>Zamknij</Button> : <Button type="button" onClick={() => setDialog(undefined)}>Anuluj</Button>}<Button type="submit" variant="primary" loading={saving} disabled={knowledgeForm.kind === "note" ? !projectNoteDraft.value.content.trim() : !knowledgeForm.title.trim() || (knowledgeKindGuidance[knowledgeForm.kind].detailRequired && !knowledgeForm.detail.trim())}>{knowledgeForm.isBook ? "Dodaj książkę" : knowledgeForm.kind === "note" ? "Zapisz notatkę" : knowledgeKindGuidance[knowledgeForm.kind].saveLabel}</Button></div></form></Modal>
+
+
+
     <Modal open={dialog === "existing-book"} title="Połącz książkę z Biblioteki" onClose={() => setDialog(undefined)}><p className="modal-intro">Książka pozostaje tym samym elementem Wiedzy; Projekt dostaje wspólne powiązanie.</p>{existingBooksQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać książek. <button type="button" onClick={() => void existingBooksQuery.refetch()}>Spróbuj ponownie</button></p> : null}{availableBooks.length ? <div className="project-entity-list">{availableBooks.map((item) => <Panel className="entity-card" key={item.id}><BookMarked /><span><strong>{item.title}</strong><small>{[item.resourceAuthor, readingPositionLabel(item), item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ")}</small></span><Button loading={saving} onClick={() => linkExistingBook(item)}>Połącz</Button></Panel>)}</div> : existingBooksQuery.isError ? null : <EmptyState icon={<BookOpen />} title="Brak dostępnych książek" detail="Dodaj książkę do Biblioteki albo zmień istniejący Materiał na książkę." />}{existingBooksQuery.hasNextPage ? <div className="list-pagination"><Button loading={existingBooksQuery.isFetchingNextPage} onClick={() => void existingBooksQuery.fetchNextPage()}>Załaduj starsze</Button></div> : null}{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button onClick={() => setDialog(undefined)}>Zamknij</Button></div></Modal>
         {(() => { const action = actions.find((candidate) => candidate.id === statusActionId); const key = action ? `project-action-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} busy={Boolean(key && mutation.isBusy(key))} error={key ? mutation.error(key) : undefined} compact onClose={closeStatusEditor} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
 
