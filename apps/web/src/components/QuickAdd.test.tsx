@@ -7,12 +7,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickAdd } from "./QuickAdd";
 import { InlineGoalAction } from "./InlineGoalAction";
 import { OperationResponseError } from "../lib/operationFailure";
+import { emptyDraft } from "./creationDraft";
+import type { KnowledgeItem } from "../domain/types";
 import { draftStorageKey } from "../hooks/usePersistentDraft";
 import { localDateForTimeZone } from "../domain/activity";
 import { shiftActionDate } from "../domain/actionPresentation";
 
 const store = vi.hoisted(() => ({
-  state: { workspaceId: "test", workspaceTimezone: "Europe/Warsaw", goals: [{ id: "goal", title: "Wynik", areaId: "project", visibility: "active", status: "active" }], areas: [{ id: "project", name: "Projekt testowy", visibility: "active" }], goalTemplates: [], knowledge: [], actions: [], knowledgeLinks: [] },
+  state: { workspaceId: "test", workspaceTimezone: "Europe/Warsaw", goals: [{ id: "goal", title: "Wynik", areaId: "project", visibility: "active", status: "active" }], areas: [{ id: "project", name: "Projekt testowy", visibility: "active" }], goalTemplates: [], knowledge: new Array<KnowledgeItem>(), actions: [], knowledgeLinks: [] },
   createAction: vi.fn(), createGoal: vi.fn(), createArea: vi.fn(), createRecurringAction: vi.fn(), createKnowledge: vi.fn(), capture: vi.fn(), materializeRecurring: vi.fn()
 }));
 vi.mock("../hooks/useWorkspaceInfinitePage", () => ({ useWorkspaceInfinitePage: () => ({ data: { items: [] }, hasNextPage: false, isError: false }) }));
@@ -32,6 +34,110 @@ beforeEach(() => vi.clearAllMocks());
 const workspaceToday = () => localDateForTimeZone(new Date(), store.state.workspaceTimezone);
 
 describe("Dodaj — formularze i kontekst", () => {
+  it.each(["action", "goal"] as const)("%s z książki pokazuje materiał i blokuje jego odłączenie w trakcie zapisu", async (mode) => {
+    const user = userEvent.setup();
+    let finish!: (id: string) => void;
+    const create = mode === "action" ? store.createAction : store.createGoal;
+    create.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    store.state.knowledge.push({ id: "book", type: "resource", title: "Książka źródłowa", detail: "", resourceFormat: "book" });
+    try {
+      render(<QuickAdd open request={{ mode, materialKnowledgeIds: ["book"] }} onClose={vi.fn()} />);
+      expect(screen.getByText("Książka źródłowa")).toBeVisible();
+      await user.type(screen.getByLabelText(mode === "action" ? "Co chcesz zrobić?" : "Co chcesz osiągnąć?"), "Krok z książki");
+      await user.click(screen.getByRole("button", { name: mode === "action" ? "Dodaj Działanie" : "Utwórz Cel" }));
+      expect(screen.getByRole("button", { name: "Odłącz materiał: Książka źródłowa" })).toBeDisabled();
+      expect(create.mock.calls[0][0]).toMatchObject({ materialKnowledgeIds: ["book"] });
+      await act(async () => finish("created-from-book"));
+    } finally { store.state.knowledge.length = 0; }
+  });
+
+  it("po odrzuceniu niedostępnego materiału pozwala go odłączyć i ponowić poprawiony zapis", async () => {
+    const user = userEvent.setup();
+    store.createAction.mockRejectedValueOnce(new OperationResponseError("knowledge_not_found", "P0001")).mockResolvedValueOnce("corrected");
+    render(<QuickAdd open request={{ mode: "action", materialKnowledgeIds: ["missing-book"] }} onClose={vi.fn()} />);
+    await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Krok bez utraconej książki");
+    await user.click(screen.getByRole("button", { name: "Dodaj Działanie" }));
+    await user.click(screen.getByRole("button", { name: "Odłącz materiał: Niedostępny materiał" }));
+    await user.click(screen.getByRole("button", { name: "Dodaj Działanie" }));
+    expect(store.createAction.mock.calls[1][0].materialKnowledgeIds).toEqual([]);
+    expect(store.createAction.mock.calls[1][1]).not.toBe(store.createAction.mock.calls[0][1]);
+  });
+  it.each(["quick-add:start", "creation:start:action"])("Start otwiera Działanie, a dawną Decyzję z %s zachowuje we właściwym typie", async (kind) => {
+    const user = userEvent.setup();
+    const source = draftStorageKey("tester", "test", kind, "new");
+    const value = { ...emptyDraft, mode: "library", libraryKind: "decision", title: "Dawny wybór", detail: "Pełne uzasadnienie", content: "Dawny wybór\nPełne uzasadnienie", knowledgeIdempotencyKey: "decision-key" };
+    const raw = JSON.stringify({ version: 2, savedAt: "2026-11-03", value });
+    localStorage.setItem(source, raw);
+    render(<QuickAdd open request={{ mode: "action", draftKey: "start", scheduledFor: workspaceToday() }} onClose={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "Nowe Działanie" })).toBeVisible();
+    expect(screen.getByLabelText("Co chcesz zrobić?")).toHaveValue("");
+    expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
+    const destination = draftStorageKey("tester", "test", "creation:start:library", "new");
+    expect(localStorage.getItem(destination)).toBe(raw);
+    await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Nowy krok");
+    await switchType(user, "Biblioteka");
+    expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("Dawny wybór");
+    expect(screen.getByLabelText("Uzasadnienie i konsekwencje")).toHaveValue("Pełne uzasadnienie");
+    expect(localStorage.getItem(destination)).toBe(raw);
+  });
+
+  it("przenosząc dawny typ zachowuje konflikt i nie tworzy kolejnych kopii po wznowieniu", async () => {
+    const user = userEvent.setup();
+    const source = draftStorageKey("tester", "test", "creation:start:action", "new");
+    const destination = draftStorageKey("tester", "test", "creation:start:library", "new");
+    const envelope = (title: string) => JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { ...emptyDraft, mode: "library", libraryKind: "decision", title, content: title, detail: "Uzasadnienie", knowledgeIdempotencyKey: title } });
+    const old = envelope("Dawna decyzja"), current = envelope("Nowsza decyzja");
+    localStorage.setItem(source, old); localStorage.setItem(destination, current);
+    const first = render(<QuickAdd open request={{ mode: "action", draftKey: "start" }} onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Co chcesz zrobić?")).toHaveValue("");
+    first.unmount();
+    render(<QuickAdd open request={{ mode: "action", draftKey: "start" }} onClose={vi.fn()} />);
+    const copies = Object.keys(localStorage).filter((key) => key.startsWith(`${destination}:recovery:`));
+    expect(copies).toHaveLength(1);
+    expect(localStorage.getItem(copies[0])).toBe(old);
+    expect(localStorage.getItem(destination)).toBe(current);
+    await switchType(user, "Biblioteka");
+    expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("Nowsza decyzja");
+    expect(screen.getByText(/Dawna decyzja/)).toBeInTheDocument();
+  });
+
+  it.each([false, true])("błąd kopii podczas migracji typu zachowuje odczytany szkic, własny=%s", (hasOwn) => {
+    const source = draftStorageKey("tester", "test", hasOwn ? "quick-add:start" : "creation:start:action", "new");
+    const raw = JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { ...emptyDraft, mode: "library", libraryKind: "decision", title: "Ocalić wybór", detail: "Całe uzasadnienie", knowledgeIdempotencyKey: "pending-copy" } });
+    localStorage.setItem(source, raw);
+    if (hasOwn) localStorage.setItem(draftStorageKey("tester", "test", "creation:start:action", "new"), JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { ...emptyDraft, title: "Własny krok", knowledgeIdempotencyKey: "own-action" } }));
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage_failed"); });
+    try {
+      render(<QuickAdd open request={{ mode: "action", draftKey: "start" }} onClose={vi.fn()} />);
+      if (hasOwn) expect(screen.getByLabelText("Co chcesz zrobić?")).toHaveValue("Własny krok");
+      else expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("Ocalić wybór");
+      expect(screen.getByText(/Nie udało się rozdzielić szkiców/)).toBeVisible();
+      expect(localStorage.getItem(source)).toBe(raw);
+    } finally { write.mockRestore(); }
+  });
+
+  it("potwierdzenie w pustym slocie docelowym kieruje dawny szkic do odzyskiwania", () => {
+    const source = draftStorageKey("tester", "test", "creation:start:action", "new");
+    const destination = draftStorageKey("tester", "test", "creation:start:library", "new");
+    const raw = JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { ...emptyDraft, mode: "library", title: "Niewysłana notatka", detail: "Treść", knowledgeIdempotencyKey: "not-sent" } });
+    localStorage.setItem(source, raw); localStorage.setItem(`${destination}:receipt`, JSON.stringify({ id: "confirmed", url: "/knowledge/confirmed", message: "Zapisano" }));
+    render(<QuickAdd open request={{ mode: "action", draftKey: "start" }} onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Co chcesz zrobić?")).toHaveValue("");
+    expect(localStorage.getItem(destination)).toBeNull();
+    const recovery = Object.keys(localStorage).find((key) => key.startsWith(`${destination}:recovery:`));
+    expect(localStorage.getItem(recovery!)).toBe(raw);
+    expect(JSON.parse(localStorage.getItem(`${destination}:receipt`)!).id).toBe("confirmed");
+  });
+
+  it("nie przekierowuje nierozstrzygniętej operacji zapisanej wcześniej w innym typie", () => {
+    const source = draftStorageKey("tester", "test", "creation:start:action", "new");
+    const raw = JSON.stringify({ version: 2, savedAt: "2026-11-03", value: { ...emptyDraft, mode: "library", libraryKind: "note", detail: "Niepewny zapis", attempted: true, knowledgeIdempotencyKey: "pending-note" } });
+    localStorage.setItem(source, raw);
+    render(<QuickAdd open request={{ mode: "action", draftKey: "start" }} onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Treść notatki")).toBeDisabled();
+    expect(localStorage.getItem(source)).toBe(raw);
+    expect(localStorage.getItem(draftStorageKey("tester", "test", "creation:start:library", "new"))).toBeNull();
+  });
   it("Działanie i Notatka po zmianie typu używają niezależnych identyfikatorów operacji", async () => {
     const user = userEvent.setup();
     store.createKnowledge.mockResolvedValueOnce("saved-note");

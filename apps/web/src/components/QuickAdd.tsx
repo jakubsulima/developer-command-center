@@ -1,4 +1,5 @@
 import { KnowledgeSourceField } from "./KnowledgeSourceField";
+import { CreationMaterialsContext } from "./CreationMaterialsContext";
 import { KnowledgeSuggestions } from "./KnowledgeSuggestions";
 import { ProjectCategoryPicker } from "./ProjectCategoryPicker";
 import { ProjectPresetPicker } from "./ProjectPresetPicker";
@@ -65,7 +66,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
   const currentDate = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const [activeMode, setActiveMode] = useState(request?.mode);
   const draftRequest = { ...request, mode: activeMode };
-  const draft = useCreationDraft(draftRequest, activeMode === request?.mode);
+  const draft = useCreationDraft(draftRequest);
   const sessionDrafts = useRef(new Map<string, string>());
   const initialDraft = draft.initial;
   const navigate = useNavigate();
@@ -314,6 +315,7 @@ export function QuickAdd({ open, request, onClose }: { open: boolean; request?: 
       <div className="quick-add-body" data-modal-scroll-body>
         {draft.value.actionId ? <p>Działanie: {state.actions.find((item) => item.id === draft.value.actionId)?.title ?? "Niedostępne Działanie"}</p> : null}
         {draft.value.sourceBookId ? <p>Źródło: {state.knowledge.find((item) => item.id === draft.value.sourceBookId)?.title ?? draft.value.sourceBookTitle ?? draft.value.sourceBookId}</p> : null}
+        {draft.value.mode === "action" || draft.value.mode === "goal" ? <CreationMaterialsContext ids={requestMaterialKnowledgeIds} disabled={saving || Boolean(receipt) || draft.value.attempted} onRemove={(id) => draft.setValue((current) => ({ ...current, materialKnowledgeIds: current.materialKnowledgeIds?.filter((candidate) => candidate !== id) }))} /> : null}
         {typeChoices}
         <fieldset className="creation-fields" disabled={saving || Boolean(receipt) || draft.value.attempted}><div className="quick-add-mode-panel">
           <div className="quick-add-mode-heading"><span>{modeCopy.label}</span><small>{modeCopy.detail}</small></div>

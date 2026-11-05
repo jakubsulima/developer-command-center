@@ -5,6 +5,7 @@ import type { ProjectPreset } from "../domain/types";
 import { CreationBody, CreationDialog, CreationFooter } from "./CreationForm";
 import { Button } from "./ui";
 import { categoryColors } from "../domain/projectCategories";
+import "./ProjectCategories.css";
 
 export function ProjectCategoryManager({ onClose }: { onClose: () => void }) {
   const { state, saveProjectCategory, deleteProjectCategory } = useStore();

@@ -28,6 +28,8 @@ export interface PersistentDraftOptions<T> {
   enabled?: boolean;
   validate?: (value: unknown) => value is T;
   migrate?: (value: unknown) => T | undefined;
+  /** Relocate a valid draft stored in another type's slot before replacing it. */
+  redirect?: (value: T) => string | undefined;
 }
 
 const PREFIX = "command-center-draft-v2";
@@ -51,7 +53,7 @@ function defaultValidate(value: unknown): value is object | string {
   return value !== null && (typeof value === "object" || typeof value === "string");
 }
 
-function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | undefined>, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined): DraftRead<T> {
+function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | undefined>, initialValue: T, validate: (value: unknown) => value is T, migrate?: (value: unknown) => T | undefined, redirect?: (value: T) => string | undefined): DraftRead<T> {
   if (!key || typeof localStorage === "undefined") return { value: initialValue, restored: false };
   try {
     const recoveryKeys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((candidate): candidate is string => Boolean(candidate?.startsWith(`${key}:recovery:`)));
@@ -65,6 +67,22 @@ function readDraft<T>(key: string | undefined, fallbackKeys: Array<string | unde
         const parsed = JSON.parse(raw) as Partial<DraftEnvelope<T>>;
         const migrated = (parsed.version === 1 || parsed.version === 2) ? (validate(parsed.value) ? parsed.value : migrate?.(parsed.value)) : undefined;
         if (migrated === undefined) { invalid = true; continue; }
+        const destination = redirect?.(migrated);
+        if (destination && !localStorage.getItem(`${candidate}:receipt`)) {
+          try {
+            const existing = localStorage.getItem(destination);
+            if (existing !== raw) {
+              const alreadyPreserved = Object.keys(localStorage).some((storedKey) => storedKey.startsWith(`${destination}:recovery:`) && localStorage.getItem(storedKey) === raw);
+              const occupied = existing !== null || localStorage.getItem(`${destination}:receipt`) !== null;
+              if (!alreadyPreserved) localStorage.setItem(occupied ? `${destination}:recovery:${crypto.randomUUID()}` : destination, raw);
+            }
+          } catch {
+            // Keep the original editor if the copy failed. Returning an empty
+            // form here could overwrite the only surviving draft on autosave.
+            return { ...(result ?? { value: migrated, restored: true, sources: [{ key: candidate, raw }] }), error: "Nie udało się rozdzielić szkiców. Zachowano odczytany formularz; ponów otwarcie po przywróceniu zapisu na urządzeniu." };
+          }
+          continue;
+        }
         if (!result) result = { value: migrated, restored: true, baseVersion: parsed.baseVersion, alternatives: [], sources: [{ key: candidate, raw }] };
         else if (JSON.stringify(result.value) === JSON.stringify(migrated)) result.sources!.push({ key: candidate, raw });
         else result.alternatives!.push({ key: candidate, value: migrated });
@@ -95,7 +113,7 @@ export function usePersistentDraft<T>(kind: string, initialValue: T, delay = 450
   // The initial value is intentionally read only when the scoped key changes;
   // the following effect handles late server hydration without resetting edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const loaded = useMemo(() => readDraft(key, fallbackKeys, initialValue, validate, options.migrate), [fallbackKeys, key]);
+  const loaded = useMemo(() => readDraft(key, fallbackKeys, initialValue, validate, options.migrate, options.redirect), [fallbackKeys, key]);
   const [value, setValueState] = useState<T>(loaded.value);
   const [status, setStatus] = useState<DraftSaveStatus>(loaded.error ? "error" : loaded.restored ? "saved" : "idle");
   const [dirty, setDirty] = useState(loaded.restored);

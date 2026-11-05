@@ -1,0 +1,917 @@
+[
+  {
+    "case": "action-cursor-options",
+    "passed": true,
+    "selectionBefore": {
+      "end": 1,
+      "start": 1
+    },
+    "selectionAfter": {
+      "end": 1,
+      "start": 1
+    }
+  },
+  {
+    "case": "action-geometry",
+    "size": {
+      "width": 320,
+      "height": 480
+    },
+    "geometry": {
+      "dialog": {
+        "height": 480,
+        "width": 320,
+        "x": 0,
+        "y": 0
+      },
+      "overflow": false,
+      "save": {
+        "bottom": 474,
+        "x": 16,
+        "y": 424
+      },
+      "scrollAreas": [
+        {
+          "classes": "quick-add-body",
+          "height": 348,
+          "tag": "DIV",
+          "total": 735
+        }
+      ],
+      "viewport": {
+        "height": 480,
+        "width": 320
+      }
+    }
+  },
+  {
+    "case": "action-geometry",
+    "size": {
+      "width": 390,
+      "height": 844
+    },
+    "geometry": {
+      "dialog": {
+        "height": 844,
+        "width": 390,
+        "x": 0,
+        "y": 0
+      },
+      "overflow": false,
+      "save": {
+        "bottom": 832,
+        "x": 20,
+        "y": 782
+      },
+      "scrollAreas": [
+        {
+          "classes": "quick-add-body",
+          "height": 670,
+          "tag": "DIV",
+          "total": 724
+        }
+      ],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    }
+  },
+  {
+    "case": "action-geometry",
+    "size": {
+      "width": 767,
+      "height": 700
+    },
+    "geometry": {
+      "dialog": {
+        "height": 700,
+        "width": 767,
+        "x": 0,
+        "y": 0
+      },
+      "overflow": false,
+      "save": {
+        "bottom": 688,
+        "x": 20,
+        "y": 638
+      },
+      "scrollAreas": [
+        {
+          "classes": "quick-add-body",
+          "height": 526,
+          "tag": "DIV",
+          "total": 724
+        }
+      ],
+      "viewport": {
+        "height": 700,
+        "width": 767
+      }
+    }
+  },
+  {
+    "case": "action-geometry",
+    "size": {
+      "width": 768,
+      "height": 700
+    },
+    "geometry": {
+      "dialog": {
+        "height": 674.3856201171875,
+        "width": 614.8809814453125,
+        "x": 76.55950927734375,
+        "y": 24.366363525390625
+      },
+      "overflow": false,
+      "save": {
+        "bottom": 666.0244140625,
+        "x": 463.3394775390625,
+        "y": 622.3876953125
+      },
+      "scrollAreas": [
+        {
+          "classes": "quick-add-body",
+          "height": 489,
+          "tag": "DIV",
+          "total": 707
+        }
+      ],
+      "viewport": {
+        "height": 700,
+        "width": 768
+      }
+    }
+  },
+  {
+    "case": "action-geometry",
+    "size": {
+      "width": 1440,
+      "height": 900
+    },
+    "geometry": {
+      "dialog": {
+        "height": 877.3407592773438,
+        "width": 618.12646484375,
+        "x": 410.9367980957031,
+        "y": 15.560302734375
+      },
+      "overflow": false,
+      "save": {
+        "bottom": 860.000732421875,
+        "x": 799.75830078125,
+        "y": 816.1337280273438
+      },
+      "scrollAreas": [
+        {
+          "classes": "quick-add-body",
+          "height": 689,
+          "tag": "DIV",
+          "total": 707
+        }
+      ],
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    }
+  },
+  {
+    "case": "goal-full-options",
+    "dialog": {
+      "bottom": 480,
+      "left": 0,
+      "right": 320,
+      "top": 0
+    },
+    "heading": "Nowy Cel",
+    "height": 480,
+    "overflow": false,
+    "save": {
+      "bottom": 474,
+      "top": 424
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 348,
+        "total": 947
+      }
+    ],
+    "width": 320
+  },
+  {
+    "case": "goal-full-options",
+    "dialog": {
+      "bottom": 700,
+      "left": 0,
+      "right": 767,
+      "top": 0
+    },
+    "heading": "Nowy Cel",
+    "height": 700,
+    "overflow": false,
+    "save": {
+      "bottom": 688,
+      "top": 638
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 526,
+        "total": 939
+      }
+    ],
+    "width": 767
+  },
+  {
+    "case": "goal-full-options",
+    "dialog": {
+      "bottom": 697.8948364257812,
+      "left": 76.30886840820312,
+      "right": 691.6911926269531,
+      "top": 22.95947265625
+    },
+    "heading": "Nowy Cel",
+    "height": 700,
+    "overflow": false,
+    "save": {
+      "bottom": 665.140625,
+      "top": 621.4683837890625
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 489,
+        "total": 982
+      }
+    ],
+    "width": 768
+  },
+  {
+    "case": "inline-to-panel-767-768",
+    "dialog": {
+      "bottom": 687.3935241699219,
+      "left": 76.57754516601562,
+      "right": 691.4225158691406,
+      "top": 35.871795654296875
+    },
+    "heading": "Nowe Działanie",
+    "height": 700,
+    "overflow": false,
+    "save": {
+      "bottom": 654.66796875,
+      "top": 611.0338134765625
+    },
+    "scrollAreas": [],
+    "width": 768
+  },
+  {
+    "case": "result-390",
+    "dialog": {
+      "bottom": 844,
+      "left": 0,
+      "right": 390,
+      "top": 0
+    },
+    "heading": "Dodaj rezultat",
+    "height": 844,
+    "overflow": false,
+    "save": null,
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "routine-full",
+    "dialog": {
+      "bottom": 480,
+      "left": 0,
+      "right": 320,
+      "top": 0
+    },
+    "heading": "Nowa Rutyna",
+    "height": 480,
+    "overflow": false,
+    "save": {
+      "bottom": 474,
+      "top": 424
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 348,
+        "total": 1414
+      }
+    ],
+    "width": 320
+  },
+  {
+    "case": "routine-full",
+    "dialog": {
+      "bottom": 844,
+      "left": 0,
+      "right": 390,
+      "top": 0
+    },
+    "heading": "Nowa Rutyna",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 832,
+      "top": 782
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 670,
+        "total": 1394
+      }
+    ],
+    "width": 390
+  },
+  {
+    "case": "routine-full",
+    "dialog": {
+      "bottom": 700,
+      "left": 0,
+      "right": 767,
+      "top": 0
+    },
+    "heading": "Nowa Rutyna",
+    "height": 700,
+    "overflow": false,
+    "save": {
+      "bottom": 688,
+      "top": 638
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 526,
+        "total": 1374
+      }
+    ],
+    "width": 767
+  },
+  {
+    "case": "routine-full",
+    "dialog": {
+      "bottom": 699.7206115722656,
+      "left": 76.84280395507812,
+      "right": 691.1572570800781,
+      "top": 25.956451416015625
+    },
+    "heading": "Nowa Rutyna",
+    "height": 700,
+    "overflow": false,
+    "save": {
+      "bottom": 667.023193359375,
+      "top": 623.4267578125
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 489,
+        "total": 1383
+      }
+    ],
+    "width": 768
+  },
+  {
+    "case": "routine-full",
+    "dialog": {
+      "bottom": 890.3008117675781,
+      "left": 410.09710693359375,
+      "right": 1029.90283203125,
+      "top": 10.576446533203123
+    },
+    "heading": "Nowa Rutyna",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 857.3111572265625,
+      "top": 813.3248291015625
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 689,
+        "total": 1383
+      }
+    ],
+    "width": 1440
+  },
+  {
+    "case": "capture-simple",
+    "dialog": {
+      "bottom": 495.2539834976196,
+      "left": 0,
+      "right": 320,
+      "top": 15.253983497619627
+    },
+    "heading": "Szybki zapis",
+    "height": 480,
+    "overflow": false,
+    "save": null,
+    "scrollAreas": [],
+    "width": 320
+  },
+  {
+    "case": "capture-simple",
+    "dialog": {
+      "bottom": 851.1683368682861,
+      "left": 0,
+      "right": 390,
+      "top": 7.168336868286133
+    },
+    "heading": "Szybki zapis",
+    "height": 844,
+    "overflow": false,
+    "save": null,
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "capture-simple",
+    "dialog": {
+      "bottom": 708.302734375,
+      "left": 412.8390808105469,
+      "right": 1027.1608581542969,
+      "top": 217.3407287597656
+    },
+    "heading": "Szybki zapis",
+    "height": 900,
+    "overflow": false,
+    "save": null,
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "triage-goal-small",
+    "dialog": {
+      "bottom": 493.6433811187744,
+      "left": 0,
+      "right": 320,
+      "top": 13.643381118774414
+    },
+    "heading": "Utwórz Cel",
+    "height": 480,
+    "overflow": false,
+    "save": null,
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 292,
+        "total": 1275
+      }
+    ],
+    "width": 320
+  },
+  {
+    "case": "project-goal-390",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 851.2420716285706,
+      "left": 0,
+      "right": 390,
+      "top": 7.242071628570557
+    },
+    "heading": "Nowy Cel",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 839.2420654296875,
+      "top": 789.2420654296875
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "project-action-390",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 856.2029409408569,
+      "left": 0,
+      "right": 390,
+      "top": 12.202940940856934
+    },
+    "heading": "Nowe Działanie",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 844.2029418945312,
+      "top": 794.2029418945312
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "project-knowledge-390",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 847.3353974819183,
+      "left": 0,
+      "right": 390,
+      "top": 3.335397481918335
+    },
+    "heading": "Dodaj do Biblioteki",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 835.3353881835938,
+      "top": 785.3353881835938
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "project-goal-1440",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 768.7494812011719,
+      "left": 412.0955810546875,
+      "right": 1027.9044189453125,
+      "top": 150.16268920898438
+    },
+    "heading": "Nowy Cel",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 735.9725341796875,
+      "top": 692.27001953125
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "project-action-1440",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 756.7214965820312,
+      "left": 412.3182067871094,
+      "right": 1027.6817321777344,
+      "top": 164.201416015625
+    },
+    "heading": "Nowe Działanie",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 723.96826171875,
+      "top": 680.2973022460938
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "project-knowledge-1440",
+    "contextVisible": true,
+    "dialog": {
+      "bottom": 755.6628112792969,
+      "left": 410.8229370117187,
+      "right": 1029.177001953125,
+      "top": 151.77023315429688
+    },
+    "heading": "Dodaj do Biblioteki",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 722.75048828125,
+      "top": 678.8671875
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "list-actions-390",
+    "text": "Nowe Działanie\nZmień\nCo chcesz zrobić?\nKiedy?\nDzisiaj\nJutro\nBez terminu\nInna data\nOpis i powiązania\nOpcjonalnie\n\nWystarczy nazwa. Resztę możesz dodać później.\n\nDodaj Działanie",
+    "dialog": {
+      "bottom": 855.8142099380493,
+      "left": 0,
+      "right": 390,
+      "top": 11.814209938049316
+    },
+    "heading": "Nowe Działanie",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 843.814208984375,
+      "top": 793.814208984375
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "list-goals-390",
+    "text": "Nowy Cel\nZmień\nCo chcesz osiągnąć?\nDodaj opis\nopcjonalnie\nWięcej opcji\nrodzaj, szablon, pierwszy krok i kryteria\n\nMiejsce zapisu: Bez powiązania\n\nProjekt opcjonalnie\nBez Projektu\nFinanse\nQA Czytelnia 04.11\nQA Projekt standardowy\nUtwórz Cel",
+    "dialog": {
+      "bottom": 858.9645357131958,
+      "left": 0,
+      "right": 390,
+      "top": 14.9645357131958
+    },
+    "heading": "Nowy Cel",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 846.9645385742188,
+      "top": 796.9645385742188
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "list-routines-390",
+    "text": "Nowa Rutyna\nZmień\nCo ma się powtarzać?\nDodaj opis\nopcjonalnie\n\nMiejsce zapisu: Bez powiązania\n\nNajbliższe: 2026-11-04 · 2026-11-11 · 2026-11-18\n\nZacznij od gotowej propozycji\nPowtarzaj\nCodziennie\nCo tydzień\nCo miesiąc\nCo ile?\nPoczątek\nDni tygodnia\nPn\nWt\nŚr\nCz\nPt\nSo\nNd\nCel lub Projekt opcjonalnie\nBez powiązania\nZbudować spokojny budżet domowy · w Projekcie\nPrzygotować prezentację projektu\nQA Cel czytelniczy · w Projekcie\nQA Cel z triage\nFinanse\nQA Czytelnia 04.11\nQA Projekt standardowy\nWięcej opcji\nUtwórz Rutynę",
+    "dialog": {
+      "bottom": 856.2848587036133,
+      "left": 0,
+      "right": 390,
+      "top": 12.28485870361328
+    },
+    "heading": "Nowa Rutyna",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 844.2848510742188,
+      "top": 794.2848510742188
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 670,
+        "total": 885
+      }
+    ],
+    "width": 390
+  },
+  {
+    "case": "list-projects-390",
+    "text": "Nowy Projekt\nZmień\nJaki Projekt utworzyć?\nDodaj opis\nopcjonalnie\nSzablon Projektu\nStandardowy\nCzytelnia\nPropozycja kategorii: Standardowy. Możesz wybrać inny szablon.\nKategorie\nmożesz wybrać kilka\nQA przegląd formularzy\nNowa kategoria\n\nMiejsce zapisu: Nowy samodzielny Projekt\n\nUtwórz Projekt",
+    "dialog": {
+      "bottom": 859.0208187103271,
+      "left": 0,
+      "right": 390,
+      "top": 15.020818710327148
+    },
+    "heading": "Nowy Projekt",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 847.0208129882812,
+      "top": 797.0208129882812
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "list-knowledge-390",
+    "text": "Dodaj do Biblioteki\nZmień\nCo zapisujesz?\nNotatka\nMateriał\nDecyzja\n\nWłasny zapis, obserwacja lub wniosek.\n\nTreść notatki\n\nMiejsce zapisu: Bez powiązania\n\nWięcej opcjonalnie\nZapisz notatkę",
+    "dialog": {
+      "bottom": 859.256724357605,
+      "left": 0,
+      "right": 390,
+      "top": 15.25672435760498
+    },
+    "heading": "Dodaj do Biblioteki",
+    "height": 844,
+    "overflow": false,
+    "save": {
+      "bottom": 847.2567138671875,
+      "top": 797.2567138671875
+    },
+    "scrollAreas": [],
+    "width": 390
+  },
+  {
+    "case": "list-actions-1440",
+    "text": "Nowe Działanie\nZmień\nCo chcesz zrobić?\nKiedy?\nDzisiaj\nJutro\nBez terminu\nInna data\nOpis i powiązania\nOpcjonalnie\n\nWystarczy nazwa. Resztę możesz dodać później.\n\nMożesz też zacząć od\n/dzialanie\n/cel\n/projekt\n/rutyna\n/skrzynka\n/wiedza\nDodaj Działanie",
+    "dialog": {
+      "bottom": 732.0631103515625,
+      "left": 411.646484375,
+      "right": 1028.353515625,
+      "top": 182.80841064453125
+    },
+    "heading": "Nowe Działanie",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 699.2384033203125,
+      "top": 655.4720458984375
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "list-goals-1440",
+    "text": "Nowy Cel\nZmień\nCo chcesz osiągnąć?\nDodaj opis\nopcjonalnie\nWięcej opcji\nrodzaj, szablon, pierwszy krok i kryteria\n\nMiejsce zapisu: Bez powiązania\n\nProjekt opcjonalnie\nBez Projektu\nFinanse\nQA Czytelnia 04.11\nQA Projekt standardowy\nMożesz też zacząć od\n/dzialanie\n/cel\n/projekt\n/rutyna\n/skrzynka\n/wiedza\nUtwórz Cel",
+    "dialog": {
+      "bottom": 767.8502197265625,
+      "left": 411.8395080566406,
+      "right": 1028.1605529785156,
+      "top": 148.74896240234375
+    },
+    "heading": "Nowy Cel",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 735.0460815429688,
+      "top": 691.30712890625
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "list-routines-1440",
+    "text": "Nowa Rutyna\nZmień\nCo ma się powtarzać?\nDodaj opis\nopcjonalnie\n\nMiejsce zapisu: Bez powiązania\n\nNajbliższe: 2026-11-04 · 2026-11-11 · 2026-11-18\n\nZacznij od gotowej propozycji\nPowtarzaj\nCodziennie\nCo tydzień\nCo miesiąc\nCo ile?\nPoczątek\nDni tygodnia\nPn\nWt\nŚr\nCz\nPt\nSo\nNd\nCel lub Projekt opcjonalnie\nBez powiązania\nZbudować spokojny budżet domowy · w Projekcie\nPrzygotować prezentację projektu\nQA Cel czytelniczy · w Projekcie\nQA Cel z triage\nFinanse\nQA Czytelnia 04.11\nQA Projekt standardowy\nWięcej opcji\nMożesz też zacząć od\n/dzialanie\n/cel\n/projekt\n/rutyna\n/skrzynka\n/wiedza\nUtwórz Rutynę",
+    "dialog": {
+      "bottom": 896.39013671875,
+      "left": 412.0634765625,
+      "right": 1027.9365234375,
+      "top": 22.247802734375
+    },
+    "heading": "Nowa Rutyna",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 863.6098022460938,
+      "top": 819.9027099609375
+    },
+    "scrollAreas": [
+      {
+        "class": "quick-add-body",
+        "height": 689,
+        "total": 918
+      }
+    ],
+    "width": 1440
+  },
+  {
+    "case": "list-projects-1440",
+    "text": "Nowy Projekt\nZmień\nJaki Projekt utworzyć?\nDodaj opis\nopcjonalnie\nSzablon Projektu\nStandardowy\nCzytelnia\nPropozycja kategorii: Standardowy. Możesz wybrać inny szablon.\nKategorie\nmożesz wybrać kilka\nQA przegląd formularzy\nNowa kategoria\n\nMiejsce zapisu: Nowy samodzielny Projekt\n\nMożesz też zacząć od\n/dzialanie\n/cel\n/projekt\n/rutyna\n/skrzynka\n/wiedza\nUtwórz Projekt",
+    "dialog": {
+      "bottom": 800.8413696289062,
+      "left": 411.6022338867187,
+      "right": 1028.397705078125,
+      "top": 113.6148681640625
+    },
+    "heading": "Nowy Projekt",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 768.0119018554688,
+      "top": 724.2393188476562
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "list-knowledge-1440",
+    "text": "Dodaj do Biblioteki\nZmień\nCo zapisujesz?\nNotatka\nWłasny zapis, obserwacja lub wniosek.\nMateriał\nZewnętrzne źródło, dokumentacja lub link.\nDecyzja\nPodjęty wybór wraz z jego uzasadnieniem.\nTreść notatki\n\nMiejsce zapisu: Bez powiązania\n\nWięcej opcjonalnie\nMożesz też zacząć od\n/dzialanie\n/cel\n/projekt\n/rutyna\n/skrzynka\n/wiedza\nZapisz notatkę",
+    "dialog": {
+      "bottom": 760.0646362304688,
+      "left": 412.0665588378906,
+      "right": 1027.9335021972656,
+      "top": 158.60113525390625
+    },
+    "heading": "Dodaj do Biblioteki",
+    "height": 900,
+    "overflow": false,
+    "save": {
+      "bottom": 727.28466796875,
+      "top": 683.5779418945312
+    },
+    "scrollAreas": [],
+    "width": 1440
+  },
+  {
+    "case": "goal-open-tool-roundtrip",
+    "durationMs": 45
+  },
+  {
+    "case": "goal-keyboard-focus-trap",
+    "passed": true,
+    "steps": 18
+  },
+  {
+    "case": "goal-focus-return",
+    "passed": true
+  },
+  {
+    "case": "weekly-new-step",
+    "passed": true,
+    "overflow": false
+  },
+  {
+    "case": "book-action-context-before",
+    "bookVisible": false,
+    "text": "Nowe Działanie\nZmień\nCo chcesz zrobić?\nKiedy?\nDzisiaj\nJutro\nBez terminu\nInna data\nOpis i powiązania\nOpcjonalnie\n\nWystarczy nazwa. Resztę możesz dodać później.\n\nDodaj Działanie"
+  },
+  {
+    "case": "action-library-note-reopen-action",
+    "noteUrl": "http://127.0.0.1:5174/knowledge/56622b1a-ad7e-4524-93f0-a1fefc884e7f",
+    "actionUrl": "http://127.0.0.1:5174/actions/58fd596d-06b5-4a61-a4a5-5e418df6c501",
+    "passed": true
+  },
+  {
+    "case": "category-colors-before",
+    "buttons": [
+      {
+        "height": 0,
+        "label": "Kolor 1",
+        "width": 0
+      },
+      {
+        "height": 0,
+        "label": "Kolor 2",
+        "width": 0
+      },
+      {
+        "height": 0,
+        "label": "Kolor 3",
+        "width": 0
+      },
+      {
+        "height": 0,
+        "label": "Kolor 4",
+        "width": 0
+      },
+      {
+        "height": 0,
+        "label": "Kolor 5",
+        "width": 0
+      },
+      {
+        "height": 0,
+        "label": "Kolor 6",
+        "width": 0
+      }
+    ]
+  },
+  {
+    "case": "category-colors-fresh-load-after",
+    "passed": true,
+    "sizes": [
+      {
+        "height": 28,
+        "width": 28
+      },
+      {
+        "height": 28,
+        "width": 28
+      },
+      {
+        "height": 28,
+        "width": 28
+      },
+      {
+        "height": 28,
+        "width": 28
+      },
+      {
+        "height": 28,
+        "width": 28
+      },
+      {
+        "height": 28,
+        "width": 28
+      }
+    ],
+    "openingSizes": [
+      {
+        "height": 27.74139404296875,
+        "width": 27.741424560546875
+      },
+      {
+        "height": 27.74139404296875,
+        "width": 27.741424560546875
+      },
+      {
+        "height": 27.74139404296875,
+        "width": 27.741455078125
+      },
+      {
+        "height": 27.74139404296875,
+        "width": 27.74139404296875
+      },
+      {
+        "height": 27.74139404296875,
+        "width": 27.74139404296875
+      },
+      {
+        "height": 27.74139404296875,
+        "width": 27.74139404296875
+      }
+    ]
+  },
+  {
+    "case": "project-filter-defaults",
+    "preset": "reading",
+    "category": true,
+    "passed": true
+  },
+  {
+    "case": "capture-command-j",
+    "passed": true,
+    "fields": 1
+  }
+]

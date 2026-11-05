@@ -1,4 +1,5 @@
 import { ProjectCategoryManager } from "../components/ProjectCategoryManager";
+import "../components/ProjectCategories.css";
 import { useMemo, useState } from "react";
 import { Archive, ArrowRight, Beaker, CalendarDays, ChevronDown, CircleAlert, CircleCheck, Clock3, FolderKanban, ListChecks, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { NavigationLink } from "../components/ContextNavigation";

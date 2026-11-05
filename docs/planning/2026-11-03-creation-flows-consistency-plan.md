@@ -2,6 +2,13 @@
 
 Data: 3 listopada 2026. Status: implementacja lokalna; odbiór rzeczywistych urządzeń pozostaje otwarty.
 
+Uzupełnienie z 4 listopada: wykonano odbiór na żywym UI w przeglądarce IAB,
+z zapisami w lokalnym demo i kontrolą wznowienia na pierwotnej karcie Supabase.
+Poprawiono niewłaściwy typ przy migracji szkicu, niewidoczne materiały
+przekazane z książki oraz brak stylów kategorii przy świeżym wejściu.
+Macierz wejść, zrzuty i granice dowodu:
+[raport przeglądarkowy](../design/creation-flows-2026-11-04/README.md).
+
 ## Realizacja lokalna — 3 listopada 2026
 
 Wykonano etapy 1–5 i automatyczną część etapu 6. Poniższy opis stanu
@@ -50,12 +57,13 @@ zmienia sygnatury RPC ani zakresu uprawnień. Wymaga późniejszego wdrożenia
 przed użyciem tych nowych opcji z produkcyjnym backendem; tej migracji nie
 wdrażano w ramach zadania.
 
-Otwarty odbiór: fizyczna klawiatura iOS Safari/PWA i Android Chrome, płynność,
-rzeczywisty layout 320 × 480 / 390 × 844 / 767 / 768 / 1440 px i obie
-kolejności ładowania CSS w silniku przeglądarki. Narzędzie zgłosiło
-`Local browser use is disabled in Work settings`; nie powstały nowe zrzuty.
-Testy JSDOM sprawdzają zachowanie i symulowane zdarzenia visualViewport,
-a testy SQL działają w lokalnym PGlite. Nie zastępują odbioru urządzenia.
+4 listopada potwierdzono układ 320 × 480 / 390 × 844 / 767 / 768 / 1440 px
+w silniku przeglądarki i zapisano nowe zrzuty. Wcześniejszy brak dostępu do
+przeglądarki nie jest już blokadą. Otwarty pozostaje odbiór fizycznej
+klawiatury iOS Safari/PWA i Android Chrome, pomiar płynności oraz wymuszona
+odwrócona kolejność ładowania CSS. Błędy sieci, wolny zapis i częściowa Rutyna
+mają regresje automatyczne; nie były wstrzykiwane do żywej karty.
+Testy JSDOM i lokalnego PGlite nie zastępują odbioru urządzenia.
 
 Nawet podwójny lokalny zapis potwierdzenia nie zapewnia trwałości, gdy po
 odpowiedzi serwera całkowicie przestaje działać storage i jednocześnie

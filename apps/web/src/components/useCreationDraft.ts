@@ -11,7 +11,7 @@ export function creationScope(request?: QuickAddRequest) {
   return `creation:${request?.actionId ? `action-${request.actionId}` : request?.sourceBookId ? `book-${request.sourceBookId}` : request?.materialKnowledgeIds?.length ? `materials-${[...request.materialKnowledgeIds].sort().join(",")}-${request.areaId ?? "global"}` : request?.goalId ? `goal-${request.goalId}` : request?.areaId ? `project-${request.areaId}` : request?.draftKey === "start" ? "start" : "global"}:${mode}`;
 }
 
-export function useCreationDraft(request?: QuickAddRequest, migrateLegacy = true) {
+export function useCreationDraft(request?: QuickAddRequest) {
   const { state } = useStore();
   const { user, mode: authMode } = useAuth();
   const currentDate = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -32,7 +32,13 @@ export function useCreationDraft(request?: QuickAddRequest, migrateLegacy = true
     ...(mode === "library" ? request?.sourceBookId ? [{ kind: "book-knowledge-note", targetId: request.sourceBookId }] : request?.areaId ? [{ kind: "project-knowledge-note", targetId: request.areaId }] : [{ kind: "knowledge-create", targetId: "global" }] : [])
   ], [mode, request?.areaId, request?.draftKey, request?.goalId, request?.sourceBookId]);
   const migrate = useCallback((value: unknown) => migrateQuickAddDraft(value, initial), [initial]);
-  const draft = usePersistentDraft(scope, initial, 250, { targetId: "new", validate: isQuickAddDraft, migrate, migrateFrom: migrateLegacy ? migrateFrom : [] });
+  const redirect = useCallback((value: QuickAddDraft) => {
+    if (normalizeQuickAddMode(value.mode) === mode || value.attempted || value.receipt) return undefined;
+    const workspaceId = state.workspaceId ?? (authMode === "demo" ? "demo-workspace" : undefined);
+    if (!user?.id || !workspaceId) return undefined;
+    return draftStorageKey(user.id, workspaceId, creationScope({ ...JSON.parse(signature) as QuickAddRequest, mode: value.mode }), "new");
+  }, [authMode, mode, signature, state.workspaceId, user?.id]);
+  const draft = usePersistentDraft(scope, initial, 250, { targetId: "new", validate: isQuickAddDraft, migrate, redirect, migrateFrom });
   const fork = (nextRequest: QuickAddRequest, value: QuickAddDraft, expected?: string) => {
     const workspaceId = state.workspaceId ?? (authMode === "demo" ? "demo-workspace" : undefined);
     if (!user?.id || !workspaceId) return { error: "Nie ma aktywnej przestrzeni szkicu." };

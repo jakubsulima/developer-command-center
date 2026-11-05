@@ -218,3 +218,29 @@ Kontrole końcowe:
 - `git diff --check`: bez błędów.
 
 Testy formularzy działają w JSDOM, a komendy SQL w lokalnym PGlite. Dostęp do przeglądarki pozostaje wyłączony; nie wykonano nowych zrzutów ani odbioru klawiatury telefonu i płynności animacji. Nie zmieniano zastanych arkuszy `polish.css` i `focus-detail.css`. Nie wykonywano push, publikacji ani wdrożenia, nie dodano nowej migracji SQL.
+
+## 2026-11-04 — ponowny odbiór w działającej przeglądarce
+
+Dostęp do IAB został przywrócony. Sprawdzono rzeczywiste renderowanie przy 320×480, 390×844, 767×700, 768×700 i 1440×900. Na pierwotnej karcie `localhost:5173` sprawdzono Start i dawny szkic, bez tworzenia testowych obiektów w Supabase. Zapisy wykonano na tej samej implementacji w osobnej lokalnej instancji demo. [Macierz wejść i dowody wizualne](docs/design/creation-flows-2026-11-04/README.md) zawierają opis każdej próby; [results.json](docs/design/creation-flows-2026-11-04/results.json) zawiera 46 obserwacji, również stan sprzed poprawek.
+
+Znaleziono i poprawiono trzy problemy:
+
+- **Migracja niewłaściwego typu.** Start → Dodaj Działanie potrafił wznowić dawną Decyzję. Kopia niewysłanego szkicu trafia teraz do właściwego typu przed zastąpieniem jej pustym formularzem. Konflikty są zachowane do odzyskania, bez kolejnych kopii przy każdym wznowieniu. Przy awarii storage pozostaje odczytany formularz; istniejące potwierdzenia i nierozstrzygnięte próby są chronione. Dwa testy najpierw odtworzyły błąd, a ponowna próba na pierwotnej karcie potwierdziła naprawę.
+- **Niewidoczny materiał z książki.** Działanie i Cel zapisywały przekazaną książkę, ale nie pokazywały jej w panelu. `CreationMaterialsContext` pokazuje materiał i udostępnia jawne Odłącz. Przycisk jest blokowany w trakcie zapisu, po sukcesie i przy nieznanym wyniku. Sprawdzono na UI zapis relacji `material`; regresje obejmują też odłączenie niedostępnego materiału po odrzuceniu zapisu.
+- **Zależność kategorii od lazy formularza.** Przy świeżym wejściu na listę Projektów kolory miały rozmiar 0×0, bo arkusz importował tylko `ProjectCategoryPicker` ładowany wraz z tworzeniem Projektu. Lista i manager importują teraz własny arkusz. Po przeładowaniu bez wcześniejszego otwierania QuickAdd sześć kolorów jest widocznych, klikalnych i ma stabilny rozmiar 28×28 px. Nie zmieniano reguł w `polish.css` ani `focus-detail.css`.
+
+Zapisano i obejrzano Działania, Projekt Standardowy i Czytelnię, kategorię inline oraz pełną kategorię z kolorem i proponowanym szablonem, książkę, notatkę bez tytułu przy książce i Działaniu, Decyzję, Materiał, rezultat, postęp, pełny Cel z kryteriami i pierwszym krokiem, Rutynę z checklistą i polityką zaległości, Capture w panelu/Skrzynce/osobnej stronie, Cel przez triage, własny szablon i krok planu tygodnia. Sprawdzono osobne łączenie istniejącej Wiedzy oraz książki. Formularze wszystkich list i sekcji Projektu przeszły kontrolę przy 390 i 1440 px. Inline → panel zachował nazwę, datę i kontekst przez 767/768 px.
+
+Nowe wpisy pozostawiają miejsce pracy. Materiał wykluczony filtrem Książki dał czytelne potwierdzenie z działającym Otwórz. Sekwencja Działanie → Notatka → wznowienie Działania zachowała treść i dała różne identyfikatory wyników. Rozwinięcie opcji zachowało kursor; 18 przejść Tab pozostało wewnątrz dialogu, Escape zamknął go i przywrócił fokus na przycisk otwierający. Termin i przypięcie sprawdzono jako niezależne.
+
+Granice: viewport przeglądarki nie jest fizyczną klawiaturą telefonu. Nie wykonano odbioru iOS Safari/PWA ani Android Chrome, pomiaru FPS ani wymuszonej odwrotnej kolejności CSS. Wolny zapis, nieznany wynik sieciowy, trwałe odrzucenie, częściowa Rutyna, błąd sprzątania po sukcesie i reduced motion pozostają potwierdzone regresjami JSDOM/PGlite; nie wstrzykiwano ich do przeglądarki. Pojedyncze zmierzone otwarcie Celu (45 ms) obejmuje czas automatyzacji, nie jest benchmarkiem urządzenia. Po zmianie liczby hooków hot reload wymagał pełnego przeładowania pierwotnej karty; późniejsze otwarcie i zachowanie szkicu przeszły kontrolę.
+
+Końcowe kontrole po wszystkich poprawkach:
+
+- `pnpm lint`: powodzenie, bez ostrzeżeń.
+- `pnpm typecheck`: powodzenie.
+- `pnpm test`: **78 plików / 587 testów — powodzenie** (10 nowych regresji ponad 577 z poprzedniego odbioru).
+- `VITE_DATA_BACKEND=demo pnpm build`: powodzenie; wcześniejsze ostrzeżenia o chunku ponad 500 kB i mieszanych importach pozostają.
+- `git diff --check`: bez błędów.
+
+Zmiany i dowody pozostają lokalne. Nie wykonywano push ani wdrożenia.

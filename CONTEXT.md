@@ -77,6 +77,13 @@ Biblioteki działają przed kursorem strony: Projekt korzysta z semantyki
 do książki), a Cel obejmuje bezpośrednie powiązanie i powiązanie przez Działanie
 z tym Celem. Aktywne, archiwalne i usunięte wpisy są osobnymi widokami.
 
+Dawny niewysłany szkic innego typu nie zmienia rodzaju otwieranego formularza:
+przed zastąpieniem trafia do właściwego zakresu, a przy konflikcie do
+odzyskiwania. Nie przekierowujemy nierozstrzygniętej próby ani potwierdzenia.
+Materiały przekazane z książki do nowego Działania lub Celu są widoczne
+w formularzu i można je jawnie odłączyć przed wysłaniem. Relacja `material`
+pozostaje niezależna od Projektu, Celu i notatki źródłowej.
+
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
 planem, sesją pracy, timerem ani osobnym stanem domenowym.
