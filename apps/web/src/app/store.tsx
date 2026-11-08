@@ -1231,20 +1231,39 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
       return id;
     },
     async recordActionResult(actionId: string, result: ActionResultInput) {
-      const previous = stateRef.current;
-      const existingLink = previous.knowledgeLinks.find((link) => link.actionId === actionId && link.meaning === "result");
+      const requestedIdentity = identityKey;
+      const current = await ensureWorkspaceState();
+      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
+      const existingLink = current.knowledgeLinks.find((link) => link.actionId === actionId && link.meaning === "result");
       if (existingLink) return existingLink.knowledgeItemId;
-      const action = previous.actions.find((candidate) => candidate.id === actionId);
+      // Completed Actions may be shown by a detail query while absent from
+      // the bounded Workspace page, including after the completion refresh.
+      const action = current.actions.find((candidate) => candidate.id === actionId)
+        ?? (mode === "demo" ? undefined : await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadAction(actionId));
       if (!action) throw new Error("action_not_found");
+      const withAction = (base: AppState): AppState => {
+        if (identityRef.current !== requestedIdentity || base.workspaceId !== current.workspaceId) throw new Error("workspace_access_denied");
+        return base.actions.some((candidate) => candidate.id === actionId) ? base : { ...base, actions: [...base.actions, action] };
+      };
       const knowledgeId = result.kind === "existing" ? result.knowledgeItemId : crypto.randomUUID();
       const linkId = crypto.randomUUID();
       const progressId = action.goalId ? crypto.randomUUID() : undefined;
       const createdAt = new Date().toISOString();
-      const current = await ensureWorkspaceState();
-      if (mode !== "demo" && !current.workspaceId) throw new Error("Brak aktywnej przestrzeni pracy.");
       const scopes: MutationScope[] = [{ collection: "knowledge", ids: result.kind === "new" ? [knowledgeId] : [] }, { collection: "knowledgeLinks", ids: [linkId] }, { collection: "progressEntries", ids: progressId ? [progressId] : [] }];
-      await runScopedCommand(mutationCoordinator, () => stateRef.current, `action:${actionId}:result`, { type: "record_action_result", actionId, result, knowledgeId, linkId, progressId, createdAt }, scopes, async () => {
-        if (mode !== "demo") await runRemote(async () => await (await loadRepository()).recordActionResultRemote(stateRef.current.workspaceId!, actionId, result, knowledgeId, linkId, progressId), `action:${actionId}:result`);
+      const command = { type: "record_action_result", actionId, result, knowledgeId, linkId, progressId, createdAt } as const;
+      await mutationCoordinator.run({
+        key: `action:${actionId}:result`,
+        apply: () => {
+          const previous = stateRef.current;
+          return {
+            nextState: executeDomainCommand(withAction(previous), command),
+            rollback: (base: AppState) => restoreMutationScopes(base, previous, scopes),
+            reapply: (fresh: AppState) => executeDomainCommand(withAction(fresh), command)
+          };
+        },
+        persist: async () => {
+          if (mode !== "demo") await runRemote(async () => await (await loadRepository()).recordActionResultRemote(current.workspaceId!, actionId, result, knowledgeId, linkId, progressId), `action:${actionId}:result`);
+        }
       });
       return knowledgeId;
     },
@@ -1431,7 +1450,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, applyRemoteSnapshot, dataFreshness, ensureWorkspaceState, hydrateKnowledge, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, applyRemoteSnapshot, dataFreshness, ensureWorkspaceState, hydrateKnowledge, identityKey, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;

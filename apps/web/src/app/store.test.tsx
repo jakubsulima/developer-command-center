@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AuthContext, type AuthContextValue } from "../auth/auth-context";
 import { demoState } from "../data/demo";
 import { emptyState } from "../data/empty";
@@ -21,11 +21,12 @@ const repository = vi.hoisted(() => ({
   endFocusRemote: vi.fn(), recordLearningEvidenceRemote: vi.fn(), updateScratchpadRemote: vi.fn(),
   decideAIProposalRemote: vi.fn(), completeReviewRemote: vi.fn(), createProjectRemote: vi.fn(),
   createGoalRemote: vi.fn(), createLearningGoalRemote: vi.fn(), exportWorkspaceRemote: vi.fn(), setEntityVisibilityRemote: vi.fn(),
-  setInboxStatusRemote: vi.fn(), releaseDueInboxItemsRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn()
+  setInboxStatusRemote: vi.fn(), releaseDueInboxItemsRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn(),
+  recordActionResultRemote: vi.fn()
 }));
 vi.mock("../data/supabaseRepository", () => repository);
 const goalReviewRepository = vi.hoisted(() => ({
-  getLatestGoalReview: vi.fn(), requestGoalReview: vi.fn(), saveAIReviewSettings: vi.fn()
+  getLatestGoalReview: vi.fn(), requestGoalReview: vi.fn(), saveAIReviewSettings: vi.fn(), loadAction: vi.fn()
 }));
 vi.mock("../data/supabaseWorkspaceRepository", () => ({ createSupabaseWorkspaceRepository: () => goalReviewRepository }));
 
@@ -82,6 +83,20 @@ function ActivePageProbe({ load }: { load: () => Promise<string> }) {
   return null;
 }
 
+function ActionResultProbe() {
+  const store = useStore();
+  const [outcome, setOutcome] = useState("");
+  return <>
+    <span>{store.state.workspaceId}</span>
+    <span data-testid="result-outcome">{outcome}</span>
+    <span data-testid="result-link">{store.state.knowledgeLinks.find((link) => link.actionId === "completed-outside-page" && link.meaning === "result")?.knowledgeItemId}</span>
+    <span data-testid="result-progress">{store.state.progressEntries.find((entry) => entry.actionId === "completed-outside-page")?.content}</span>
+    <span data-testid="result-action-status">{store.state.actions.find((action) => action.id === "completed-outside-page")?.status}</span>
+    <button onClick={() => void store.recordActionResult("completed-outside-page", { kind: "new", title: "Rezultat działania", detail: "Opis ze szkicu" }).then(setOutcome, (error: Error) => setOutcome(error.message))}>SaveResult</button>
+    <button onClick={() => void store.reload().catch(() => undefined)}>RefreshResultWorkspace</button>
+  </>;
+}
+
 describe("StoreProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,6 +110,75 @@ describe("StoreProvider", () => {
     goalReviewRepository.getLatestGoalReview.mockReset().mockResolvedValue({ review: null, freshness: "none", checkedAt: "2026-09-25T10:00:00Z" });
     goalReviewRepository.requestGoalReview.mockReset();
     goalReviewRepository.saveAIReviewSettings.mockReset().mockResolvedValue({ windowDays: 7, cacheHours: 24 });
+    goalReviewRepository.loadAction.mockReset();
+    repository.recordActionResultRemote.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("zapisuje rezultat ukończonego Działania spoza strony danych Workspace", async () => {
+    goalReviewRepository.loadAction.mockResolvedValue({ ...demoState.actions[0], id: "completed-outside-page", status: "completed", completedAt: "2026-11-08T17:55:41Z" });
+    const user = userEvent.setup();
+    renderStore(<ActionResultProbe />);
+    await screen.findByText("workspace-1");
+
+    await user.click(screen.getByRole("button", { name: "SaveResult" }));
+
+    await waitFor(() => expect(repository.recordActionResultRemote).toHaveBeenCalledWith("workspace-1", "completed-outside-page", { kind: "new", title: "Rezultat działania", detail: "Opis ze szkicu" }, expect.any(String), expect.any(String), expect.any(String)));
+    expect(goalReviewRepository.loadAction).toHaveBeenCalledWith("completed-outside-page");
+    expect(screen.getByTestId("result-link")).not.toBeEmptyDOMElement();
+    expect(screen.getByTestId("result-progress")).toHaveTextContent("Rezultat: Rezultat działania");
+    expect(screen.getByTestId("result-action-status")).toHaveTextContent("completed");
+    expect(screen.getByTestId("result-outcome")).not.toHaveTextContent("action_not_found");
+  });
+
+  it("utrzymuje zapis rezultatu podczas odświeżenia strony bez tego Działania", async () => {
+    goalReviewRepository.loadAction.mockResolvedValue({ ...demoState.actions[0], id: "completed-outside-page", status: "completed" });
+    const save = deferred<void>();
+    repository.recordActionResultRemote.mockReturnValue(save.promise);
+    const user = userEvent.setup();
+    renderStore(<ActionResultProbe />);
+    await screen.findByText("workspace-1");
+    await user.click(screen.getByRole("button", { name: "SaveResult" }));
+    await waitFor(() => expect(repository.recordActionResultRemote).toHaveBeenCalledTimes(1));
+    const resultId = screen.getByTestId("result-link").textContent;
+    const reads = repository.loadSupabaseState.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "RefreshResultWorkspace" }));
+
+    await waitFor(() => expect(repository.loadSupabaseState.mock.calls.length).toBeGreaterThan(reads));
+    expect(screen.getByTestId("result-link")).toHaveTextContent(resultId!);
+    expect(screen.getByTestId("result-progress")).toHaveTextContent("Rezultat: Rezultat działania");
+    save.resolve();
+    await waitFor(() => expect(screen.getByTestId("result-outcome")).toHaveTextContent(resultId!));
+    expect(repository.recordActionResultRemote).toHaveBeenCalledTimes(1);
+  });
+
+  it("wycofuje rezultat po błędzie zapisu bez cofania ukończenia Działania", async () => {
+    goalReviewRepository.loadAction.mockResolvedValue({ ...demoState.actions[0], id: "completed-outside-page", status: "completed" });
+    repository.recordActionResultRemote.mockRejectedValue(new Error("result_save_failed"));
+    const user = userEvent.setup();
+    renderStore(<ActionResultProbe />);
+    await screen.findByText("workspace-1");
+
+    await user.click(screen.getByRole("button", { name: "SaveResult" }));
+
+    await waitFor(() => expect(screen.getByTestId("result-outcome")).toHaveTextContent("result_save_failed"));
+    expect(screen.getByTestId("result-link")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("result-progress")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("result-action-status")).toHaveTextContent("completed");
+  });
+
+  it("odrzuca rezultat niedostępnego Działania bez wysyłania zapisu", async () => {
+    goalReviewRepository.loadAction.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderStore(<ActionResultProbe />);
+    await screen.findByText("workspace-1");
+
+    await user.click(screen.getByRole("button", { name: "SaveResult" }));
+
+    await waitFor(() => expect(screen.getByTestId("result-outcome")).toHaveTextContent("action_not_found"));
+    expect(goalReviewRepository.loadAction).toHaveBeenCalledWith("completed-outside-page");
+    expect(repository.recordActionResultRemote).not.toHaveBeenCalled();
+    expect(screen.getByTestId("result-link")).toBeEmptyDOMElement();
   });
 
   it("ładuje prywatny Workspace i zapisuje capture przez repozytorium", async () => {
