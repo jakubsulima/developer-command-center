@@ -1,5 +1,5 @@
 import { CreationDialog } from "./CreationForm";
-import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -65,6 +65,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [bottomNavHidden, setBottomNavHidden] = useState(false);
+  const bottomNavRef = useRef<HTMLElement>(null);
+  const bottomNavScroll = useRef({ previousY: 0, travel: 0 });
   const [signOutError, setSignOutError] = useState("");
   const leaveAccount = () => void signOut().catch((error) => setSignOutError(error instanceof Error ? error.message : "Nie udało się wylogować."));
   const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
@@ -81,6 +84,47 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
     setQuickAddSession((session) => session + 1);
     setQuickAddOpen(true);
   }, [loadingView]);
+  useLayoutEffect(() => {
+    // Collapsing the navigation space can clamp scrollY near the page end.
+    // Treat that layout adjustment as the baseline, not an upward gesture.
+    bottomNavScroll.current = {
+      previousY: Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight)),
+      travel: 0
+    };
+  }, [bottomNavHidden]);
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 767px)");
+    const scrollPosition = () => Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    const reset = () => {
+      bottomNavScroll.current = { previousY: scrollPosition(), travel: 0 };
+      setBottomNavHidden(false);
+    };
+    const handleScroll = () => {
+      if (!mobile.matches) return;
+      const scroll = bottomNavScroll.current;
+      const currentY = scrollPosition();
+      const delta = currentY - scroll.previousY;
+      scroll.previousY = currentY;
+      if (!delta) return;
+      // Ignore tiny direction changes and clamp elastic overscroll at both edges.
+      scroll.travel = Math.sign(delta) === Math.sign(scroll.travel) ? scroll.travel + delta : delta;
+      if (currentY <= 24) {
+        setBottomNavHidden(false);
+        scroll.travel = 0;
+      } else if (Math.abs(scroll.travel) >= 12) {
+        if (scroll.travel < 0) setBottomNavHidden(false);
+        else if (document.documentElement.scrollHeight - window.innerHeight > (bottomNavRef.current?.offsetHeight ?? 0) + 24) setBottomNavHidden(true);
+        scroll.travel = 0;
+      }
+    };
+    reset();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    mobile.addEventListener("change", reset);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      mobile.removeEventListener("change", reset);
+    };
+  }, [location.key]);
   useEffect(() => {
     const handleRequest = (event: Event) => {
       if (loadingView) return;
@@ -173,7 +217,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       add: addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
       search: <button className="icon-button page-search-button" disabled={loadingView} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
     }}>
-    <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}`}>
+    <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${bottomNavHidden ? " bottom-nav-hidden" : ""}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></div>
         <nav className="side-nav" aria-label="Główna nawigacja">
@@ -208,7 +252,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <main className="main-content">{error || freshnessError ? <div className="shell-sync-alert" role="status"><CloudOff /><span>{error ? "Nie udało się zsynchronizować zmian." : "Nie udało się odświeżyć danych."}</span><Button variant="ghost" onClick={() => void reload().catch(() => undefined)}>Spróbuj ponownie</Button></div> : null}{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
       {aside && <aside className="context-rail">{aside}</aside>}
 
-      <nav className="bottom-nav" aria-label="Nawigacja mobilna">
+      <nav ref={bottomNavRef} className={`bottom-nav${bottomNavHidden ? " is-hidden" : ""}`} aria-label="Nawigacja mobilna" onFocusCapture={() => setBottomNavHidden(false)}>
         <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
         <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
         <button className={`capture-fab${captureOpen ? " active" : ""}`} disabled={loadingView} aria-expanded={captureOpen} aria-haspopup="dialog" onClick={() => setCaptureOpen(true)} aria-label="Szybki zapis"><span className="capture-fab-icon"><Plus /></span><span>Zapisz</span></button>

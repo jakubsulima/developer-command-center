@@ -186,7 +186,9 @@ textarea { line-height: 1.6; }
   .desktop-capture-button kbd { display: none; }
 }
 @media (max-width: 767px) {
-  .app-shell .main-content, .app-shell.focus-detail .main-content { padding: 24px 16px 36px; }
+  .app-shell, .app-shell.with-aside { --mobile-nav-space: 72px; padding-bottom: 0; }
+  .app-shell.bottom-nav-hidden { --mobile-nav-space: 0px; }
+  .app-shell .main-content, .app-shell.focus-detail .main-content { padding: 24px 16px calc(16px + var(--mobile-nav-space) + env(safe-area-inset-bottom)); }
   .topbar { padding: 0 16px; gap: 8px; height: 64px; }
   .mobile-brand { margin-right: auto; font-size: 16px; letter-spacing: -.025em; }
   .mobile-brand .brand-mark { width: 30px; height: 30px; }
@@ -223,6 +225,9 @@ textarea { line-height: 1.6; }
   .actions-list-row { padding-block: 16px; }
   #quick-capture, .return-reminder-settings, .ai-review-settings-panel { padding: 20px 16px; margin-bottom: 20px; }
   .bottom-nav { height: calc(72px + env(safe-area-inset-bottom)); padding: 6px 8px env(safe-area-inset-bottom); background: #0c1422; backdrop-filter: none; border-color: var(--border); }
+  .bottom-nav { transition: transform var(--motion-panel-in) var(--motion-ease-in), opacity var(--motion-control) ease; }
+  .bottom-nav.is-hidden { transform: translateY(calc(100% + 16px)); opacity: 0; pointer-events: none; }
+  .bottom-nav:has(:focus-visible) { transform: none; opacity: 1; pointer-events: auto; }
   .bottom-nav > a, .bottom-nav > .mobile-more-trigger { min-height: 58px; gap: 5px; font-size: 11px; border-radius: 12px; }
   .bottom-nav > a.active, .bottom-nav > .mobile-more-trigger.active { color: #b0cdff; background: var(--secondary); }
   .capture-fab { height: 58px; gap: 4px; transform: none; font-size: 11px; color: var(--secondary-foreground); }
@@ -522,6 +527,46 @@ textarea { line-height: 1.6; }
   .start-capture-link strong { font-size: 14px; }
   .modal.creation-hub-modal { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .creation-hub-modal .modal-head h2 { font-size: 21px; }
+}
+@media (max-width: 767px) {
+  .main-content > :is(.page-heading, .knowledge-page-heading, .project-detail-toolbar) {
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 15;
+    isolation: isolate;
+    margin-top: -20px;
+    padding-block: 4px;
+  }
+  .main-content > :is(.page-heading, .knowledge-page-heading, .project-detail-toolbar)::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: calc(-1 * max(28px, env(safe-area-inset-top))) -20px 0;
+    background: var(--background);
+    box-shadow: 0 8px 16px -8px rgb(0 0 0 / 24%);
+    pointer-events: none;
+  }
+  .main-content > :is(.page-heading, .knowledge-page-heading, .project-detail-toolbar)::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 100% -20px auto;
+    height: 16px;
+    background: linear-gradient(to bottom, var(--background), transparent);
+    pointer-events: none;
+  }
+  .app-shell .main-content .page-heading { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-height: 44px; margin-bottom: 12px; }
+  .app-shell .main-content .page-heading-copy { flex: 1; min-width: 0; }
+  .app-shell .main-content .page-heading h1 { overflow: hidden; margin: 0; padding: 0; font-size: 20px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+  .app-shell .main-content .page-heading .eyebrow { display: none; }
+  .app-shell .main-content .page-heading-secondary { flex: 0 0 auto; order: 1; }
+  .app-shell .main-content .page-heading .page-actions { flex: 0 0 auto; order: 2; gap: 0; align-self: center; }
+  .app-shell .main-content .page-add-button { background: transparent; color: var(--secondary-foreground); border-radius: 8px; }
+  .app-shell .main-content .page-add-button:is(:hover, .is-active) { background: var(--surface-selected); }
+  .app-shell .main-content .page-heading .page-actions svg { width: 18px; height: 18px; }
+  .app-shell .main-content .project-view-status-active { display: none; }
+  .app-shell .main-content .project-heading-actions .project-view-status { margin-top: 0; }
+  .knowledge-page-heading > .page-heading { margin-bottom: 0; }
 }
 @container (max-height: 500px) {
   .modal.creation-hub-modal { padding-top: max(4px, env(safe-area-inset-top)); }
