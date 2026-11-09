@@ -145,7 +145,7 @@
   .focus-detail .goal-detail-grid { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 40px; }
 }
 @media (max-width: 767px) {
-  .app-shell.focus-detail .main-content { padding: 16px 20px calc(96px + env(safe-area-inset-bottom)); }
+  .app-shell.focus-detail .main-content { padding: 16px 20px calc(16px + var(--mobile-nav-space, 72px) + env(safe-area-inset-bottom)); }
   .focus-detail .detail-title-block h1, .focus-detail .goal-overview h1, .focus-detail .knowledge-detail-head h1 { font-size: 27px; }
   .focus-detail .context-navigation { margin-bottom: 18px; }
   .focus-detail .goal-detail-toolbar .context-navigation { margin-bottom: 0; }
