@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionFeedbackProvider } from "./ActionFeedback";
 import { useActionFeedback } from "./action-feedback-context";
 
@@ -15,6 +15,51 @@ function Probe({ firstUndo, secondUndo, noticeAction }: { firstUndo: () => Promi
 }
 
 describe("ActionFeedback", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("najpierw wygasza komunikat, a potem usuwa go ze stosu", () => {
+    vi.useFakeTimers();
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Sukces" }));
+    const slot = screen.getByRole("status").closest(".undo-notice-slot");
+
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(slot).toHaveAttribute("data-leaving", "true");
+    expect(slot).toHaveAttribute("inert");
+    expect(screen.getByText("Zapisano.")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.queryByText("Zapisano.")).not.toBeInTheDocument();
+  });
+
+  it.each(["pointer", "focus"])("zatrzymuje czas przy interakcji %s i wznawia po jej zakończeniu", (interaction) => {
+    vi.useFakeTimers();
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Pierwsza" }));
+    const notice = screen.getByRole("status");
+    const close = within(notice).getByRole("button", { name: "Zamknij komunikat" });
+    act(() => vi.advanceTimersByTime(2_000));
+    if (interaction === "pointer") fireEvent.pointerEnter(notice);
+    else fireEvent.focus(close);
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(notice.closest(".undo-notice-slot")).not.toHaveAttribute("data-leaving");
+    if (interaction === "pointer") fireEvent.pointerLeave(notice);
+    else fireEvent.blur(close, { relatedTarget: screen.getByRole("button", { name: "Sukces" }) });
+    act(() => vi.advanceTimersByTime(6_300));
+    expect(notice).not.toBeInTheDocument();
+  });
+
+  it("zamyka tylko wskazany komunikat i zachowuje błędy do ręcznego zamknięcia", () => {
+    vi.useFakeTimers();
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Sukces" }));
+    fireEvent.click(screen.getByRole("button", { name: "Błąd" }));
+    fireEvent.click(within(screen.getByRole("status")).getByRole("button", { name: "Zamknij komunikat" }));
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.queryByText("Zapisano.")).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Brak połączenia.");
+  });
+
   it("pokazuje dostępny wynik i wykonuje komendę kompensującą", async () => {
     const undo = vi.fn();
     const user = userEvent.setup();
@@ -48,7 +93,7 @@ describe("ActionFeedback", () => {
     expect(within(actions as HTMLElement).getByRole("button", { name: "Cofnij" })).toBeInTheDocument();
     await user.click(within(actions as HTMLElement).getByRole("button", { name: "Dodaj rezultat" }));
     expect(addResult).toHaveBeenCalledOnce();
-    expect(notice).not.toBeInTheDocument();
+    await waitFor(() => expect(notice).not.toBeInTheDocument());
   });
 
   it("po błędzie undo pozostawia komunikat i pozwala ponowić", async () => {
