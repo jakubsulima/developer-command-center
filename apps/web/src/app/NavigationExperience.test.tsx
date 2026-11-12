@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -24,6 +24,45 @@ function seedNavigationState() {
 }
 
 describe("spójna nawigacja kontekstowa", () => {
+  it.each(["status", "dodawanie"])("zachowuje schowany pasek podczas blokady przewijania: %s", async (flow) => {
+    seedNavigationState();
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ matches: query === "(max-width: 767px)", media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList));
+    const height = vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(3000);
+    const position = vi.spyOn(window, "scrollY", "get").mockReturnValue(0);
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const { container, unmount } = renderApp("/actions");
+    try {
+      const trigger = await screen.findByRole("button", { name: "Zmień status: Do zrobienia — Wykonać krok" });
+      position.mockReturnValue(400);
+      fireEvent.scroll(window);
+      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
+
+      await user.click(flow === "status" ? trigger : screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
+      const dialog = await screen.findByRole("dialog", { name: flow === "status" ? "Zmień status Działania" : "Nowe Działanie" });
+      // Fixing the body during scroll lock makes the browser report scrollY=0.
+      position.mockReturnValue(0);
+      fireEvent.scroll(window);
+      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
+      expect(container.querySelector(".app-shell")).toHaveClass("bottom-nav-hidden");
+
+      await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
+      position.mockReturnValue(400);
+      fireEvent.scroll(window);
+      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
+      await waitFor(() => expect(document.querySelector("[data-modal-backdrop]")).not.toBeInTheDocument());
+      position.mockReturnValue(370);
+      fireEvent.scroll(window);
+      await waitFor(() => expect(container.querySelector(".bottom-nav")).not.toHaveClass("is-hidden"));
+    } finally {
+      unmount();
+      media.mockRestore();
+      height.mockRestore();
+      position.mockRestore();
+      scrollTo.mockRestore();
+    }
+  });
+
   it("przenosi pełny kontekst przez Projekt → Cel → Działanie → Wiedza i wraca do źródła", async () => {
     seedNavigationState();
     const user = userEvent.setup();

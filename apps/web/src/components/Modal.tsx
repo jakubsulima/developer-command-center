@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { DialogContent } from "./ui/dialog";
 
@@ -81,8 +82,10 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     };
   }, [open, viewportMetrics.height]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
+    // Capture the page position before changing overflow can clamp it.
+    const scrollY = window.scrollY;
     const root = document.documentElement;
     const previousRootOverflow = root.style.overflow;
     const previousRootOverscroll = root.style.overscrollBehavior;
@@ -93,7 +96,6 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     const previousPosition = document.body.style.position;
     const previousTop = document.body.style.top;
     const previousWidth = document.body.style.width;
-    const scrollY = window.scrollY;
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
     document.body.style.position = "fixed";
@@ -201,8 +203,9 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     };
   }, [closeOnBackdrop, initialFocus, open]);
 
-  if (exitDurationMs > 0 ? !present : !open) return null;
-  return (
+  if (!open && (exitDurationMs <= 0 || !present)) return null;
+  // Keep fixed overlays outside scrolling/clipping page containers.
+  return createPortal(
     <div data-modal-backdrop className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} style={{ "--modal-viewport-height": `${viewportMetrics.height}px`, "--modal-viewport-offset-top": `${viewportMetrics.offsetTop}px` } as CSSProperties} onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
@@ -214,6 +217,7 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
         </div>
         {children}
       </DialogContent>
-    </div>
+    </div>,
+    document.body
   );
 }
