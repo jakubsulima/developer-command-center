@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { configure, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,8 @@ import { StoreProvider } from "./store";
 
 beforeEach(() => vi.stubGlobal("indexedDB", undefined));
 afterEach(() => vi.unstubAllGlobals());
+// Route imports can take longer than the default query timeout on a cold run.
+configure({ asyncUtilTimeout: 5000 });
 
 function renderApp(path = "/actions?view=open", withHistory = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -22,6 +24,14 @@ function renderApp(path = "/actions?view=open", withHistory = false) {
     return <><button onClick={() => navigate(-1)}>Back test</button><button onClick={() => navigate(1)}>Forward test</button></>;
   }
   return render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App />{withHistory ? <HistoryControls /> : null}<LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+}
+
+function enableDesktopPreview() {
+  vi.stubGlobal("matchMedia", vi.fn((media: string) => ({
+    matches: media === "(min-width: 1440px)", media, onchange: null,
+    addListener: vi.fn(), removeListener: vi.fn(),
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn()
+  })));
 }
 
 describe("lista wszystkich Działań", () => {
@@ -181,11 +191,75 @@ describe("lista wszystkich Działań", () => {
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
     await user.click(await screen.findByRole("link", { name: "Pobrać historię transakcji" }));
-    expect(await screen.findByRole("heading", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pobrać historię transakcji" }, { timeout: 5000 })).toBeInTheDocument();
     const contextNavigation = document.querySelector<HTMLElement>(".context-navigation")!;
     expect(within(contextNavigation).getByRole("link", { name: "Działania" })).toHaveAttribute("href", "/actions?view=overdue");
     await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue");
+  });
+
+  it("otwiera podgląd na desktopie bez opuszczania listy i przywraca fokus po Escape", async () => {
+    enableDesktopPreview();
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue&project=area-finanse&other=keep");
+    const title = await screen.findByRole("link", { name: "Pobrać historię transakcji" });
+    await user.click(title);
+
+    const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
+    expect(within(preview).getByText("Ostatnie trzy miesiące")).toBeInTheDocument();
+    expect(within(preview).getByRole("heading", { name: "Pobrać historię transakcji" })).toHaveFocus();
+    expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue&project=area-finanse&other=keep&preview=action-budget-overdue");
+    expect(title).toHaveAttribute("href", "/actions/action-budget-overdue");
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "Pobrać historię transakcji" })).not.toBeInTheDocument();
+    expect(title).toHaveFocus();
+    expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue&project=area-finanse&other=keep");
+  });
+
+  it("wraca z pełnego widoku do listy z wybranym podglądem i filtrami", async () => {
+    enableDesktopPreview();
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue&project=area-finanse");
+    await user.click(await screen.findByRole("link", { name: "Pobrać historię transakcji" }));
+    const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
+    await user.click(within(preview).getByRole("link", { name: "Otwórz pełny widok" }));
+    const contextNavigation = await screen.findByRole("navigation", { name: "Ścieżka kontekstu" });
+    await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
+    expect(await screen.findByRole("complementary", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
+    expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue&project=area-finanse&preview=action-budget-overdue");
+  });
+
+  it("zmienia status w podglądzie i zamyka tylko dialog przy pierwszym Escape", async () => {
+    enableDesktopPreview();
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue");
+    await user.click(await screen.findByRole("link", { name: "Pobrać historię transakcji" }));
+    const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
+    await user.click(within(preview).getByRole("button", { name: "Zmień status: Do zrobienia — Pobrać historię transakcji" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Zmień status Działania" })).not.toBeInTheDocument();
+    expect(preview).toBeInTheDocument();
+
+    await user.click(within(preview).getByRole("button", { name: "Zmień status: Do zrobienia — Pobrać historię transakcji" }));
+    const dialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    await user.click(within(dialog).getByRole("button", { name: /W trakcie testowania/ }));
+    expect(await within(preview).findByRole("button", { name: "Zmień status: W trakcie testowania — Pobrać historię transakcji" })).toBeInTheDocument();
+    expect(screen.getByTestId("location-address")).toHaveTextContent("view=overdue&preview=action-budget-overdue");
+  });
+
+  it("ukończenie z podglądu usuwa wiersz z Otwarte i pozwala cofnąć zmianę", async () => {
+    enableDesktopPreview();
+    const user = userEvent.setup();
+    renderApp("/actions?view=overdue");
+    await user.click(await screen.findByRole("link", { name: "Pobrać historię transakcji" }));
+    const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
+    await user.click(within(preview).getByRole("button", { name: "Ukończ Działanie" }));
+    expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pobrać historię transakcji" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Pobrać historię transakcji" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByRole("link", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
   });
 });

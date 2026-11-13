@@ -101,6 +101,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
     };
     const handleScroll = () => {
       if (!mobile.matches) return;
+      // A modal fixes the body and temporarily resets window.scrollY to zero.
+      // Keep the gesture baseline until its saved page position is restored.
+      if (document.body.style.position === "fixed" || document.querySelector("[data-modal-backdrop]")) return;
       const scroll = bottomNavScroll.current;
       const currentY = scrollPosition();
       const delta = currentY - scroll.previousY;

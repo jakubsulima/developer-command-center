@@ -4278,7 +4278,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .creation-hub-modal .quick-add-draft .draft-status { font-size: 12px; }
   .creation-hub-modal .quick-add-draft button { min-height: 44px; }
   .creation-hub-modal .quick-add-footer > .button { width: 100%; min-height: 48px; }
-  .app-shell:has(.quick-add-backdrop) .bottom-nav { opacity: .2; pointer-events: none; }
+  body:has(> .quick-add-backdrop) .bottom-nav { opacity: .2; pointer-events: none; }
   .topbar-add-label { max-width: none; font-size: 0; }
   .topbar-add-label::after { content: "Dodaj"; font-size: 14px; }
 }

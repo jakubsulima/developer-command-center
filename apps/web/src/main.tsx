@@ -12,6 +12,7 @@ import { AuthRoot } from "./auth/AuthRoot";
 import { installPerformanceMetrics } from "./lib/performanceMetrics";
 import "./styles.css";
 import "./polish.css";
+import "./desktop.css";
 
 AppErrorReporter.install();
 installPerformanceMetrics();
