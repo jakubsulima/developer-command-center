@@ -1,6 +1,6 @@
 import { SavedActionViews } from "../components/SavedActionViews";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
-import { ChevronDown, Filter, ListTodo, RefreshCw, X } from "lucide-react";
+import { ChevronDown, Filter, ListTodo, PanelRightOpen, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -24,6 +24,7 @@ import { localDateForTimeZone } from "../domain/activity";
 import type { GoalAction } from "../domain/types";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 import { resolveRoutineTitle } from "../domain/actionPresentation";
+import { ActionPreview } from "../components/ActionPreview";
 
 const actionStatusViews = ["open", "ready", "in_progress", "testing", "waiting", "blocked", "completed", "cancelled", "skipped"] as const satisfies readonly ActionListView[];
 const actionScheduleViews = ["open", "today", "overdue", "unscheduled"] as const satisfies readonly ActionListView[];
@@ -94,6 +95,7 @@ export function ActionsPage() {
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
   const rowRefs = useRef(new Map<string, HTMLElement>());
+  const previewTriggerRef = useRef<HTMLElement | null>(null);
   const focusAfterMutation = useRef<{ actionId: string; index: number } | undefined>(undefined);
   const rawView = params.get("view");
   const view: ActionListView = isActionListView(rawView) ? rawView : "open";
@@ -123,6 +125,20 @@ export function ActionsPage() {
   const hasFilters = view !== "open" || scheduleView !== "open" || Boolean(projectId || goalId);
   const filterCount = Number(view !== "open") + Number(scheduleView !== "open") + Number(Boolean(projectId)) + Number(Boolean(goalId));
   const groupedItems = groupOpenActions(items, view, today);
+  const previewAction = items.find((action) => action.id === params.get("preview"));
+  const openPreview = (action: GoalAction, trigger: HTMLElement) => {
+    previewTriggerRef.current = trigger;
+    const next = new URLSearchParams(params);
+    next.set("preview", action.id);
+    setParams(next, { replace: true });
+  };
+  const closePreview = () => {
+    const next = new URLSearchParams(params);
+    next.delete("preview");
+    setParams(next, { replace: true });
+    const trigger = previewTriggerRef.current?.isConnected ? previewTriggerRef.current : previewAction ? rowRefs.current.get(previewAction.id)?.querySelector<HTMLElement>(".actions-list-title") : undefined;
+    trigger?.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     if (!highlightId) return;
@@ -253,7 +269,15 @@ export function ActionsPage() {
         {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{scheduleView !== "open" && scheduleView !== view ? <Badge>{actionScheduleViewLabels[scheduleView]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
       </section>
 
+      <div className={`actions-workspace${previewAction ? " has-preview" : ""}`} onKeyDown={(event) => {
+        if (event.key === "Escape" && previewAction && !document.querySelector('[aria-modal="true"]')) {
+          event.preventDefault();
+          closePreview();
+        }
+      }}>
+      <div className="actions-collection">
       <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i cel muszą pasować jednocześnie.</small> : null}</div>
+      {items.length ? <div className="actions-list-columns" aria-hidden="true"><span /><span>Działanie</span><span>Projekt / Cel</span><span>Status</span><span>Termin</span><span /></div> : null}
       {loading || actionsPage.isPending ? <ListSkeleton rows={5} label="Ładowanie Działań" /> : null}
       {actionsPage.isError ? <Panel className="actions-error" role="alert"><RefreshCw /><div><strong>Nie udało się pobrać Działań.</strong><p>Spróbuj ponownie; bieżące filtry pozostaną zachowane.</p></div><Button onClick={retry}>Spróbuj ponownie</Button></Panel> : null}
       {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, Projekt lub Cel albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
@@ -262,14 +286,23 @@ export function ActionsPage() {
         {group.items.map((action) => {
           const context = resolveActionContext(action, state);
           const mutationKey = `actions-list:${action.id}`;
-          return <section role="listitem" ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }} className={`panel actions-list-row ${action.status} ${highlightId === action.id ? "navigation-card-highlight" : ""}`} key={action.id} data-navigation-card-id={navigationCardId("action", action.id)} data-highlighted={highlightId === action.id || undefined} tabIndex={-1}>
+          return <section role="listitem" ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }} className={`panel actions-list-row ${action.status} ${highlightId === action.id ? "navigation-card-highlight" : ""}`} key={action.id} data-navigation-card-id={navigationCardId("action", action.id)} data-highlighted={highlightId === action.id || undefined} data-preview-selected={previewAction?.id === action.id || undefined} tabIndex={-1}>
             <span className="actions-list-complete">{!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={mutation.isBusy(`actions-status:${action.id}`)} onToggleComplete={() => void completeAction(action)} /> : null}</span>
-            <span className="actions-list-copy"><NavigationLink className="actions-list-title" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} disabled={mutation.isBusy(`actions-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} /><small className="actions-list-context"><NavigationLink to={context.to} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}>{compactContextLabel(context)}</NavigationLink></small>{action.detail ? <small className="actions-list-detail">{action.detail}</small> : null}{mutation.error(mutationKey) || mutation.error(`actions-status:${action.id}`) ? <span className="inline-mutation-error" role="alert">{mutation.error(mutationKey) ?? mutation.error(`actions-status:${action.id}`)} <button type="button" onClick={() => void (mutation.retry(mutationKey) ?? mutation.retry(`actions-status:${action.id}`))?.()}>Spróbuj ponownie</button></span> : null}</span>
+            <span className="actions-list-copy"><NavigationLink className="actions-list-title" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)} onClick={(event) => {
+              if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                event.preventDefault();
+                openPreview(action, event.currentTarget);
+              }
+            }}><strong>{action.title}</strong></NavigationLink><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} disabled={mutation.isBusy(`actions-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} /><small className="actions-list-context"><NavigationLink to={context.to} breadcrumbs={[{ label: "Działania", to: locationAddress(location) }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Działania" sourceCardId={navigationCardId("action", action.id)}>{compactContextLabel(context)}</NavigationLink></small>{action.detail ? <small className="actions-list-detail">{action.detail}</small> : null}{mutation.error(mutationKey) || mutation.error(`actions-status:${action.id}`) ? <span className="inline-mutation-error" role="alert">{mutation.error(mutationKey) ?? mutation.error(`actions-status:${action.id}`)} <button type="button" onClick={() => void (mutation.retry(mutationKey) ?? mutation.retry(`actions-status:${action.id}`))?.()}>Spróbuj ponownie</button></span> : null}</span>
+            <button type="button" className="icon-button actions-preview-trigger" aria-label={`Podejrzyj: ${action.title}`} title="Podejrzyj Działanie" aria-expanded={previewAction?.id === action.id} aria-controls={previewAction ? "action-preview" : undefined} onClick={(event) => openPreview(action, event.currentTarget)}><PanelRightOpen aria-hidden="true" /></button>
           </section>;
         })}
       </div></section>)}</div> : null}
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
+      </div>
+      {previewAction ? <ActionPreview action={previewAction} today={today} returnTo={locationAddress(location)} busy={mutation.isBusy(`actions-status:${previewAction.id}`)} error={mutation.error(`actions-status:${previewAction.id}`)} onClose={closePreview} onOpenStatus={() => setStatusActionId(previewAction.id)} onComplete={() => void completeAction(previewAction)} onRetry={() => void mutation.retry(`actions-status:${previewAction.id}`)?.()} /> : null}
+      </div>
       {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
       <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
     </AppShell>

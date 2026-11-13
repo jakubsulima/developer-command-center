@@ -28,6 +28,8 @@ import { isActionInTodayProjection, localDateForTimeZone } from "../domain/activ
 import { describeActionSchedule, resolveRoutineTitle } from "../domain/actionPresentation";
 import { useProjectKnowledgeItems } from "../hooks/useProjectKnowledgeItems";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
+import { ProjectOverviewActions, ProjectOverviewContext } from "../components/ProjectOverview";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 
 
 type ProjectView = "overview" | "goals" | "actions" | "knowledge";
@@ -60,6 +62,7 @@ const projectActionStatusIcons = {
 } satisfies Record<ProjectActionStatus, typeof Circle>;
 
 export function ProjectDetailPage() {
+  const desktop = useDesktopLayout();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -194,7 +197,7 @@ export function ProjectDetailPage() {
       {orderedViews.map((value) => <button key={value} role="tab" aria-selected={view === value} onClick={() => setView(value)}>{value === "overview" ? "Przegląd" : value === "goals" ? "Cele" : value === "actions" ? "Działania" : "Wiedza"}{value !== "overview" ? <small aria-hidden="true">{value === "goals" ? currentGoals.length : value === "actions" ? openActions.length : knowledge.length}</small> : null}</button>)}
     </div>
 
-    {view === "overview" ? <>
+    {view === "overview" ? <div className="project-overview-workspace"><div className="project-overview-main">
       <section className="project-overview" aria-labelledby="project-overview-title">
         <h2 className="sr-only" id="project-overview-title">Co jest teraz najważniejsze</h2>
         {signal ? <Panel className={`project-now-card project-now-card-${signal.kind}`} data-navigation-card-id="project-now-card" tabIndex={-1}>
@@ -206,8 +209,9 @@ export function ProjectDetailPage() {
         </Panel> : <Panel className="project-now-card project-now-card-inactive"><span className="project-now-icon"><ListChecks /></span><div><span className="eyebrow">Projekt poza aktywną przestrzenią</span><h3>{project.visibility === "archived" ? "Projekt w Archiwum" : "Projekt w Koszu"}</h3><p>Jego Działania pozostają zachowane w tym kontekście.</p></div><Button variant="primary" onClick={() => setView("actions")}>Pokaż Działania <ArrowRight /></Button></Panel>}
 
       </section>
+      {desktop && project.visibility === "active" ? <ProjectOverviewActions actions={openActions} today={today} navigation={projectNavigation} onAdd={() => requestAppQuickAdd({ mode: "action", areaId: project.id, draftKey: `project-${project.id}-actions` })} onShowAll={() => setView("actions")} onOpenStatus={openStatusEditor} isBusy={(id) => mutation.isBusy(`project-action-status:${id}`)} errorFor={(id) => mutation.error(`project-action-status:${id}`)} onRetry={(id) => void mutation.retry(`project-action-status:${id}`)?.()} /> : null}
       <details className="project-flow-guide"><summary><span className="project-flow-guide-label"><span><Lightbulb /></span><span><strong>Pętla pracy — wskazówka</strong><small>Jak przejść od kierunku Projektu do zachowanej Wiedzy</small></span></span><span className="project-flow-guide-action">Pokaż <ChevronDown /></span></summary><section className="project-flow" aria-labelledby="project-flow-title"><div className="project-flow-heading"><div><span className="eyebrow">Pętla pracy</span><h2 id="project-flow-title">Od kierunku do wiedzy</h2></div><p>Każdy krok zostawia kontekst, który można wykorzystać ponownie.</p></div><div className="project-flow-steps"><div><span>1</span><small>Projekt</small><strong>{project.name}</strong><p>Kierunek i wspólny kontekst</p></div><ArrowRight /><button type="button" onClick={() => setView("goals")}><span>2</span><small>Cele</small><strong>{activeGoals.length ? activeGoalsLabel : "Ustal rezultat"}</strong><p>Po czym poznasz sukces</p></button><ArrowRight /><button type="button" onClick={() => setView("actions")}><span>3</span><small>Działanie</small><strong>{signal?.actionId ? signal.title : "Wybierz następny krok"}</strong><p>Co konkretnie robisz teraz</p></button><ArrowRight /><button type="button" onClick={() => setView("knowledge")}><span>4</span><small>Rezultat / wiedza</small><strong>{insights.length ? insightsLabel : "Zapisz rezultat"}</strong><p>Co zostaje na przyszłość</p></button></div></section></details>
-    </> : null}
+    </div>{desktop && project.visibility === "active" ? <ProjectOverviewContext goals={currentGoals} knowledge={knowledge} navigation={projectNavigation} knowledgeLoading={projectKnowledgeQuery.isPending} knowledgeError={projectKnowledgeQuery.isError} onRetryKnowledge={() => void projectKnowledgeQuery.refetch()} onShowGoals={() => setView("goals")} onShowKnowledge={() => setView("knowledge")} /> : null}</div> : null}
 
     <div className="project-sections">
       {visibleSections.includes("goals") ? <section aria-labelledby="project-goals-title"><div className="section-heading project-section-heading"><div><h2 id="project-goals-title">Cele</h2><span>{goalFilter === "current" ? "Bieżące rezultaty do wykonania w tym Projekcie" : "Osiągnięte i porzucone Cele"}</span></div>{goalFilter === "current" && historicalGoals.length ? <div className="project-section-actions project-section-actions-single"><details className="project-more-menu project-section-more-menu"><summary aria-label="Więcej opcji Celów" title="Więcej opcji Celów"><MoreHorizontal /><span className="sr-only">Więcej opcji Celów</span></summary><div><Button onClick={(event) => { closeProjectMenu(event.currentTarget); setGoalFilter("history"); }}><History />Pokaż historię <span className="project-menu-count">{historicalGoals.length}</span></Button></div></details></div> : null}</div>

@@ -105,6 +105,7 @@ export function StartPage() {
   return <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie na Starcie", quickAdd: { mode: "action", scheduledFor: currentDate, draftKey: "start" } }}>
     <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} />
 
+    <div className="start-workspace">
     <Link className="start-capture-link" to="/capture"><span className="start-capture-icon"><Plus /></span><span><strong>Zapisz myśl lub link</strong><small>Resztę uporządkujesz później.</small></span><ChevronRight /></Link>
 
     <div className="today-layout start-layout">
@@ -115,15 +116,15 @@ export function StartPage() {
       </div>
     </div>
 
+    <div className="start-context">
     <ReturnToWork />
     {summary.recommendation.kind === "blocked" ? <p className="return-to-work"><Link to={summary.recommendation.to}>{summary.recommendation.title} — {recommendationCta}</Link></p> : null}
     {summary.overdueActions.length ? <details className="start-overdue"><summary>Zaległe Działania · {summary.overdueActions.length}</summary><Link to="/actions?view=overdue">Przejrzyj zaległe Działania</Link></details> : null}
     <CurrentWeekPlanNotice read={planRead} />
     <KnowledgeRevisitSignal now={now} />
     <details className="start-ai-help" open={searchParams.get("show") === "attention" || searchParams.get("show") === "upcoming" || undefined}><summary>Pomóż wybrać następny krok</summary><AIStartGuidance homeSummary={summary} /></details>
-
-
-
+    </div>
+    </div>
     {(() => { const action = state.actions.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `start-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
     <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
   </AppShell>;

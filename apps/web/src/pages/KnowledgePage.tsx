@@ -2,8 +2,8 @@ import { formatActionDate } from "../domain/actionPresentation";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { localDateForTimeZone } from "../domain/activity";
 import { readingPositionLabel } from "../domain/readingProgress";
-import { Archive, BookMarked, Inbox, MoreHorizontal, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Archive, BookMarked, Inbox, MoreHorizontal, PanelRightOpen, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -25,6 +25,7 @@ import { filterableKnowledgeKinds, isFilterableKnowledgeKind } from "../domain/k
 import { knowledgeKindLabels } from "../domain/labels";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
+import { KnowledgePreview } from "../components/KnowledgePreview";
 
 type View = "active" | "archived" | "trashed";
 
@@ -55,6 +56,7 @@ export function KnowledgePage() {
   const view: View = viewParam === "archived" || viewParam === "trashed" ? viewParam : "active";
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [actionsItemId, setActionsItemId] = useState<string>();
+  const previewTriggerRef = useRef<HTMLElement | null>(null);
   const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
   const [debouncedQuery, setDebouncedQuery] = useState(() => params.get("q") ?? "");
   const normalized = debouncedQuery.trim().toLocaleLowerCase("pl");
@@ -110,6 +112,22 @@ export function KnowledgePage() {
     visibility: view
   }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, revisitOnOrBefore, state, view]);
   const results = knowledgeItems.filter(matches).sort((left, right) => (revisitOnOrBefore ? left.revisitOn ?? "" : left.updatedAt ?? left.createdAt ?? "").localeCompare(revisitOnOrBefore ? right.revisitOn ?? "" : right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
+  const previewItem = results.find((item) => item.id === params.get("preview"));
+  const sourceBookLink = previewItem ? state.knowledgeLinks.find((link) => link.knowledgeItemId === previewItem.id && link.meaning === "source" && link.targetKnowledgeItemId) : undefined;
+  const openPreview = (item: KnowledgeItem, trigger: HTMLElement) => {
+    previewTriggerRef.current = trigger;
+    const next = new URLSearchParams(params);
+    next.set("preview", item.id);
+    setParams(next, { replace: true });
+  };
+  const closePreview = () => {
+    const next = new URLSearchParams(params);
+    next.delete("preview");
+    setParams(next, { replace: true });
+    const fallback = Array.from(document.querySelectorAll<HTMLElement>(".knowledge-title-link")).find((link) => link.closest("[data-navigation-card-id]")?.getAttribute("data-navigation-card-id") === (previewItem ? navigationCardId("knowledge", previewItem.id) : undefined));
+    const trigger = previewTriggerRef.current?.isConnected ? previewTriggerRef.current : fallback;
+    trigger?.focus({ preventScroll: true });
+  };
   const changeVisibility = async (item: KnowledgeItem, visibility: "archived" | "trashed") => {
     const previous = item.trashedAt ? "trashed" : item.archivedAt ? "archived" : "active";
     await setVisibility("knowledge", item.id, visibility);
@@ -131,6 +149,10 @@ export function KnowledgePage() {
         </div>
       </div>
       {section === "inbox" ? <KnowledgeInbox /> : <>
+      <div className={`knowledge-workspace${previewItem ? " has-preview" : ""}`} onKeyDown={(event) => {
+        if (event.key === "Escape" && previewItem && !document.querySelector('[aria-modal="true"]')) { event.preventDefault(); closePreview(); }
+      }}>
+      <div className="knowledge-collection">
       <div className="knowledge-controls">
         <div className="knowledge-filter-topbar">
           <div className="knowledge-search"><Search /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj w bibliotece…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
@@ -180,10 +202,13 @@ export function KnowledgePage() {
             const noteDetail = titleIsFirstLine ? item.detail.replace(/^\s*[^\n]*\n?/, "").trim() : item.detail;
             const longNote = noteDetail.length > 600 || noteDetail.split("\n").length > 8;
             return (
-              <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} tabIndex={-1}>
-                {item.revisitOn ? <Badge>Powrót: {formatActionDate(item.revisitOn, state.workspaceTimezone)}</Badge> : null}{item.resourceFormat === "book" ? <Badge>Książka</Badge> : <KnowledgeKindBadge kind={item.type} />}
-                <span className="knowledge-row-content"><NavigationLink className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)}><strong className="line-clamp-2">{item.title}</strong></NavigationLink>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{sourceBook ? <NavigationLink className="knowledge-row-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy">Źródło: {sourceBook.title}{sourceBook.resourceAuthor ? ` · ${sourceBook.resourceAuthor}` : ""}</NavigationLink> : null}{item.type === "note" && noteDetail ? <>{longNote ? <details className="knowledge-row-note-details"><summary>{noteDetail.slice(0, 520).trimEnd()}… <span>Pokaż więcej</span></summary><p>{noteDetail}</p></details> : <small className="knowledge-row-note-preview">{noteDetail}</small>}</> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
+              <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} data-preview-selected={previewItem?.id === item.id || undefined} tabIndex={-1}>
+                <span className="knowledge-row-badges">{item.revisitOn ? <Badge>Powrót: {formatActionDate(item.revisitOn, state.workspaceTimezone)}</Badge> : null}{item.resourceFormat === "book" ? <Badge>Książka</Badge> : <KnowledgeKindBadge kind={item.type} />}</span>
+                <span className="knowledge-row-content"><NavigationLink className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)} onClick={(event) => {
+                  if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); openPreview(item, event.currentTarget); }
+                }}><strong className="line-clamp-2">{item.title}</strong></NavigationLink>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{sourceBook ? <NavigationLink className="knowledge-row-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy">Źródło: {sourceBook.title}{sourceBook.resourceAuthor ? ` · ${sourceBook.resourceAuthor}` : ""}</NavigationLink> : null}{item.type === "note" && noteDetail ? <>{longNote ? <details className="knowledge-row-note-details"><summary>{noteDetail.slice(0, 520).trimEnd()}… <span>Pokaż więcej</span></summary><p>{noteDetail}</p></details> : <small className="knowledge-row-note-preview">{noteDetail}</small>}</> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
                 <div className="knowledge-actions">
+                  <button type="button" className="icon-button knowledge-preview-trigger" aria-label={`Podejrzyj Wiedzę: ${item.title}`} title="Podejrzyj Wiedzę" aria-expanded={previewItem?.id === item.id} aria-controls={previewItem ? "knowledge-preview" : undefined} onClick={(event) => openPreview(item, event.currentTarget)}><PanelRightOpen aria-hidden="true" /></button>
                   <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
                 </div>
               </Panel>
@@ -193,6 +218,9 @@ export function KnowledgePage() {
       ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku + w nagłówku, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "revisit", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
       {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
       {results.length && knowledgePage.data && !knowledgePage.hasNextPage && !knowledgePage.isFetching && !knowledgePage.isError ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
+      </div>
+      {previewItem ? <KnowledgePreview item={previewItem} sourceBook={sourceBookLink?.targetKnowledgeItemId ? sourceBooksById.get(sourceBookLink.targetKnowledgeItemId) : undefined} returnTo={locationAddress(location)} onClose={closePreview} /> : null}
+      </div>
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
         const item = knowledgeItems.find((candidate) => candidate.id === actionsItemId);
         if (!item) return null;
