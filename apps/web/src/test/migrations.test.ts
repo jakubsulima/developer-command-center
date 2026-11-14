@@ -65,11 +65,101 @@ describe("migracje Supabase", () => {
       await database.exec(await readFile(new URL(`../../../../supabase/migrations/${name}.sql`, import.meta.url), "utf8"));
     }
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20261103200435_creation_triage_goal_options.sql", import.meta.url), "utf8"));
+    // Exercise the upgrade with linked records that already exist in the old schema.
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id='ca990000-0000-0000-0000-000000000001'");
+    const goal = crypto.randomUUID(), action = crypto.randomUUID(), routine = crypto.randomUUID(), knowledge = crypto.randomUUID();
+    await database.query("insert into public.goals(id,workspace_id,area_id,title,outcome,target_date) values ($1,$2,'ca990000-0000-0000-0000-000000000010','Zachowane zadanie','Oryginalny rezultat','2027-01-01')", [goal, workspace]);
+    await database.query("insert into public.recurring_action_templates(id,workspace_id,goal_id,title,starts_on,recurrence_rule) values ($1,$2,$3,'Zachowana rutyna','2026-11-14','{\"unit\":\"week\",\"interval\":1,\"weekdays\":[6]}')", [routine, workspace, goal]);
+    await database.query("insert into public.actions(id,workspace_id,goal_id,title,detail,recurring_template_id,occurrence_date) values ($1,$2,$3,'Zachowane Działanie','Oryginalny opis',$4,'2026-11-14')", [action, workspace, goal, routine]);
+    await database.query("insert into public.goal_criteria(workspace_id,goal_id,title,completed) values ($1,$2,'Oryginalne kryterium',true)", [workspace, goal]);
+    await database.query("insert into public.entities(id,workspace_id,type,title) values ($1,$2,'artifact','Zachowana Wiedza')", [knowledge, workspace]);
+    await database.query("insert into public.knowledge_items(entity_id,workspace_id,detail) values ($1,$2,'Oryginalna treść')", [knowledge, workspace]);
+    await database.query("insert into public.knowledge_links(workspace_id,knowledge_entity_id,goal_id,meaning) values ($1,$2,$3,'result')", [workspace, knowledge, goal]);
+    await database.query("insert into public.progress_entries(workspace_id,goal_id,action_id,knowledge_entity_id,kind,content) values ($1,$2,$3,$4,'result','Oryginalny postęp')", [workspace, goal, action, knowledge]);
+    const preservedTables = ["goals", "actions", "goal_criteria", "recurring_action_templates", "knowledge_links", "progress_entries", "knowledge_items"];
+    const snapshots = await Promise.all(preservedTables.map((table) => scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by to_jsonb(item)::text) from public.${table} item`)));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20261114114912_action_groups.sql", import.meta.url), "utf8"));
+    for (const [index, table] of preservedTables.entries()) {
+      expect(await scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by (to_jsonb(item)-'group_type')::text) from public.${table} item`)).toEqual(snapshots[index]);
+    }
+    expect(await scalar("select group_type from public.goals where id=$1", [goal])).toBe("task");
+    await database.query("delete from public.progress_entries where goal_id=$1", [goal]);
+    await database.query("delete from public.knowledge_links where goal_id=$1", [goal]);
+    await database.query("delete from public.actions where id=$1", [action]);
+    await database.query("delete from public.recurring_action_templates where id=$1", [routine]);
+    await database.query("delete from public.goals where id=$1", [goal]);
+    await database.query("delete from public.entities where id=$1", [knowledge]);
   }, 30_000);
 
   afterEach(async () => {
     await database.exec("reset role");
     await database.query("select set_config('request.jwt.claim.sub', '', false)");
+  });
+
+  it("kategoria zachowuje ID i przyjmuje kolejne Działania bez rezultatu ani cyklu ukończenia", async () => {
+    const user = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    const group = crypto.randomUUID();
+    const save = () => database.query("select public.create_action_group($1,$2,null,'UI/UX','','custom',null,null,null,'[]'::jsonb,$2,'[]'::jsonb,'category')", [workspace, group]);
+    await save(); await save();
+    expect(await scalar("select group_type from public.goals where id=$1", [group])).toBe("category");
+    expect(await scalar("select outcome from public.goals where id=$1", [group])).toBe("");
+    expect(await scalar("select count(*)::int from public.goals where id=$1", [group])).toBe(1);
+    for (let index = 0; index < 2; index++) {
+      const action = crypto.randomUUID();
+      await database.query("select public.create_action_item($1,$2,$3,null,'Poprawka','',null,false,$2)", [workspace, action, group]);
+      await database.query("update public.actions set status='completed',completed_at=now() where id=$1", [action]);
+    }
+    expect(await scalar("select status from public.goals where id=$1", [group])).toBe("active");
+    await database.query("select public.create_action_item($1,$2,$3,null,'Kolejna poprawka','',null,false,$2)", [workspace, crypto.randomUUID(), group]);
+    expect(await scalar("select count(*)::int from public.actions where goal_id=$1", [group])).toBe(3);
+    await expect(database.query("update public.goals set status='achieved' where id=$1", [group])).rejects.toThrow();
+    await expect(database.query("insert into public.goal_criteria(workspace_id,goal_id,title) values ($1,$2,'Nie dotyczy kategorii')", [workspace, group])).rejects.toThrow("category_has_no_success_criteria");
+    const core = await scalar<{ goals: { id: string; groupType: string }[] }>("select public.get_workspace_core($1)", [user]);
+    expect(core.goals.find((item) => item.id === group)?.groupType).toBe("category");
+    const context = await scalar<{ goals: { id: string; groupType: string; signals: { kind: string }[] }[] }>("select public.get_ai_goal_review_context($1,28)", [workspace]);
+    const category = context.goals.find((item) => item.id === group)!;
+    expect(category.groupType).toBe("category");
+    expect(category.signals.map((item) => item.kind)).not.toEqual(expect.arrayContaining(["missing_next_action", "missing_criteria"]));
+    await expect(database.query("select public.create_action_group($1,$2,null,'Different','','custom',null,null,null,'[]'::jsonb,$2,'[]'::jsonb,'task')", [workspace, group])).rejects.toThrow("group_idempotency_conflict");
+  });
+
+  it("domyślny typ starego rekordu to zadanie, a konwersja nie usuwa kryteriów ani historii", async () => {
+    const user = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    const group = crypto.randomUUID(), criterion = crypto.randomUUID();
+    await database.query("insert into public.goals(id,workspace_id,title,outcome) values ($1,$2,'Istniejący rezultat','Zachowany opis')", [group, workspace]);
+    await database.query("insert into public.goal_criteria(id,workspace_id,goal_id,title) values ($1,$2,$3,'Zachowane kryterium')", [criterion, workspace, group]);
+    expect(await scalar("select group_type from public.goals where id=$1", [group])).toBe("task");
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    await expect(database.query("select public.update_goal_details_checked($1,1,'{\"groupType\":\"category\",\"criteria\":[]}'::jsonb,$2)", [group, crypto.randomUUID()])).rejects.toThrow("group_conversion_has_outcome_history");
+    expect(await scalar("select count(*)::int from public.goal_criteria where id=$1", [criterion])).toBe(1);
+    expect(await scalar("select outcome from public.goals where id=$1", [group])).toBe("Zachowany opis");
+    expect(await scalar("select group_type from public.goals where id=$1", [group])).toBe("task");
+    const convertible = crypto.randomUUID(), action = crypto.randomUUID();
+    await database.query("select public.create_action_group($1,$2,$3,'Wydajność','Opis','custom',null,'Pomiar','', '[]'::jsonb,$2,'[]'::jsonb,'task')", [workspace, convertible, action]);
+    await database.query("select public.update_goal_details_checked($1,1,'{\"groupType\":\"category\"}'::jsonb,$2)", [convertible, crypto.randomUUID()]);
+    expect(await scalar("select goal_id::text from public.actions where id=$1", [action])).toBe(convertible);
+    expect(await scalar("select group_type from public.goals where id=$1", [convertible])).toBe("category");
+  });
+
+  it("grupy i ich Działania pozostają odizolowane między Workspace'ami", async () => {
+    const user = crypto.randomUUID(), other = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1),($2)", [user, other]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    const foreign = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [other]);
+    const group = crypto.randomUUID();
+    await database.query("insert into public.goals(id,workspace_id,title,group_type) values ($1,$2,'UI/UX','category')", [group, foreign]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    await expect(database.query("select public.create_action_item($1,$2,$3,null,'Cross workspace','',null,false,$2)", [workspace, crypto.randomUUID(), group])).rejects.toThrow();
+    await expect(database.query("select public.create_action_group($1,$2,null,'Foreign','','custom',null,null,null,'[]'::jsonb,$2,'[]'::jsonb,'category')", [foreign, crypto.randomUUID()])).rejects.toThrow("workspace_access_denied");
+    expect(await scalar("select count(*)::int from public.goals where id=$1", [group])).toBe(0);
   });
 
   it("Działanie → Notatka → Działanie zachowuje odrębne audyty i bezpieczne retry", async () => {

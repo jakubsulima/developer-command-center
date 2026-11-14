@@ -1,0 +1,7 @@
+.context-add-trigger { display: inline-flex; flex-shrink: 0; }
+.page-add-button .context-add-chevron { width: 14px; height: 14px; }
+.context-add-menu { position: fixed; z-index: 90; display: grid; width: min(260px, calc(100vw - 24px)); padding: 6px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: 0 12px 36px rgb(0 0 0 / .28); }
+.context-add-menu > button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--foreground); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.context-add-menu > button:is(:hover, :focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; background: var(--muted); }
+.context-add-menu > button > svg { flex-shrink: 0; width: 18px; height: 18px; color: var(--muted-foreground); }
+@media (max-width: 767px) { .page-add-button .context-add-chevron { display: none; } }

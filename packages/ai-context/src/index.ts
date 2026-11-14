@@ -6,7 +6,7 @@ export interface ContextRequest {
 export interface ContextSource { key: string; type: ContextRequest["target"]["type"] | "knowledge" | "progress"; id: string; title: string; route: string; updatedAt: string | null; version: number | null }
 export type ContextSection =
   | { type: "project"; source: ContextSource; description: string }
-  | { type: "goal"; source: ContextSource; outcome: string; status: string; criteria: { title: string; completed: boolean }[] }
+  | { type: "goal"; source: ContextSource; groupType?: "category" | "task"; outcome: string; status: string; criteria: { title: string; completed: boolean }[] }
   | { type: "action"; source: ContextSource; detail: string; status: string; blocker?: string; reviewOn?: string; scheduledFor?: string; checklist: { title: string; completed: boolean }[] }
   | { type: "knowledge"; source: ContextSource; kind: string; detail: string; url?: string; readingPosition?: string }
   | { type: "progress"; source: ContextSource; kind: string; content: string };
@@ -63,7 +63,7 @@ export function renderContextMarkdown(bundle: ContextBundle) {
     const source = section.source;
     output.push(`\n### ${source.title}`, `Źródło: ${source.key} · ${source.route} · Wersja: ${source.version ?? "nieznana"} · Aktualizacja: ${source.updatedAt ?? "nieznana"}`);
     if (section.type === "project") output.push(section.description);
-    else if (section.type === "goal") output.push(`Status: ${section.status}`, `Rezultat: ${section.outcome}`, ...section.criteria.map((criterion) => `- [${criterion.completed ? "x" : " "}] ${criterion.title}`));
+    else if (section.type === "goal") output.push(`Rodzaj grupy: ${section.groupType === "category" ? "Kategoria działań" : "Zadanie nadrzędne"}`, `Status: ${section.status}`, `${section.groupType === "category" ? "Opis" : "Rezultat"}: ${section.outcome}`, ...section.criteria.map((criterion) => `- [${criterion.completed ? "x" : " "}] ${criterion.title}`));
     else if (section.type === "action") output.push(`Status: ${section.status}`, section.detail, ...(section.blocker ? [`Blokada: ${section.blocker}`] : []), ...(section.reviewOn ? [`Powrót do blokady: ${section.reviewOn}`] : []), ...(section.scheduledFor ? [`Termin: ${section.scheduledFor}`] : []), ...section.checklist.map((item) => `- [${item.completed ? "x" : " "}] ${item.title}`));
     else if (section.type === "knowledge") output.push(`Rodzaj: ${section.kind}`, section.detail, ...(section.url ? [`Link do źródła (bez pobierania strony): ${section.url}`] : []), ...(section.readingPosition ? [`Pozycja czytania: ${section.readingPosition}`] : []));
     else output.push(`Aktualizacja: ${section.kind}`, section.content);

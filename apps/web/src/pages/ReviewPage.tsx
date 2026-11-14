@@ -26,7 +26,7 @@ const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", 
 const reviewTabs = [
   { id: "summary", label: "Tydzień", icon: CalendarCheck, title: "Podsumowanie tygodnia" },
   { id: "plan", label: "Plan", icon: CalendarDays, title: "Plan na kolejny tydzień" },
-  { id: "ai", label: "AI", icon: Sparkles, title: "Przegląd Celów z AI" },
+  { id: "ai", label: "AI", icon: Sparkles, title: "Przegląd grup działań z AI" },
   { id: "history", label: "Historia", icon: RefreshCw, title: "Historia i stan przestrzeni" }
 ] as const;
 type ReviewTab = typeof reviewTabs[number]["id"];
@@ -263,7 +263,7 @@ export function ReviewPage() {
                 <div className="weekly-activity-detail-heading"><div><span className="section-kicker">{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · {state.workspaceTimezone}</span><h3>{activityKind === "actions" ? "Ukończone Działania" : activityKind === "knowledge" ? "Dodana Wiedza" : "Aktualizacje postępu"}</h3></div><Button variant="ghost" onClick={() => setActivityKind(null)}>Zamknij</Button></div>
                 <div className="weekly-activity-filters">
                   <label>Projekt<select aria-label="Filtruj szczegóły po Projekcie" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}><option value="">Wszystkie Projekty</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
-                  <label>Cel<select aria-label="Filtruj szczegóły po Celu" value={activityGoalFilter} onChange={(event) => setActivityGoalFilter(event.target.value)}><option value="">Wszystkie Cele</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
+                  <label>Grupa działań<select aria-label="Filtruj szczegóły po grupy" value={activityGoalFilter} onChange={(event) => setActivityGoalFilter(event.target.value)}><option value="">Wszystkie grupy</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
                 </div>
                 {activityPage.isPending ? <p className="muted-copy">Wczytuję szczegóły tego tygodnia…</p> : null}
                 {activityPage.isError ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać szczegółów. <Button variant="ghost" onClick={() => void activityPage.refetch()}>Spróbuj ponownie</Button></p> : null}
@@ -284,7 +284,7 @@ export function ReviewPage() {
                 </> : <p>Ten Plan nie zawierał zapisanych Działań.</p>}
               </section>
               {planForThisWeek?.snapshot?.plan.selectedGoals.length ? <section className="weekly-goal-results" aria-labelledby="weekly-goal-results-title">
-                <div><span className="section-kicker">Rezultaty i kryteria</span><h3 id="weekly-goal-results-title">Cele z Planu</h3></div>
+                <div><span className="section-kicker">Rezultaty i kryteria</span><h3 id="weekly-goal-results-title">Grupy działań z Planu</h3></div>
                 {planForThisWeek.snapshot.plan.selectedGoals.map((savedGoal) => {
                   const currentGoal = state.goals.find((goal) => goal.id === savedGoal.id);
                   const criteria = state.goalCriteria.filter((criterion) => criterion.goalId === savedGoal.id);
@@ -293,7 +293,7 @@ export function ReviewPage() {
                   const changedCriteria = savedCriteria?.filter((before) => criteria.some((now) => now.id === before.id && now.completed !== before.completed)).length ?? 0;
                   const addedCriteria = savedCriteria ? criteria.filter((now) => !savedCriteria.some((before) => before.id === now.id)).length : 0;
                   return <article className="weekly-goal-result" key={savedGoal.id}>
-                    {currentGoal ? <Link to={`/goals/${savedGoal.id}`}><strong>{savedGoal.title}</strong><span>{currentGoal.outcome || savedGoal.outcome || "Cel bez opisanego rezultatu"}</span></Link> : <><strong>{savedGoal.title}</strong><span>Cel niedostępny w bieżącej przestrzeni.</span></>}
+                    {currentGoal ? <Link to={`/goals/${savedGoal.id}`}><strong>{savedGoal.title}</strong><span>{currentGoal.outcome || savedGoal.outcome || "Grupa działań bez opisanego rezultatu"}</span></Link> : <><strong>{savedGoal.title}</strong><span>Grupa działań niedostępna w bieżącej przestrzeni.</span></>}
                     <p>{executionListComplete ? `${completedForGoal} ukończonych Działań w tym tygodniu` : "Wynik Działań będzie pełny po wczytaniu wszystkich stron."}</p>
                     <details><summary>Kryteria · stan bieżący</summary>{savedCriteria === undefined ? <p>Brak historycznego zapisu kryteriów.</p> : !criteria.length && !savedCriteria.length ? <p>Nie zdefiniowano kryteriów.</p> : <><p>{changedCriteria} zmienionych · {addedCriteria} dodanych od zapisu Planu.</p><ul>{criteria.map((criterion) => <li key={criterion.id}>{criterion.completed ? "✓" : "○"} {criterion.title}{savedCriteria.find((before) => before.id === criterion.id)?.completed !== undefined && savedCriteria.find((before) => before.id === criterion.id)?.completed !== criterion.completed ? " · zmieniono" : ""}</li>)}</ul>{savedCriteria.filter((before) => !criteria.some((now) => now.id === before.id)).map((criterion) => <p key={criterion.id}>Usunięto kryterium: {criterion.title}</p>)}</>}</details>
                   </article>;
@@ -308,7 +308,7 @@ export function ReviewPage() {
                   <p className="weekly-signal-note">Suma kategorii to liczba sygnałów; to samo Działanie może pojawić się w więcej niż jednej kategorii.</p>
                   <div className="weekly-suggestion-list">{weekly.suggestions.slice(1).map((suggestion) => <div className="weekly-suggestion-group" key={suggestion.id}><Link to={suggestion.to}><span><strong>{suggestion.title}</strong><small>{suggestion.detail}</small></span><ArrowRight /></Link>{suggestion.items?.length ? <ul>{suggestion.items.map((item) => <li key={item.id}><Link to={item.to}>{item.title}</Link></li>)}</ul> : null}</div>)}</div>
                 </details> : null}
-                {weekly.suggestions.length === 1 && weekly.suggestions[0].id === "continue" ? <p className="weekly-signal-note">Nie wykryto zaległości, blokad, Celów bez kroku ani nowych elementów w Skrzynce.</p> : null}
+                {weekly.suggestions.length === 1 && weekly.suggestions[0].id === "continue" ? <p className="weekly-signal-note">Nie wykryto zaległości, blokad, grup działań bez kroku ani nowych elementów w Skrzynce.</p> : null}
               </section> : null}
               <details className="weekly-summary-mobile-details"><summary>Pełny opis tygodnia</summary><p>{weekly.metricsAvailable ? weekly.generatedSummary : "Czekam na aktualne dane tygodnia."}</p></details>
             </Panel>
@@ -317,13 +317,13 @@ export function ReviewPage() {
               <div className="section-heading"><div><span className="section-kicker"><CalendarCheck />Twoja decyzja</span><h2>Ustaw kierunek na kolejny tydzień</h2></div></div>
               <p>Podsumowanie jest gotowe. Dopisz tylko jedną decyzję, jeśli chcesz — nie musisz wypełniać checklisty.</p>
               <label className="field-label" htmlFor="review-note">Najważniejsza decyzja <span className="optional-label">opcjonalnie</span></label>
-              <textarea id="review-note" rows={2} disabled={saving} placeholder="Np. Najpierw odblokowuję budżet, pozostałe Cele czekają." value={draft.value.note} onChange={(event) => draft.setValue({ ...draft.value, note: event.target.value })} />
+              <textarea id="review-note" rows={2} disabled={saving} placeholder="Np. Najpierw odblokowuję budżet, pozostałe Grupy działań czekają." value={draft.value.note} onChange={(event) => draft.setValue({ ...draft.value, note: event.target.value })} />
               <div className="weekly-decision-footer"><div><DraftStatus status={draft.status} />{draft.dirty ? <Button variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div></div>
               <Link className="button button-primary weekly-next-plan-link" to={tabHref("plan")}><CalendarDays />Zaplanuj kolejny tydzień<ArrowRight /></Link>
             </Panel>
             <details className="weekly-current-state">
               <summary>Stan przestrzeni na teraz</summary>
-              <div className="review-state-list"><p><strong>{activeGoalCount}</strong><span>{polishPluralForm(activeGoalCount, "aktywny Cel", "aktywne Cele", "aktywnych Celów")}</span></p><p><strong>{blockedCount}</strong><span>{polishPluralForm(blockedCount, "blokada", "blokady", "blokad")}</span></p><p><strong>{inboxCount}</strong><span>{polishPluralForm(inboxCount, "element w Skrzynce", "elementy w Skrzynce", "elementów w Skrzynce")}</span></p></div>
+              <div className="review-state-list"><p><strong>{activeGoalCount}</strong><span>{polishPluralForm(activeGoalCount, "aktywną grupę", "aktywne grupy", "aktywnych grup")}</span></p><p><strong>{blockedCount}</strong><span>{polishPluralForm(blockedCount, "blokada", "blokady", "blokad")}</span></p><p><strong>{inboxCount}</strong><span>{polishPluralForm(inboxCount, "element w Skrzynce", "elementy w Skrzynce", "elementów w Skrzynce")}</span></p></div>
             </details>
           </div>
 
@@ -392,7 +392,7 @@ export function ReviewPage() {
             <div><strong>Tydzień</strong><span>{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)}</span></div>
             <div><strong>Podsumowanie systemowe</strong><span>{weekly.metricsAvailable ? weekly.generatedSummary : "Brak aktualnych metryk — zapis podsumowania jest niedostępny."}</span></div>
             <div><strong>Liczniki</strong><span>{weekly.completedActions} ukończonych Działań · {weekly.knowledgeAdded} dodanych elementów Wiedzy · {weekly.progressUpdates} aktualizacji postępu</span></div>
-            <div><strong>Cele na kolejny tydzień</strong><span>{selectedGoals.length ? selectedGoals.map((goal) => goal.title).join(", ") : "Nie wybrano Celów"}</span>{!selectedGoals.length ? <Link to={tabHref("plan")}>Wybierz Cele w Planie</Link> : null}</div>
+            <div><strong>Grupy działań na kolejny tydzień</strong><span>{selectedGoals.length ? selectedGoals.map((goal) => goal.title).join(", ") : "Nie wybrano grup działań"}</span>{!selectedGoals.length ? <Link to={tabHref("plan")}>Wybierz Grupy działań w Planie</Link> : null}</div>
             <div><strong>Twoja decyzja</strong><span>{draft.value.note.trim() || "Brak dodatkowej notatki"}</span></div>
           </div><p className="muted-copy">Treść analizy AI nie jest dopisywana do historii zamknięć.</p></details>
           {Object.keys(planDraft.value.changes).length ? <p className="muted-copy" role="status">Najpierw zapisz lub cofnij przygotowane zmiany terminów.</p> : null}

@@ -47,7 +47,7 @@ export function SettingsPage() {
     <details className="settings-section"><summary><Bell /><span><strong>Przypomnienia</strong><small>Wybierz dni i porę powrotu do aplikacji</small></span><ChevronDown /></summary><div className="settings-section-content"><ReturnReminderSettings /></div></details>
     <details className="settings-section"><summary><Sparkles /><span><strong>Przegląd z AI</strong><small>Ostatnie {savedSettings.windowDays} dni · wynik zachowany przez {savedSettings.cacheHours / 24} dni</small></span><ChevronDown /></summary><div className="settings-section-content">
     <Panel className="ai-review-settings-panel">
-      <div className="section-heading"><div><span className="section-kicker">Przegląd Celów z AI</span><h2>Zakres i ponowne użycie wyniku</h2></div></div>
+      <div className="section-heading"><div><span className="section-kicker">Przegląd grup działań z AI</span><h2>Zakres i ponowne użycie wyniku</h2></div></div>
       <form onSubmit={(event) => void submit(event)}>
         <div className="ai-review-settings-fields">
           <label className="ai-review-setting-field" htmlFor="ai-review-window-days">

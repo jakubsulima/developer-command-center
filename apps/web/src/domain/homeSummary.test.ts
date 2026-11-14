@@ -16,8 +16,8 @@ describe("deriveHomeSummary", () => {
     ["overdue", { actions: [action("overdue", { scheduledFor: "2026-08-20" })] }],
     ["today_action", { actions: [action("today", { scheduledFor: "2026-08-21" })] }],
     ["today_action", { actions: [action("pinned", { pinnedToToday: true })] }],
-    ["next_action", { goals: [{ id: "goal-next", title: "Cel z następnym krokiem", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }], actions: [action("next", { goalId: "goal-next", isNext: true })] }],
-    ["goal_without_next_action", { goals: [{ id: "goal-1", title: "Cel", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }] }],
+    ["next_action", { goals: [{ id: "goal-next", title: "Grupa działań z następnym krokiem", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }], actions: [action("next", { goalId: "goal-next", isNext: true })] }],
+    ["goal_without_next_action", { goals: [{ id: "goal-1", title: "Grupa działań", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }] }],
     ["knowledge_queue", { inbox: [{ id: "inbox-1", kind: "text" as const, content: "Decyzja", createdAt: "2026-08-20T10:00:00.000Z", status: "unprocessed" as const }] }]
   ] as const)("selects %s by deterministic priority", (kind, changes) => {
     const state = { ...structuredClone(emptyState), ...changes } as unknown as AppState;
@@ -32,14 +32,14 @@ describe("deriveHomeSummary", () => {
 
   it("does not guess an arbitrary open action", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    state.goals = [{ id: "goal-1", title: "Grupa działań", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
     state.actions = [action("unmarked", { goalId: "goal-1", title: "Nieoznaczone Działanie" })];
     expect(deriveHomeSummary(state, now).recommendation.kind).toBe("goal_without_next_action");
   });
 
   it("always points action recommendations to the action detail route", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    state.goals = [{ id: "goal-1", title: "Grupa działań", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
     state.actions = [action("next", { goalId: "goal-1", isNext: true })];
     expect(deriveHomeSummary(state, now).recommendation.to).toBe("/actions/next");
   });
@@ -56,11 +56,11 @@ describe("deriveHomeSummary", () => {
   it("prefers a conscious next action across multiple goals", () => {
     const state = structuredClone(emptyState);
     state.goals = [
-      { id: "goal-b", title: "Późniejszy Cel", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-20T10:00:00.000Z" },
-      { id: "goal-a", title: "Wcześniejszy Cel", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-19T10:00:00.000Z" }
+      { id: "goal-b", title: "Późniejszy Grupa działań", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-20T10:00:00.000Z" },
+      { id: "goal-a", title: "Wcześniejszy Grupa działań", outcome: "", kind: "custom", status: "active", visibility: "active", priority: "normal", createdAt: "2026-08-19T10:00:00.000Z" }
     ];
     state.actions = [action("next-b", { goalId: "goal-b", isNext: true, createdAt: "2026-08-20T10:00:00.000Z" }), action("next-a", { goalId: "goal-a", isNext: true, createdAt: "2026-08-19T10:00:00.000Z" })];
-    expect(deriveHomeSummary(state, now).recommendation).toMatchObject({ kind: "next_action", title: "next-a", context: "Cel: Wcześniejszy Cel" });
+    expect(deriveHomeSummary(state, now).recommendation).toMatchObject({ kind: "next_action", title: "next-a", context: "Grupa: Wcześniejszy Grupa działań" });
   });
 
   it("does not duplicate a blocked overdue action in attention", () => {

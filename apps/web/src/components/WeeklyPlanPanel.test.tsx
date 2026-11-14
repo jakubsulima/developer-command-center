@@ -70,7 +70,7 @@ describe("WeeklyPlanPanel", () => {
     const user = userEvent.setup();
     const state = structuredClone(emptyState);
     state.areas = [{ id: "project-1", name: "Projekt", visibility: "active", createdAt: "", updatedAt: "" }];
-    state.goals = [{ id: "goal-1", title: "Cel", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active", areaId: "project-1" }];
+    state.goals = [{ id: "goal-1", title: "Grupa działań", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active", areaId: "project-1" }];
     const createAction = vi.fn().mockRejectedValueOnce(new Error("timeout")).mockResolvedValueOnce("new-action");
     renderPlan(state, { selectedGoalIds: ["goal-1"] }, { createAction });
     await user.type(screen.getByRole("textbox", { name: "Nowy krok" }), "Przygotować szkic");

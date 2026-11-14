@@ -1,5 +1,17 @@
 # Plan rozwoju aplikacji opartej na Projektach i Celach
 
+## Projekt i grupy Działań z 14 listopada 2026
+
+[Plan usprawnienia Projektu i grupowania Działań](./2026-11-14-project-workspace-and-action-groups-plan.md)
+obejmuje stabilny zapis, menu Dodaj, opis pod tytułem i wspólny pulpit na
+szerokim ekranie. Drugie wydanie zmienia rolę Celów na grupy Działań:
+stałe Kategorie, np. UI/UX i Wydajność, albo zamykalne Zadania nadrzędne.
+Zawiera kolejność prac, zgodność istniejących danych, zależności planu
+tygodnia i AI oraz kryteria odbioru. Status: pierwsze wydanie zaimplementowane
+i sprawdzone lokalnie; 638 testów, lint, typecheck i build demo poprawne.
+[Raport odbioru i zrzuty](../design/project-workspace-2026-11-14/README.md).
+Drugie wydanie zaimplementowane: Kategorie i Zadania nadrzędne, zachowane dane oraz powiązania; migracje i przegląd AI wdrożone do Supabase. Frontend sprawdzony lokalnie, 649 testów. [Raport drugiego wydania](../design/action-groups-2026-11-14/README.md).
+
 ## Spójne dodawanie z 3 listopada 2026
 
 [Plan ujednolicenia dodawania](./2026-11-03-creation-flows-consistency-plan.md)
@@ -8,8 +20,7 @@ szkice, kontekst, zapis i klawiaturę telefonu. Wskazuje różnice między mobil
 i desktopem, priorytety, sześć etapów zmian oraz kryteria odbioru zgodne
 z wariantem A. Status: etapy 1–5 oraz automatyczna część etapu 6 wykonane
 lokalnie. Wyniki i pozostałe ograniczenia opisano w planie oraz `design-qa.md`.
-Migracja triage nie została wdrożona; odbiór urządzeń i żywego UI pozostaje
-otwarty ze względu na wyłączony dostęp do lokalnej przeglądarki.
+Migrację triage wdrożono 14 listopada jako zależność grup Działań. Odbiór lokalnego UI opisują raporty z 4 i 14 listopada; fizyczny telefon nadal wymaga osobnej próby.
 
 ## Szybki zapis i regularny powrót z 24 października 2026
 
@@ -159,7 +170,7 @@ tylko-do-odczytu przeglądu wszystkich aktywnych Celów i rekomendacji na kolejn
 tydzień. Mechanizm `AIProposal → approval → AIExecution` pozostaje przewidziany
 dopiero dla późniejszych funkcji wykonujących mutacje.
 
-Aktualnym źródłem decyzji produktowych jest dokument
+Aktualne reguły grup Działań opisuje [ADR 0010](../adr/0010-action-groups.md). Model trwałych Projektów wprowadził dokument
 [Trwałe Projekty i proste Cele](./project-centered-hierarchy.md). Wcześniejszy
 dokument [Cele, działania cykliczne i wiedza](./goal-centric-redesign.md)
 pozostaje zapisem etapu przejściowego.
@@ -183,7 +194,7 @@ testy regresji i checkpointy HITL bieżącego sprintu nie są zamknięte.
 ## Stałe zasady nowego produktu
 
 - Projekt jest trwałym kontenerem dla Celów, Zadań i Wiedzy.
-- Cel jest prostym, możliwym do zamknięcia rezultatem i może należeć do Projektu.
+- Grupa Działań jest stałą Kategorią albo zamykalnym Zadaniem nadrzędnym; może należeć do Projektu.
 - Działanie może być pojedyncze albo pochodzić z szablonu cyklicznego.
 - Wykonanie działania nie wymaga timera ani Focus Session.
 - Projekty, szablony celów i szablony cykliczne mogą być tworzone przez

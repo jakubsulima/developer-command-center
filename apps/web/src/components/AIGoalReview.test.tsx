@@ -23,7 +23,7 @@ describe("AIGoalReview", () => {
     const labels: Array<[string, string]> = [["goal-1", "Płynna praca w terminalu"]];
 
     expect(humanizeEntityReferences("Czy goalId goal-1 ma przekroczyć próg aktywności?", labels))
-      .toBe("Czy Cel „Płynna praca w terminalu” ma przekroczyć próg aktywności?");
+      .toBe("Czy Grupa działań „Płynna praca w terminalu” ma przekroczyć próg aktywności?");
     expect(humanizeEntityReferences("Sygnały missing_criteria i missing_next_action blokują postęp.", labels))
       .toBe("Sygnały brak kryteriów sukcesu i brak następnego Działania blokują postęp.");
     expect(humanizeEntityReferences("Brak missing_next_action. completed7Days: 1; progress entry.", labels))
@@ -31,16 +31,16 @@ describe("AIGoalReview", () => {
     expect(humanizeEntityReferences("Brak missing_next_action mimo 1 completed7Days.", labels))
       .toBe("Brak następnego Działania mimo jednego Działania ukończonego w ostatnich 7 dniach.");
     expect(humanizeEntityReferences("Sygnały stallują postęp.", labels)).toBe("Sygnały wstrzymują postęp.");
-    expect(humanizeEntityReferences("Dodaj kryteria dla celu 7876975f.", [["7876975f-a47d-4049-a295-b4f2196d732b", "Płynna praca w terminalu"]]))
-      .toBe("Dodaj kryteria dla celu „Płynna praca w terminalu”.");
+    expect(humanizeEntityReferences("Dodaj kryteria dla grupy 7876975f.", [["7876975f-a47d-4049-a295-b4f2196d732b", "Płynna praca w terminalu"]]))
+      .toBe("Dodaj kryteria dla grupy „Płynna praca w terminalu”.");
   });
 
   it("wymaga świadomej zgody i pokazuje deterministyczną symulację", async () => {
     const user = userEvent.setup();
     renderReview();
     await user.click(await screen.findByRole("tab", { name: "AI" }));
-    await screen.findByRole("heading", { name: "Przegląd Celów z AI" });
-    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje Cele" }));
+    await screen.findByRole("heading", { name: "Przegląd grup działań z AI" });
+    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
     expect(within(consent).getByText(/nie wysyłamy profilu/i)).toBeInTheDocument();
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
@@ -48,14 +48,14 @@ describe("AIGoalReview", () => {
     expect(screen.getByText("Symulacja")).toBeInTheDocument();
     const target = screen.getAllByLabelText("Dotyczy")[0]!;
     expect(within(target).getByRole("link", { name: /Zbudować spokojny budżet domowy/i })).toHaveAttribute("href", "/goals/goal-budget");
-    expect(screen.queryByRole("link", { name: /Przejdź do Celu/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Przejdź do grupy/ })).not.toBeInTheDocument();
   });
 
   it("draft AI nie zapisuje się przed zatwierdzeniem", async () => {
     const user = userEvent.setup();
     renderReview();
     await user.click(await screen.findByRole("tab", { name: "AI" }));
-    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje Cele" }));
+    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
     const add = await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" });
     await user.click(add[0]!);
@@ -70,7 +70,7 @@ describe("AIGoalReview", () => {
     const user = userEvent.setup();
     renderReview();
     await user.click(await screen.findByRole("tab", { name: "AI" }));
-    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje Cele" }));
+    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
     await user.click((await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" }))[0]!);
     const dialog = screen.getByRole("dialog", { name: "Zatwierdź krok AI w Planie" });
@@ -90,9 +90,9 @@ describe("AIGoalReview", () => {
     renderStart();
     await screen.findByRole("heading", { name: "Kierunek od AI" });
     expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje Cele" }));
+    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
-    expect(within(consent).getByText(/aktywne Cele, ich kryteria/i)).toBeInTheDocument();
+    expect(within(consent).getByText(/aktywne grupy, ich kryteria/i)).toBeInTheDocument();
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
     expect(await screen.findByText("Główna rekomendacja")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/review?tab=ai");
@@ -113,7 +113,7 @@ describe("AIGoalReview", () => {
     await user.dblClick(within(draft).getByRole("button", { name: "Zatwierdź i dodaj" }));
     expect(await within(screen.getByRole("region", { name: "Na dziś" })).findByRole("link", { name: "Krok ze Startu" })).toBeInTheDocument();
     expect(screen.getAllByText("Krok ze Startu")).toHaveLength(1);
-    expect(screen.getByText(/Dane Celów zmieniły się od tej analizy/)).toBeInTheDocument();
+    expect(screen.getByText(/Dane grup działań zmieniły się od tej analizy/)).toBeInTheDocument();
     expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
   });
 });

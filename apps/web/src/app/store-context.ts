@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule, WeeklyReviewSnapshot } from "../domain/types";
+import type { ActionGroupType, ActionResultInput, ActionStatus, AppState, CommitmentStatus, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, MissedOccurrencePolicy, NewLearningGoalInput, NewProjectInput, ProjectPreset, ReadingStatus, RecurrenceRule, WeeklyReviewSnapshot } from "../domain/types";
 import type { AuthMode } from "../auth/auth-context";
 import type { SyncState } from "./workspaceMutationCoordinator";
 import type { WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -14,6 +14,7 @@ export interface CreatedProjectReference {
 }
 
 export interface NewGoalInput {
+  groupType?: ActionGroupType;
   title: string;
   outcome: string;
   firstActionTitle?: string;
@@ -55,7 +56,7 @@ export interface WeeklyReviewSaveMetadata {
 }
 
 export type NewInboxTriageIntent =
-  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; templateId?: string; criteria?: string[] }
+  | { kind: "goal"; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; groupType?: ActionGroupType; templateId?: string; criteria?: string[] }
   | { kind: "action"; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
   | { kind: "knowledge"; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus; sourceBookId?: string };
 
@@ -80,7 +81,7 @@ export interface AppStore {
   submitInboxTriageFeedback: (proposalId: string, rating: AIInboxTriageFeedbackRating) => Promise<void>;
   search: (query: string, limit?: number) => Promise<SearchResult[]>;
   createGoal: (input: NewGoalInput) => Promise<string>;
-  updateGoal: (goalId: string, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
+  updateGoal: (goalId: string, changes: { groupType?: ActionGroupType; title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
   createAction: (input: NewActionInput, idempotencyKey?: string) => Promise<string>;
   updateAction: (actionId: string, changes: { title?: string; detail?: string; scheduledFor?: string | null; pinnedToToday?: boolean; goalId?: string | null; areaId?: string | null; position?: number; checklist?: Array<{ id: string; title: string; completed: boolean }> }, expectedVersion?: number) => Promise<void>;
   setActionStatus: (actionId: string, status: ActionStatus, blocker?: string, expectedVersion?: number, reviewOn?: string | null) => Promise<void>;

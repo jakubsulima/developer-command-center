@@ -24,7 +24,7 @@ export function MultiCombobox({ label, options, value, onChange, disabled = fals
   }, [open]);
   return <div className="multi-combobox" ref={rootRef}>
     <div className="combobox-chips">{selected.map((option) => <span key={option.id}>{option.label}<button type="button" disabled={disabled} aria-label={`Usuń powiązanie: ${option.label}`} onClick={() => onChange(value.filter((id) => id !== option.id))}><X /></button></span>)}</div>
-    <Input disabled={disabled} role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && available[active] ? `${listId}-${available[active].id}` : undefined} value={query} placeholder="Wyszukaj i dodaj Cel…" onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={(event) => {
+    <Input disabled={disabled} role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && available[active] ? `${listId}-${available[active].id}` : undefined} value={query} placeholder="Wyszukaj i dodaj Grupa działań…" onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={(event) => {
       if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive((index) => Math.max(0, Math.min(Math.max(available.length - 1, 0), index + 1))); }
       if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(0, index - 1)); }
       if (event.key === "Enter" && open && available[active]) { event.preventDefault(); choose(available[active].id); }

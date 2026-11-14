@@ -18,7 +18,7 @@ describe("Knowledge Module", () => {
     const state = {
       ...structuredClone(emptyState),
       areas: [{ id: "project", name: "Projekt", visibility: "active" as const, createdAt: "now", updatedAt: "now" }],
-      goals: [{ id: "goal", title: "Cel", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const, areaId: "project" }],
+      goals: [{ id: "goal", title: "Grupa działań", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const, areaId: "project" }],
       knowledge: [{ id: "note", type: "note" as const, title: "Notatka", detail: "" }, { id: "source", type: "resource" as const, title: "Źródło", detail: "" }],
       knowledgeLinks: [
         { id: "goal-link", knowledgeItemId: "note", goalId: "goal", meaning: "reference" as const, createdAt: "2026-08-02" },

@@ -6,9 +6,9 @@ odzyskiwania kontekstu i pomaga doprowadzać rozpoczęte rzeczy do wyniku.
 ## Current language — Projects as persistent contexts
 
 **Project / Projekt**:
-Trwały, własny kontekst pracy, który grupuje Cele, Działania i Wiedzę. Projekt
+Trwały, własny kontekst pracy, który grupuje grupy Działań, Działania i Wiedzę. Projekt
 nie ma jednego warunku ukończenia; można go archiwizować, ale nie „osiąga się”
-go tak jak Celu. W bieżącym modelu danych jest addytywnie oparty na tabeli
+go jak zadania nadrzędnego. W bieżącym modelu danych jest addytywnie oparty na tabeli
 `areas`, aby zachować istniejące rekordy i relacje.
 _Avoid_: Goal, one-off outcome, temporary task list
 
@@ -17,10 +17,24 @@ Kategoria może podpowiedzieć wybór przy tworzeniu, lecz nie zmienia szablonu
 istniejącego Projektu. Czytelnia prezentuje książki i powiązaną Wiedzę w zwykłym
 kontekście Projektu; nie jest oddzielnym modułem ani wymogiem Workspace'u.
 
-**Goal / Cel**:
-Prosty, możliwy do zamknięcia rezultat. Cel może należeć do jednego Projektu
-albo pozostać samodzielny; nie jest nadrzędnym kontenerem całej pracy.
-_Avoid_: Project, Area, Workspace, permanent responsibility
+**Action Group / Grupa działań**:
+Jedna opcjonalna grupa dla Działania: **Kategoria**, np. UI/UX lub Wydajność,
+albo **Zadanie nadrzędne**. Grupa może należeć do Projektu lub być samodzielna.
+Kategoria jest stałym tematem pracy, bez wymaganego rezultatu, kryteriów sukcesu,
+daty docelowej i ukończenia. Zadanie nadrzędne można jawnie ukończyć; rezultat
+oraz kryteria są opcjonalne. Ukończenie wszystkich Działań nie zamyka grupy.
+Nowe formularze domyślnie proponują Kategorię. Nie tworzymy drugiego obowiązkowego
+wymiaru klasyfikacji ani wielopoziomowego drzewa zadań.
+
+Techniczne `Goal`, `goals`, `goalId` i adresy `/goals` pozostają dla zgodności.
+`groupType` / `group_type` rozróżnia `category` i `task`; brak pola w starszym
+snapshotcie oznacza `task`. Dotychczasowe Cele stają się Zadaniami nadrzędnymi
+bez zmiany ID, treści, statusu, dat, kryteriów, historii, Wiedzy czy Rutyn.
+Zmiana zadania w kategorię wymaga aktywnego rekordu bez daty, kryteriów i historii
+rezultatów; blokujemy konwersję, która ukryłaby te informacje. Działania można
+przenosić pomiędzy grupami tego samego Projektu, zachowując tożsamość i historię.
+Plan tygodnia i AI nie traktują braku kryteriów lub następnego kroku kategorii
+jako problemu. Decyzja: [ADR 0010](docs/adr/0010-action-groups.md).
 
 **Action / Działanie**:
 Konkretny krok możliwy do utworzenia, zaplanowania, zablokowania, ukończenia,
@@ -32,27 +46,27 @@ Techniczna nazwa rekordu używanego jako trwały Projekt. Nie jest eksponowana
 w aktywnym interfejsie; pozostaje w schemacie dla kompatybilności.
 _Avoid_: user-facing module, Goal
 
-**Goal Template / Szablon Celu**:
+**Task Template / Szablon zadania nadrzędnego**:
 Edytowalna kopia języka rezultatu, kryteriów i proponowanych Działań. Szablon
-systemowy jest wyłącznie propozycją i nigdy nie aktywuje Celu automatycznie.
+systemowy jest wyłącznie propozycją i nigdy nie aktywuje zadania automatycznie.
 
 **Recurring Action / Działanie cykliczne**:
 Szablon serii materializujący zwykłe Działania według jawnej reguły i strefy
 czasowej. Wystąpienie można zmienić lub ukończyć bez zmiany serii.
 
 **Progress Update / Aktualizacja postępu**:
-Krótka notatka, decyzja, rezultat, dowód albo blocker na osi czasu Celu.
+Krótka notatka, decyzja, rezultat, dowód albo blocker na osi czasu grupy Działań.
 
 **Knowledge / Wiedza**:
 Jeden obszar z dwiema widocznymi częściami: Skrzynką surowych przechwyceń oraz
 Biblioteką Notatek, Materiałów, Decyzji, Rezultatów i Poszukiwań. Link albo treść
 dodane z globalnego „Dodaj” trafiają najpierw do Skrzynki, gdzie można je
-przetworzyć. Element Wiedzy może mieć wiele relacji z Celami, Działaniami,
+przetworzyć. Element Wiedzy może mieć wiele relacji z grupami Działań, Działaniami,
 seriami i innymi elementami Wiedzy; Materiał może na przykład potwierdzać Decyzję.
 Książka jest Materiałem z formatem, opcjonalnym autorem i wspólnym statusem
 czytania. Pozostaje jednym elementem Wiedzy w całym Workspace'ie, także gdy
 powiążą ją różne Projekty. Status czytania jest niezależny od Archiwum, Kosza,
-Celów i Działań. Relacja `source` oznacza Notatka → Materiał; nie jest
+grup Działań i Działań. Relacja `source` oznacza Notatka → Materiał; nie jest
 potwierdzeniem Decyzji.
 
 Krótka Notatka wymaga niepustej treści. Tytuł jest opcjonalny; jeśli go nie
@@ -60,7 +74,7 @@ podano, przy utworzeniu powstaje z pierwszej niepustej linii, po normalizacji
 białych znaków i skróceniu do 100 punktów kodowych. Pełna treść po usunięciu
 skrajnych białych znaków zachowuje podziały linii. Późniejsza edycja treści nie
 zmienia automatycznie utrwalonego tytułu. Notatka zapisana przy książce wskazuje
-ją przez relację `source`; jawny Projekt i Cel pozostają odrębnymi powiązaniami.
+ją przez relację `source`; jawny Projekt i grupa Działań pozostają odrębnymi powiązaniami.
 
 Szkice nowych notatek są trwałe tylko na bieżącym urządzeniu i rozdzielone
 według kontekstu, takiego jak książka albo Projekt. Retry używa stabilnego
@@ -74,15 +88,15 @@ nieznanego wyniku. Niewysłane szkice v2 otrzymują odrębne klucze przy
 migracji; próby wysłane i potwierdzenia zachowują swoje identyfikatory. Filtry
 Biblioteki działają przed kursorem strony: Projekt korzysta z semantyki
 `projectKnowledgeIds` (łącznie z jednokrotnym przejściem od notatki źródłowej
-do książki), a Cel obejmuje bezpośrednie powiązanie i powiązanie przez Działanie
-z tym Celem. Aktywne, archiwalne i usunięte wpisy są osobnymi widokami.
+do książki), a grupa obejmuje bezpośrednie powiązanie i powiązanie przez Działanie
+z tą grupą. Aktywne, archiwalne i usunięte wpisy są osobnymi widokami.
 
 Dawny niewysłany szkic innego typu nie zmienia rodzaju otwieranego formularza:
 przed zastąpieniem trafia do właściwego zakresu, a przy konflikcie do
 odzyskiwania. Nie przekierowujemy nierozstrzygniętej próby ani potwierdzenia.
-Materiały przekazane z książki do nowego Działania lub Celu są widoczne
+Materiały przekazane z książki do nowego Działania lub grupy są widoczne
 w formularzu i można je jawnie odłączyć przed wysłaniem. Relacja `material`
-pozostaje niezależna od Projektu, Celu i notatki źródłowej.
+pozostaje niezależna od Projektu, grupy i notatki źródłowej.
 
 **Today / Dzisiaj**:
 Projekcja Działań zaplanowanych, zaległych i świadomie przypiętych. Nie jest
@@ -91,7 +105,7 @@ planem, sesją pracy, timerem ani osobnym stanem domenowym.
 **Inbox Item**:
 Techniczna, zachowana koperta surowego przechwycenia widoczna jako Skrzynka
 wewnątrz Wiedzy. Nie jest osobnym modułem nawigacji. Triage zaczyna się od
-intencji: utwórz Cel, dodaj Działanie, zapisz w Bibliotece, odłóż albo odrzuć.
+intencji: utwórz grupę, dodaj Działanie, zapisz w Bibliotece, odłóż albo odrzuć.
 
 **Archive** i **Trash**:
 Odwracalne stany widoczności niezależne od osiągnięcia, ukończenia lub
@@ -104,7 +118,7 @@ tworzą i aktywny UI ich nie używa.
 
 **Tworzenie i szkic lokalny**:
 Ten sam typ ma wspólne pola i reguły na telefonie i desktopie. Równoważne
-wejścia w jednym Celu kontynuują ten sam szkic Działania, także przy
+wejścia w jednej grupie kontynuują ten sam szkic Działania, także przy
 przejściu z inline do panelu. Szkic ma pierwszeństwo przed kontekstem wejścia
 i filtrem; jego powiązania pozostają widoczne. Różne wersje szkicu można
 odzyskać bez nadpisywania wcześniejszej treści.
@@ -265,17 +279,17 @@ _Avoid_: Learning Goal, Topic, Progress Bar
 
 - Wszystkie rekordy należą do jednego Workspace'u; złożone klucze obce i RLS
   blokują relacje między Workspace'ami.
-- Projekt jest trwałym kontenerem dla Celów, Działań i Wiedzy.
-- Cel może opcjonalnie należeć do jednego Projektu i powstać z jednego Szablonu.
-- Działanie może wskazywać Cel, Projekt albo pozostać samodzielne.
-- Cel może mieć najwyżej jedno następne, gotowe do pracy Działanie.
+- Projekt jest trwałym kontenerem dla grup Działań, Działań i Wiedzy.
+- Grupa może opcjonalnie należeć do jednego Projektu; szablony dotyczą zadań nadrzędnych.
+- Działanie może wskazywać jedną grupę, Projekt albo pozostać samodzielne.
+- Grupa może mieć najwyżej jedno następne, gotowe do pracy Działanie; dla kategorii nie jest ono wymagane.
 - Ukończenie Działania nie wymaga i nie tworzy Focus Session ani Checkpointu.
 - Działanie cykliczne przechowuje regułę, strefę, politykę zaległości i
   checklistę; każde wystąpienie jest zwykłym Działaniem.
 - Para `(recurring_template_id, occurrence_date)` jest unikalna.
 - `skip_missed` jest domyślną polityką; `carry_one` tworzy najwyżej jeden zaległy
   rekord po przerwie.
-- Wiedza może istnieć bez powiązań i łączyć się z Projektami, Celami, Działaniami
+- Wiedza może istnieć bez powiązań i łączyć się z Projektami, grupami Działań, Działaniami
   albo seriami bez zmiany własnej treści.
 - Aktualizacja postępu może wskazać Działanie i Wiedzę.
 - Projecty i Learning Goals są addytywnie backfillowane do Celów z tymi samymi

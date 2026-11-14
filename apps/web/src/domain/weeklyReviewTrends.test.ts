@@ -12,7 +12,7 @@ function review(id: string, startDate: string, timeZone: string, revision = 1, m
     metrics: { completedActions: metric, knowledgeAdded: 2, progressUpdates: 3 },
     summary: `Migawka ${revision}`,
     note,
-    plan: { startDate: end, endDateExclusive: "2026-10-19", selectedGoals: [{ id: "goal", title: "Cel prywatny" }], includeStandalone: false, actions: [{ id: `action-${revision}`, title: `Krok ${revision}`, status: "ready", version: 1, scheduledFor: "2026-10-12" }] }
+    plan: { startDate: end, endDateExclusive: "2026-10-19", selectedGoals: [{ id: "goal", title: "Grupa działań prywatny" }], includeStandalone: false, actions: [{ id: `action-${revision}`, title: `Krok ${revision}`, status: "ready", version: 1, scheduledFor: "2026-10-12" }] }
   };
   return { id, type: "weekly", templateVersion: 2, answers: {}, summary: snapshot.summary, completedAt: `${end}T10:00:00.000Z`, periodStart: startDate, periodEndExclusive: end, workspaceTimezone: timeZone, revision, snapshot };
 }

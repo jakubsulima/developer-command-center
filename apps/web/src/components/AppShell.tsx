@@ -1,4 +1,5 @@
 import { CreationDialog } from "./CreationForm";
+import { AddMenu, type AddMenuItem } from "./AddMenu";
 import { lazy, Suspense, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -24,7 +25,7 @@ const navigation = [
   { to: "/", label: "Start", icon: CalendarDays },
   { to: "/projects", label: "Projekty", icon: FolderKanban },
   { to: "/routines", label: "Rutyny", icon: Repeat2 },
-  { to: "/goals", label: "Cele", icon: Flag },
+  { to: "/goals", label: "Grupy działań", icon: Flag },
   { to: "/actions", label: "Działania", icon: CheckSquare },
   { to: "/knowledge", label: "Wiedza", icon: Archive, badge: true },
   { to: "/review", label: "Podsumowanie", icon: CalendarCheck },
@@ -37,6 +38,7 @@ export type AppShellAddAction = {
   active?: boolean;
   onClick?: () => void;
   quickAdd?: AppShellQuickAddRequest;
+  menu?: AddMenuItem[];
 };
 
 export function AppShell({ children, aside, addAction, appearance, loadingView = false }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail"; loadingView?: boolean }) {
@@ -62,6 +64,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const [captureSaving, setCaptureSaving] = useState(false);
   const captureCloseGuard = useRef<(() => boolean) | null>(null);
   const [quickAddRequest, setQuickAddRequest] = useState<AppShellQuickAddRequest | undefined>();
+  const quickAddReturnFocus = useRef<HTMLElement | null>(null);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -79,11 +82,20 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const moreActive = ["/goals", "/knowledge", "/routines", "/review", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     if (loadingView) return;
+    quickAddReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     beginPerformanceTiming("quick-add");
     setQuickAddRequest(request);
     setQuickAddSession((session) => session + 1);
     setQuickAddOpen(true);
   }, [loadingView]);
+  const closeQuickAdd = useCallback(() => {
+    setQuickAddOpen(false);
+    // The loading dialog and form are separate lazy mounts. Keep the original
+    // trigger across that handoff, after the modal releases its inert background.
+    window.requestAnimationFrame(() => {
+      if (quickAddReturnFocus.current?.isConnected) quickAddReturnFocus.current.focus({ preventScroll: true });
+    });
+  }, []);
   useLayoutEffect(() => {
     // Collapsing the navigation space can clamp scrollY near the page end.
     // Treat that layout adjustment as the baseline, not an upward gesture.
@@ -217,7 +229,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
 
   return (
     <PageActionsContext.Provider value={{
-      add: addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
+      add: addAction?.menu ? <AddMenu label={addAction.label} ariaLabel={addAction.ariaLabel} items={addAction.menu} disabled={loadingView} onSelect={openQuickAdd} /> : addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
       search: <button className="icon-button page-search-button" disabled={loadingView} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
     }}>
     <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${bottomNavHidden ? " bottom-nav-hidden" : ""}`}>
@@ -263,7 +275,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
       </nav>
       <CreationDialog open={captureOpen} closeDisabled={captureSaving} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}><QuickCapture onSavingChange={setCaptureSaving} closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /></CreationDialog>
-      {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={() => setQuickAddOpen(false)}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={() => setQuickAddOpen(false)} /></Suspense> : null}
+      {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={closeQuickAdd}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={closeQuickAdd} /></Suspense> : null}
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
       <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
         <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
@@ -272,7 +284,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
           <button type="button" onClick={() => { setProfileCenterOpen(false); openQuickAdd(); }}><span><Plus /></span><strong>Dodaj dowolne</strong><small>Pełny wybór typów</small></button>
         </div></section>
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
-          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Cele</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
+          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Grupy działań</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
           <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span><ChevronRight /></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Ostatnie zapisy</small></span></NavLink>

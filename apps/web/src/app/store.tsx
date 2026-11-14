@@ -599,6 +599,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
         actionId,
         title: input.title,
         outcome: input.outcome,
+        groupType: input.groupType,
         firstActionTitle: input.firstActionTitle,
         firstActionDetail: input.firstActionDetail,
         kind: input.kind ?? "custom",
@@ -867,7 +868,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
     async setGoalStatus(goalId, status, reason) {
       const changedAt = new Date().toISOString();
       const progressId = crypto.randomUUID();
-      const progressContent = status === "achieved" ? "Cel oznaczono jako osiągnięty po świadomym potwierdzeniu." : status === "abandoned" ? `Cel porzucono. Powód: ${reason?.trim()}` : status === "paused" ? "Cel wstrzymano." : "Cel wznowiono.";
+      const progressContent = status === "achieved" ? "Zadanie ukończone po świadomym potwierdzeniu." : status === "abandoned" ? `Zadanie porzucone. Powód: ${reason?.trim()}` : status === "paused" ? "Grupa wstrzymana." : "Grupa wznowiona.";
       const command = { type: "set_goal_status", goalId, status, reason, progressId, progressContent, changedAt } as const;
       await runScopedCommand(mutationCoordinator, () => stateRef.current, `goal:${goalId}`, command, [{ collection: "goals", ids: [goalId] }, { collection: "progressEntries", ids: [progressId] }], async () => {
         if (mode !== "demo") await runRemote(async () => (await loadRepository()).setGoalStatusRemote(goalId, status, reason, progressId, progressContent), `goal:${goalId}`);

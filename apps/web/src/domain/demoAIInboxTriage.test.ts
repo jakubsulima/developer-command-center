@@ -17,14 +17,14 @@ describe("demo AI Inbox triage", () => {
     expect(proposal.proposal).toMatchObject({ decision: "knowledge", knowledgeKind: "resource", linkedType: "none" });
   });
 
-  it("rozpoznaje Działanie i wiąże je z aktywnym Celem", () => {
+  it("rozpoznaje Działanie i wiąże je z aktywnym grupą", () => {
     const state = structuredClone(emptyState);
     state.goals = [{ id: "goal-budget", title: "Budżet domowy", outcome: "Spokojne finanse", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
     const proposal = createDemoAIInboxTriageProposal(state, item("Zrob budzet domowy"));
     expect(proposal.proposal).toMatchObject({ decision: "action", linkedType: "goal", linkedId: "goal-budget" });
   });
 
-  it("rozpoznaje Cel, Projekt i bezpiecznie zatrzymuje niejasne treści", () => {
+  it("rozpoznaje Grupa działań, Projekt i bezpiecznie zatrzymuje niejasne treści", () => {
     const state = structuredClone(emptyState);
     state.areas = [{ id: "project-learn", name: "Nauka TypeScript", description: "Rozwój", visibility: "active", createdAt: "now", updatedAt: "now" }];
     expect(createDemoAIInboxTriageProposal(state, item("Chce osiagnac bieglosc w TypeScript")).proposal).toMatchObject({ decision: "goal", confidence: "medium", linkedType: "project", linkedId: "project-learn" });

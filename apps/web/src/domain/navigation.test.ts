@@ -21,11 +21,11 @@ describe("NavigationState", () => {
   it("supports older back fields while keeping breadcrumb limits at the UI boundary", () => {
     expect(readNavigationState({ backTo: "/projects/p1", backLabel: "Projekt" })).toMatchObject({ returnTo: "/projects/p1", returnLabel: "Projekt" });
     const page = breadcrumbsForPage(
-      { breadcrumbs: [{ label: "Projekty", to: "/projects" }, { label: "Finanse", to: "/projects/p1" }, { label: "Cel", to: "/goals/g1" }], returnTo: "/projects/p1", returnLabel: "Projekt" },
+      { breadcrumbs: [{ label: "Projekty", to: "/projects" }, { label: "Finanse", to: "/projects/p1" }, { label: "Grupa działań", to: "/goals/g1" }], returnTo: "/projects/p1", returnLabel: "Projekt" },
       [],
       { label: "Działanie" }
     );
-    expect(page.map((item) => item.label)).toEqual(["Projekty", "Finanse", "Cel", "Działanie"]);
+    expect(page.map((item) => item.label)).toEqual(["Projekty", "Finanse", "Grupa działań", "Działanie"]);
   });
 
   it("cuts a circular trail when a knowledge relation returns to an earlier entity", () => {

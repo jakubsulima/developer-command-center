@@ -45,11 +45,11 @@ function isActionScheduleView(view: ActionListView): view is ActionScheduleView 
 
 function filterLabel(value: string, kind: "project" | "goal", state: ReturnType<typeof useStore>["state"]) {
   if (kind === "project") return state.areas.find((area) => area.id === value)?.name ?? "Nieaktualny Projekt";
-  return state.goals.find((goal) => goal.id === value)?.title ?? "Nieaktualny Cel";
+  return state.goals.find((goal) => goal.id === value)?.title ?? "Nieaktualna grupa";
 }
 
 function compactContextLabel(context: ReturnType<typeof resolveActionContext>) {
-  if (context.kind === "goal") return context.name ? `Cel: ${context.name}` : "Cel";
+  if (context.kind === "goal") return context.name ? `Grupa: ${context.name}` : "Grupa działań";
   if (context.kind === "project") return context.name ? `Projekt: ${context.name}` : "Projekt";
   if (context.kind === "missing-project") return "Projekt niedostępny";
   return "Samodzielne działanie";
@@ -85,6 +85,15 @@ function groupOpenActions(items: GoalAction[], view: ActionListView, today: stri
 
 export function ActionsPage() {
   const { state, mode, loading, setActionStatus, undoActionCompletion } = useStore();
+  const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const { id, mode: createdMode } = (event as CustomEvent<{ id: string; mode: string }>).detail;
+      if (createdMode === "action") setCreatedItems((current) => ({ workspaceId: state.workspaceId, ids: [...(current.workspaceId === state.workspaceId ? current.ids : []), id] }));
+    };
+    window.addEventListener("creation:succeeded", receive);
+    return () => window.removeEventListener("creation:succeeded", receive);
+  }, [state.workspaceId]);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -117,7 +126,8 @@ export function ActionsPage() {
   });
   const highlightedAction = highlightId ? state.actions.find((action) => action.id === highlightId) ?? highlightQuery.data : undefined;
   const pageItems = actionsPage.data?.items ?? [];
-  const items = [highlightedAction, ...pageItems]
+  const justCreated = createdItems.workspaceId === state.workspaceId ? state.actions.filter((action) => createdItems.ids.includes(action.id)) : [];
+  const items = [highlightedAction, ...justCreated, ...pageItems]
     .filter((item): item is GoalAction => Boolean(item))
     .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
     .map((item) => state.actions.find((current) => current.id === item.id) ?? item)
@@ -208,7 +218,7 @@ export function ActionsPage() {
     setParams(next);
   };
 
-  const refreshActions = () => queryClient.resetQueries({ queryKey: ["workspace-page", "actions"] });
+  const refreshActions = () => queryClient.invalidateQueries({ queryKey: ["workspace-page", "actions"] });
   const rememberFocus = (action: GoalAction) => {
     focusAfterMutation.current = { actionId: action.id, index: Math.max(0, items.findIndex((item) => item.id === action.id)) };
   };
@@ -264,7 +274,7 @@ export function ActionsPage() {
           </div></div>}
           <div className="knowledge-filter-fields">
           <label><span>Projekt</span><select aria-label="Filtr Projektu" value={projectId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("project", event.target.value); else next.delete("project"); setParams(next); }}><option value="">Wszystkie projekty</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
-          <label><span>Cel</span><select aria-label="Filtr Celu" value={goalId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("goal", event.target.value); else next.delete("goal"); setParams(next); }}><option value="">Wszystkie cele</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
+          <label><span>Grupa działań</span><select aria-label="Filtr grupy" value={goalId ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("goal", event.target.value); else next.delete("goal"); setParams(next); }}><option value="">Wszystkie grupy działań</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
         </div></div> : null}
         {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{scheduleView !== "open" && scheduleView !== view ? <Badge>{actionScheduleViewLabels[scheduleView]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
       </section>
@@ -276,11 +286,11 @@ export function ActionsPage() {
         }
       }}>
       <div className="actions-collection">
-      <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i cel muszą pasować jednocześnie.</small> : null}</div>
-      {items.length ? <div className="actions-list-columns" aria-hidden="true"><span /><span>Działanie</span><span>Projekt / Cel</span><span>Status</span><span>Termin</span><span /></div> : null}
+      <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i grupa muszą pasować jednocześnie.</small> : null}</div>
+      {items.length ? <div className="actions-list-columns" aria-hidden="true"><span /><span>Działanie</span><span>Projekt / Grupa działań</span><span>Status</span><span>Termin</span><span /></div> : null}
       {loading || actionsPage.isPending ? <ListSkeleton rows={5} label="Ładowanie Działań" /> : null}
       {actionsPage.isError ? <Panel className="actions-error" role="alert"><RefreshCw /><div><strong>Nie udało się pobrać Działań.</strong><p>Spróbuj ponownie; bieżące filtry pozostaną zachowane.</p></div><Button onClick={retry}>Spróbuj ponownie</Button></Panel> : null}
-      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, Projekt lub Cel albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
+      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, Projekt lub Grupa działań albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
       {items.length ? <div className="actions-groups" aria-label={`Lista: ${actionListViewLabels[view]}`}>
         {groupedItems.map((group) => <section className="actions-group" key={group.key} aria-label={group.label}>{group.label ? <h2><span>{group.label}</span><small>{group.items.length}</small></h2> : null}<div className="actions-list" role="list">
         {group.items.map((action) => {

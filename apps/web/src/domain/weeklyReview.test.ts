@@ -14,7 +14,7 @@ describe("automatyczne podsumowanie tygodnia", () => {
   it("liczy aktywność i proponuje decyzje z bieżącego stanu", () => {
     const state: AppState = {
       ...emptyState,
-      goals: [{ id: "g-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }],
+      goals: [{ id: "g-1", title: "Grupa działań", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }],
       actions: [
         { id: "a-1", version: 1, goalId: "g-1", title: "Gotowe", detail: "", status: "completed", position: 0, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-08-05T10:00:00.000Z" },
         { id: "a-2", version: 1, goalId: "g-1", title: "Blokada", detail: "", status: "blocked", position: 1, isNext: false, pinnedToToday: false, checklist: [] }
@@ -49,11 +49,11 @@ describe("automatyczne podsumowanie tygodnia", () => {
     expect(deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z")).suggestions[0]).toMatchObject({ id: "blocked", to: "/actions?view=blocked&highlight=blocked" });
   });
 
-  it("udostępnia wszystkie kategorie i wszystkie Cele bez następnego kroku", () => {
+  it("udostępnia wszystkie kategorie i wszystkie Grupy działań bez następnego kroku", () => {
     const state: AppState = {
       ...emptyState,
       workspaceTimezone: "Europe/Warsaw",
-      goals: Array.from({ length: 4 }, (_, index) => ({ id: `g-${index}`, title: `Cel ${index}`, outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const })),
+      goals: Array.from({ length: 4 }, (_, index) => ({ id: `g-${index}`, title: `Grupa działań ${index}`, outcome: "", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const })),
       actions: [
         { id: "blocked", version: 1, title: "Blokada", detail: "", status: "blocked", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
         { id: "overdue", version: 1, title: "Zaległe", detail: "", status: "ready", position: 1, isNext: false, pinnedToToday: false, checklist: [], scheduledFor: "2026-08-01" }
@@ -71,7 +71,7 @@ describe("automatyczne podsumowanie tygodnia", () => {
   it("odrzuca aktywność i blokady należące do archiwalnych rodziców", () => {
     const state: AppState = {
       ...emptyState,
-      goals: [{ id: "archived-goal", title: "Archiwalny Cel", outcome: "", kind: "custom", status: "active", visibility: "archived", priority: "normal" }],
+      goals: [{ id: "archived-goal", title: "Archiwalny Grupa działań", outcome: "", kind: "custom", status: "active", visibility: "archived", priority: "normal" }],
       actions: [
         { id: "completed", version: 1, goalId: "archived-goal", title: "Stare Działanie", detail: "", status: "completed", position: 0, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-08-05T10:00:00.000Z" },
         { id: "blocked", version: 1, goalId: "archived-goal", title: "Stara blokada", detail: "", status: "blocked", blocker: "Stary kontekst", position: 1, isNext: false, pinnedToToday: false, checklist: [] }

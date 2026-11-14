@@ -1,3 +1,4 @@
+import { actionGroupType } from "./actionGroups";
 import { buildContextBundle, type ContextRequest, type ContextSection, type ContextSource, type ContextOmission } from "../../../../packages/ai-context/src/index";
 import type { AppState } from "./types";
 import { actionStatusLabels, goalStatusLabels, knowledgeKindLabels, progressKindLabels } from "./labels";
@@ -27,20 +28,20 @@ export function contextBundleFromData(data: ContextData, request: ContextRequest
   const omissions: ContextOmission[] = [];
   const source = (type: ContextSource["type"], item: { id: string; title?: string; name?: string; version?: number; updatedAt?: string; createdAt?: string }): ContextSource => ({ key: `${type}:${item.id}`, type, id: item.id, title: item.title ?? item.name ?? "Aktualizacja postępu", route: type === "project" ? `/projects/${item.id}` : type === "progress" ? `/goals/${data.progressEntries.find((p) => p.id === item.id)?.goalId ?? ""}` : `/${type === "knowledge" ? "knowledge" : `${type}s`}/${item.id}`, updatedAt: item.updatedAt ?? item.createdAt ?? null, version: item.version ?? null });
   for (const area of data.areas) sections.push({ type: "project", source: source("project",area), description: area.description ?? "" });
-  for (const goal of data.goals.slice(0,20)) sections.push({ type: "goal", source: source("goal",goal), outcome: goal.outcome, status: goalStatusLabels[goal.status], criteria: data.goalCriteria.filter((item) => item.goalId === goal.id).map(({ title, completed }) => ({ title, completed })) });
+  for (const goal of data.goals.slice(0,20)) sections.push({ type: "goal", source: source("goal",goal), groupType: actionGroupType(goal), outcome: goal.outcome, status: goalStatusLabels[goal.status], criteria: data.goalCriteria.filter((item) => item.goalId === goal.id).map(({ title, completed }) => ({ title, completed })) });
   for (const action of data.actions.slice(0,20)) sections.push({ type: "action", source: source("action",action), detail: action.detail, status: actionStatusLabels[action.status], blocker: action.blocker, reviewOn: action.reviewOn, scheduledFor: action.scheduledFor, checklist: action.checklist });
   for (const entry of data.progressEntries.slice(0,5)) sections.push({ type: "progress", source: source("progress",entry), kind: progressKindLabels[entry.kind], content: entry.content });
   for (const knowledge of data.knowledge.slice(0,10)) sections.push({ type: "knowledge", source: source("knowledge",knowledge), kind: knowledgeKindLabels[knowledge.type], detail: knowledge.detail, url: knowledge.sourceUrl, readingPosition: readingPositionLabel(knowledge) || undefined });
   for (const [name, items, limit] of [["goals",data.goals,20],["actions",data.actions,20],["progress",data.progressEntries,5],["knowledge",data.knowledge,10]] as const) if (items.length > limit) omissions.push({ sourceKey: name, reason: `Uwzględniono maksymalnie ${limit} rekordów.` });
   if (data.readLimited) omissions.push({ sourceKey: "content", reason: "Odczyt ograniczono do 40 000 znaków treści oraz 25 elementów jednej listy." });
-  if (data.contextMismatch) omissions.push({ sourceKey: "context", reason: "Projekt Działania różni się od Projektu jego Celu. Uwzględniono Projekt Celu." });
+  if (data.contextMismatch) omissions.push({ sourceKey: "context", reason: "Projekt Działania różni się od Projektu jego grupy. Uwzględniono Projekt grupy." });
   if (request.selection.includeKnowledge && request.selection.extraKnowledgeIds.some((id) => !data.knowledge.some((item) => item.id === id))) omissions.push({ sourceKey: "knowledge", reason: "Niektóre dodatkowe źródła są niedostępne lub zostały wykluczone." });
   const mainKey = `${request.target.type}:${request.target.id}`;
   const main = sections.find((section) => section.source.key === mainKey);
   if (!main) throw new Error("Obiekt kontekstu jest niedostępny. Odśwież dane.");
   const rootAction = request.target.type === "action" ? data.actions.find((item) => item.id === request.target.id) : undefined;
   const rootGoal = data.goals.find((item) => item.id === (request.target.type === "goal" ? request.target.id : rootAction?.goalId));
-  if (request.selection.includeGoal && rootAction?.goalId && !rootGoal) omissions.push({ sourceKey: "goal", reason: "Powiązany Cel jest niedostępny w aktualnym zakresie." });
+  if (request.selection.includeGoal && rootAction?.goalId && !rootGoal) omissions.push({ sourceKey: "goal", reason: "Powiązany Grupa jest niedostępny w aktualnym zakresie." });
   const parentProjectId = rootGoal?.areaId ?? rootAction?.areaId;
   if (request.selection.includeProject && parentProjectId && !data.areas.some((area) => area.id === parentProjectId)) omissions.push({ sourceKey: "project", reason: "Powiązany Projekt jest niedostępny w aktualnym zakresie." });
   return buildContextBundle(request,{ workspaceId: data.workspaceId, sections: [main,...sections.filter((section) => section !== main)], omissions }, generatedAt);

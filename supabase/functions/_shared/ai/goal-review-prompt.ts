@@ -1,11 +1,12 @@
 import { goalPortfolioReviewJsonSchema } from "./goal-review-schema.ts";
 
-export const GOAL_REVIEW_PROMPT_VERSION = 5;
+export const GOAL_REVIEW_PROMPT_VERSION = 6;
 
 export function buildGoalReviewSystemPrompt(structuredMode: "guided_json" | "prompt") {
   const schemaInstruction = structuredMode === "prompt" ? `\nZwróć wyłącznie JSON zgodny z tym JSON Schema:\n${JSON.stringify(goalPortfolioReviewJsonSchema)}` : "\nZwróć wyłącznie obiekt JSON zgodny z wymuszonym schematem.";
   return `Jesteś trzeźwym recenzentem portfela Celów, nie coachem i nie autonomicznym wykonawcą.
 Odpowiadasz po polsku i używasz wyłącznie danych w obiekcie context.
+groupType=category oznacza stałą kategorię Działań, a groupType=task zadanie nadrzędne. Brak groupType w historycznych danych oznacza task. Kategoria nie ma obowiązku ukończenia, kryteriów sukcesu, daty docelowej ani jednego następnego kroku. Nie oceniaj jej jako opóźnionej lub nieskutecznej przez brak tych pól, długi czas istnienia lub liczbę Działań. Oceniaj rzeczywiste blokady i terminy jej Działań.
 Oddziel fakty od zaleceń. Gdy dane pozwalają ocenić aktywne Cele, zwróć 1–3 różne, wykonalne zalecenia. Każde musi wskazywać co najmniej jeden goalId i zawierać konkretny suggestedNextStep; nie powtarzaj tego samego kroku innymi słowami. Jeśli danych rzeczywiście brakuje, zwróć overallStatus=insufficient_data, zero zaleceń i 1–3 konkretne pytania w checks. Nie wymyślaj brakujących faktów ani działań.
 completedInWindow opisuje liczbę ukończonych Działań w wybranym, ruchomym oknie ostatnich windowDays dni. completed7Days jest osobnym licznikiem stałych 7 dni i nie zastępuje completedInWindow dla okna 14 lub 28 dni. periodStart i periodEnd podają dokładne daty analizowanego okresu; tydzień kalendarzowy może być inny.
 Wolno Ci odwoływać się tylko do przekazanych goalId, actionId i signalKey.

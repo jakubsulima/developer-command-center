@@ -12,7 +12,7 @@ const review = (recommendations: AIGoalReviewRecommendation[]): AIGoalReview => 
   reviewId: "review", status: "ready", cached: false, generatedAt: "2026-09-19T10:00:00.000Z", periodStart: "2026-08-22", periodEnd: "2026-09-19", windowDays: 28, provider: "test", model: "test", analyzedGoalIds: [], omittedGoalIds: [],
   review: { schemaVersion: AI_GOAL_REVIEW_SCHEMA_VERSION, headline: "Kierunek", summary: "Podsumowanie", overallStatus: "attention", recommendations, checks: [], goalAssessments: [] }
 });
-const goal = (changes: Partial<Goal> = {}): Goal => ({ id: "goal", title: "Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", ...changes });
+const goal = (changes: Partial<Goal> = {}): Goal => ({ id: "goal", title: "Grupa działań", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", ...changes });
 const action = (changes: Partial<GoalAction> = {}): GoalAction => ({ id: "action", version: 1, title: "Działanie", detail: "", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [], ...changes });
 
 describe("AI start guidance", () => {
@@ -23,7 +23,7 @@ describe("AI start guidance", () => {
     expect(selectPrimaryAIRecommendation([])).toBeUndefined();
   });
 
-  it("wybiera szkic, Działanie, Cel albo jawny brak CTA", () => {
+  it("wybiera szkic, Działanie, Grupa działań albo jawny brak CTA", () => {
     const activeGoal = goal();
     const openAction = action();
     expect(selectAIStartGuidance(review([recommendation("draft", "now", { goalIds: [activeGoal.id], actionIds: [openAction.id], draftAction: { goalId: activeGoal.id, title: "Krok", detail: "" } })]), [activeGoal], [openAction]).cta.kind).toBe("draft");

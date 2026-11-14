@@ -89,7 +89,7 @@ function signalForAction(kind: "blocked" | "overdue", action: GoalAction): HomeA
 function actionContext(action: GoalAction, state: AppState) {
   if (action.goalId) {
     const goal = state.goals.find((candidate) => candidate.id === action.goalId);
-    if (goal) return `Cel: ${goal.title}`;
+    if (goal) return `Grupa: ${goal.title}`;
   }
   if (action.areaId) {
     const area = state.areas.find((candidate) => candidate.id === action.areaId);
@@ -123,7 +123,7 @@ export function deriveHomeSummary(state: AppState, now = new Date(), source: "de
   const attentionSignals: HomeAttentionSignal[] = [
     ...[...blocked, ...undatedBlocked].map((action) => signalForAction("blocked", action)),
     ...overdue.map((action) => signalForAction("overdue", action)),
-    ...goalsWithoutNextAction.map((goal) => ({ id: `goal-${goal.id}`, kind: "goal_without_next_action" as const, title: goal.title, detail: "Aktywny Cel nie ma gotowego następnego Działania.", to: `/goals/${encodeURIComponent(goal.id)}`, goalId: goal.id })),
+    ...goalsWithoutNextAction.map((goal) => ({ id: `goal-${goal.id}`, kind: "goal_without_next_action" as const, title: goal.title, detail: "Aktywne zadanie nadrzędne nie ma gotowego następnego Działania.", to: `/goals/${encodeURIComponent(goal.id)}`, goalId: goal.id })),
     ...queue.map((item) => ({ id: `knowledge-${item.id}`, kind: "knowledge_queue" as const, title: item.content, detail: "Element Skrzynki czeka na decyzję.", to: `/knowledge?section=inbox&status=${item.status}&item=${encodeURIComponent(item.id)}`, inboxItemId: item.id }))
   ];
 
@@ -131,9 +131,9 @@ export function deriveHomeSummary(state: AppState, now = new Date(), source: "de
   if (blocked[0]) recommendation = { kind: "blocked", title: `Odblokuj: ${blocked[0].title}`, detail: blocked[0].blocker ?? "Podejmij decyzję, która pozwoli ruszyć dalej.", to: actionQueueRoute("blocked", blocked[0].id) };
   else if (overdue[0]) recommendation = { kind: "overdue", title: `Zdecyduj o zaległym Działaniu: ${overdue[0].title}`, detail: "Ukończ, przełóż albo anuluj — nie przenoś go bez decyzji.", to: actionQueueRoute("overdue", overdue[0].id) };
   else if (todayActions[0]) recommendation = { kind: "today_action", title: `Zacznij od: ${todayActions[0].title}`, detail: todayActions[0].scheduledFor === today ? "To najbliższe Działanie zaplanowane na dziś." : "To Działanie zostało przez Ciebie przypięte na dziś.", to: actionRoute(todayActions[0]) };
-  else if (nextActions[0]) recommendation = { kind: "next_action", title: nextActions[0].title, detail: "To świadomie wybrane następne Działanie dla aktywnego Celu.", context: actionContext(nextActions[0], state), to: actionRoute(nextActions[0]) };
+  else if (nextActions[0]) recommendation = { kind: "next_action", title: nextActions[0].title, detail: "To świadomie wybrane następne Działanie dla aktywnego grupy.", context: actionContext(nextActions[0], state), to: actionRoute(nextActions[0]) };
   else if (undatedBlocked[0]) recommendation = { kind: "blocked", title: `Ustal, kiedy wrócić do blokady: ${undatedBlocked[0].title}`, detail: undatedBlocked[0].blocker ?? "Wybierz datę ponownego sprawdzenia.", to: actionQueueRoute("blocked", undatedBlocked[0].id) };
-  else if (goalsWithoutNextAction[0]) recommendation = { kind: "goal_without_next_action", title: `Ustal następny krok: ${goalsWithoutNextAction[0].title}`, detail: "Aktywny Cel potrzebuje jednego konkretnego ruchu.", to: `/goals/${encodeURIComponent(goalsWithoutNextAction[0].id)}` };
+  else if (goalsWithoutNextAction[0]) recommendation = { kind: "goal_without_next_action", title: `Ustal następny krok: ${goalsWithoutNextAction[0].title}`, detail: "Aktywne zadanie nadrzędne potrzebuje jednego konkretnego ruchu.", to: `/goals/${encodeURIComponent(goalsWithoutNextAction[0].id)}` };
   else if (queue[0]) recommendation = { kind: "knowledge_queue", title: `Przejrzyj kolejkę Wiedzy: ${queue[0].content}`, detail: "Podejmij decyzję, zanim element zacznie obciążać pamięć.", to: `/knowledge?section=inbox&status=${queue[0].status}&item=${encodeURIComponent(queue[0].id)}` };
   else if (allBlocked.length || upcomingActions.length) recommendation = { kind: "calm", title: "Brak pilnego kroku na dziś", detail: `Najbliższy termin: ${[...allBlocked.map((a) => a.reviewOn), ...upcomingActions.map((a) => a.scheduledFor)].filter(Boolean).sort()[0] ?? "sprawdź listę Działań"}.`, to: "/actions" };
   else recommendation = { kind: "calm", title: "Wszystko jest pod kontrolą", detail: "Nie ma pilnych wyjątków. Wybierz spokojnie kolejny krok.", to: "/?show=today" };

@@ -23,7 +23,8 @@ function renderApp(path = "/actions?view=open", withHistory = false) {
     const navigate = useNavigate();
     return <><button onClick={() => navigate(-1)}>Back test</button><button onClick={() => navigate(1)}>Forward test</button></>;
   }
-  return render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App />{withHistory ? <HistoryControls /> : null}<LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+  const view = render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App />{withHistory ? <HistoryControls /> : null}<LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+  return { ...view, queryClient };
 }
 
 function enableDesktopPreview() {
@@ -35,6 +36,38 @@ function enableDesktopPreview() {
 }
 
 describe("lista wszystkich Działań", () => {
+  it("pokazuje zapisane Działanie od razu, zachowując wcześniej widoczny wiersz", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const oldTitle = await screen.findByRole("link", { name: "Spisać stałe koszty" });
+    await user.click(screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
+    const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+    await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Krok bez odświeżania strony");
+    await user.type(within(dialog).getByLabelText("Opis"), "Treść nowego kroku");
+    await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
+    expect(await screen.findByRole("link", { name: "Krok bez odświeżania strony" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBe(oldTitle);
+  });
+
+  it("odświeża listę po zmianie statusu bez usuwania wczytanych wierszy", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderApp();
+    const title = await screen.findByRole("link", { name: "Spisać stałe koszty" });
+    const states: string[] = [];
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === "workspace-page" && event.query.queryKey[1] === "actions") states.push(event.query.state.status);
+    });
+    try {
+      await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Spisać stałe koszty" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
+      expect(await screen.findByRole("button", { name: "Zmień status: W toku — Spisać stałe koszty" })).toBeInTheDocument();
+      expect(title.isConnected).toBe(true);
+      expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBe(title);
+      expect(states.length).toBeGreaterThan(0);
+      expect(states).not.toContain("pending");
+    } finally { unsubscribe(); }
+  });
+
   it("pokazuje samodzielne Działanie i zachowuje sprzeczne filtry", async () => {
     const state = structuredClone(demoState);
     state.actions.push({ id: "standalone", version: 1, title: "Samodzielny krok", detail: "Bez kontekstu", status: "ready", position: 9, isNext: false, pinnedToToday: false, checklist: [] });
@@ -45,11 +78,11 @@ describe("lista wszystkich Działań", () => {
     expect(await screen.findByRole("link", { name: "Samodzielny krok" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Filtry Działań" }));
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "area-finanse");
-    await user.selectOptions(screen.getByLabelText("Filtr Celu"), "");
+    await user.selectOptions(screen.getByLabelText("Filtr grupy"), "");
     expect(await screen.findByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Samodzielny krok" })).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Filtr Celu"), "goal-budget");
-    expect(await screen.findByText("Projekt i cel muszą pasować jednocześnie.")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Filtr grupy"), "goal-budget");
+    expect(await screen.findByText("Projekt i grupa muszą pasować jednocześnie.")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "");
     expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
   });

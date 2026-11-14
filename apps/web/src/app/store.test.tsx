@@ -190,7 +190,7 @@ describe("StoreProvider", () => {
     expect(await screen.findByText("Nowy zdalny capture")).toBeInTheDocument();
   });
 
-  it("wykonuje zdalne komendy projektu, celu, Inboxu, Focus, AI, Review i eksportu", async () => {
+  it("wykonuje zdalne komendy projektu, grupy, Inboxu, Focus, AI, Review i eksportu", async () => {
     const user = userEvent.setup();
     renderStore(<Probe />);
     await screen.findByText("workspace-1");
@@ -219,7 +219,7 @@ describe("StoreProvider", () => {
     expect(screen.queryByText(/Remote Project/)).not.toBeInTheDocument();
   });
 
-  it("odświeża brakujący kontekst Workspace przed utworzeniem Celu", async () => {
+  it("odświeża brakujący kontekst Workspace przed utworzeniem grupy", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     queryClient.setQueryData(["workspace-state", "user-1"], structuredClone(emptyState));
     const user = userEvent.setup();

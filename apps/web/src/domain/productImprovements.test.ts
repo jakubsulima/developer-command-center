@@ -23,7 +23,7 @@ describe("product improvements",()=>{
   it("does not recommend future blockers or scheduled next steps as today's work",()=>{
     const state=structuredClone(emptyState);state.actions=[action("future",{status:"blocked",reviewOn:"2026-10-06",scheduledFor:"2026-09-20",pinnedToToday:true})];
     expect(deriveHomeSummary(state,now)).toMatchObject({attentionCount:0,recommendation:{kind:"calm"}});
-    state.goals=[{id:"goal",title:"Cel",outcome:"Rezultat",kind:"custom",status:"active",visibility:"active",priority:"normal"}];
+    state.goals=[{id:"goal",title:"Grupa działań",outcome:"Rezultat",kind:"custom",status:"active",visibility:"active",priority:"normal"}];
     state.actions=[action("future",{goalId:"goal",isNext:true,status:"blocked",reviewOn:"2026-10-06"})];
     expect(deriveHomeSummary(state,now).recommendation.kind).toBe("calm");
   });

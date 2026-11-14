@@ -1,13 +1,14 @@
+import { actionGroupType, categoryConversionBlocker } from "./actionGroups";
 import { applyReadingChanges } from "./readingProgress";
 import { validateSavedActionView, type SavedActionView } from "./savedActionViews";
 import { validateProjectParent } from "./projectHierarchy";
-import type { ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WeeklyReviewSnapshot, WorkItemStatus } from "./types";
+import type { ActionGroupType, ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WeeklyReviewSnapshot, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
 import { validateKnowledgeTarget } from "./knowledge";
 import { validateReviewOn } from "./blockerReview";
 
 export type InboxTriageIntent =
-  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; templateId?: string; criteria?: Array<{ id: string; title: string; completed: boolean }> }
+  | { kind: "goal"; goalId: string; actionId?: string; title: string; outcome: string; firstActionTitle?: string; areaId?: string; targetDate?: string; goalKind?: GoalKind; groupType?: ActionGroupType; templateId?: string; criteria?: Array<{ id: string; title: string; completed: boolean }> }
   | { kind: "action"; actionId: string; title: string; detail?: string; goalId?: string; areaId?: string; pinnedToToday?: boolean; targetDate?: string }
   | { kind: "knowledge"; knowledgeId: string; linkId?: string; projectLinkId?: string; sourceLinkId?: string; sourceBookId?: string; knowledgeKind: KnowledgeKind; title: string; detail: string; goalId?: string; projectId?: string; sourceUrl?: string; resourceFormat?: "book"; resourceAuthor?: string; readingStatus?: ReadingStatus };
 
@@ -22,6 +23,7 @@ export type DomainCommand =
   decidedAt: string;
 } | {
   type: "create_goal";
+  groupType?: ActionGroupType;
   goalId: string;
   actionId?: string;
   title: string;
@@ -37,6 +39,7 @@ export type DomainCommand =
   createdAt: string;
 } | {
   type: "update_goal";
+  groupType?: ActionGroupType;
   goalId: string;
   title?: string;
   outcome?: string;
@@ -401,7 +404,9 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
   }
 
   if (command.type === "set_goal_status") {
-    if (!state.goals.some((goal) => goal.id === command.goalId)) throw new Error("goal_not_found");
+    const group = state.goals.find((goal) => goal.id === command.goalId);
+    if (!group) throw new Error("goal_not_found");
+    if (actionGroupType(group) === "category" && !["active", "paused"].includes(command.status)) throw new Error("category_cannot_be_completed");
     if (command.status === "abandoned" && !command.reason?.trim()) throw new Error("goal_abandon_reason_required");
     const progressEntries = command.progressId && command.progressContent?.trim() && !state.progressEntries.some((entry) => entry.id === command.progressId) ? [{
       id: command.progressId, goalId: command.goalId, kind: "decision" as const,
@@ -455,7 +460,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     let next = state;
     if (command.intent.kind === "goal") next = executeDomainCommand(next, {
       type: "create_goal", goalId: command.intent.goalId, actionId: command.intent.actionId,
-      title: command.intent.title, outcome: command.intent.outcome, firstActionTitle: command.intent.firstActionTitle, targetDate: command.intent.targetDate,
+      title: command.intent.title, outcome: command.intent.outcome, groupType: command.intent.groupType, firstActionTitle: command.intent.firstActionTitle, targetDate: command.intent.targetDate,
       areaId: command.intent.areaId, kind: command.intent.goalKind ?? "custom", templateId: command.intent.templateId, criteria: command.intent.criteria, createdAt: command.decidedAt
     });
     if (command.intent.kind === "action") next = executeDomainCommand(next, {
@@ -643,6 +648,13 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!action) throw new Error("action_not_found");
     if (command.expectedVersion !== undefined && action.version !== command.expectedVersion) throw new Error("action_version_conflict");
     if (command.title !== undefined && !command.title.trim()) throw new Error("action_title_required");
+    if (command.goalId) {
+      const group = state.goals.find((item) => item.id === command.goalId && item.visibility === "active");
+      if (!group) throw new Error("goal_not_found");
+      const projectId = command.areaId === null ? undefined : command.areaId ?? action.areaId;
+      if (projectId && projectId !== group.areaId) throw new Error("goal_project_mismatch");
+    }
+
     return { ...state, actions: state.actions.map((item) => item.id === command.actionId ? {
       ...item,
       title: command.title?.trim() ?? item.title,
@@ -650,6 +662,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       scheduledFor: command.scheduledFor === null ? undefined : command.scheduledFor ?? item.scheduledFor,
       pinnedToToday: command.pinnedToToday ?? item.pinnedToToday,
       goalId: command.goalId === null ? undefined : command.goalId ?? item.goalId,
+      isNext: command.goalId !== undefined && command.goalId !== item.goalId ? false : item.isNext,
       areaId: command.areaId === null ? undefined : command.areaId ?? item.areaId,
       position: command.position ?? item.position,
       checklist: command.checklist ?? item.checklist,
@@ -790,11 +803,14 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const outcome = command.outcome.trim();
     const firstActionTitle = command.firstActionTitle?.trim();
     if (!title) throw new Error("goal_title_required");
-    if (!outcome) throw new Error("goal_outcome_required");
+    const groupType = command.groupType ?? "task";
+    if (!["category", "task"].includes(groupType)) throw new Error("invalid_group_type");
+    if (groupType === "category" && (command.targetDate || command.criteria?.length)) throw new Error("category_outcome_fields_forbidden");
+    if (command.areaId && !state.areas.some((area) => area.id === command.areaId && area.visibility === "active")) throw new Error("area_not_found");
     if (firstActionTitle && !command.actionId) throw new Error("action_id_required");
     const existing = state.goals.find((goal) => goal.id === command.goalId);
     if (existing) {
-      if (existing.title === title && existing.outcome === outcome) return state;
+      if (existing.title === title && existing.outcome === outcome && actionGroupType(existing) === groupType) return state;
       throw new Error("goal_id_conflict");
     }
     if (command.actionId && state.actions.some((action) => action.id === command.actionId)) throw new Error("action_id_conflict");
@@ -807,6 +823,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       ...state,
       goals: [...state.goals, {
         id: command.goalId,
+        groupType,
         title,
         outcome,
         kind: command.kind,
@@ -829,7 +846,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
         areaId: command.areaId,
         status: "ready",
         position: 0,
-        isNext: true,
+        isNext: groupType === "task",
         pinnedToToday: false,
         checklist: [],
         createdAt: command.createdAt,
@@ -845,9 +862,22 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     const goal = state.goals.find((candidate) => candidate.id === command.goalId);
     if (!goal) throw new Error("goal_not_found");
     if (command.title !== undefined && !command.title.trim()) throw new Error("goal_title_required");
-    if (command.outcome !== undefined && !command.outcome.trim()) throw new Error("goal_outcome_required");
+    const nextType = command.groupType ?? actionGroupType(goal);
+    if (!["category", "task"].includes(nextType)) throw new Error("invalid_group_type");
+    if (nextType === "category") {
+      if (actionGroupType(goal) !== "category") {
+        const blocker = categoryConversionBlocker(state, goal);
+        if (blocker) throw new Error(blocker);
+      }
+      if (command.targetDate || command.criteria?.length) throw new Error("category_outcome_fields_forbidden");
+    }
+    if (command.areaId !== undefined && command.areaId !== (goal.areaId ?? null)) {
+      if (command.areaId && !state.areas.some((area) => area.id === command.areaId && area.visibility === "active")) throw new Error("area_not_found");
+      if (state.actions.some((action) => action.goalId === goal.id && action.areaId && action.areaId !== command.areaId)
+        || state.recurringActionTemplates.some((item) => item.goalId === goal.id && item.areaId && item.areaId !== command.areaId)) throw new Error("group_project_has_actions");
+    }
     return { ...state,
-      goals: state.goals.map((candidate) => candidate.id === goal.id ? { ...candidate, version: (candidate.version ?? 1) + 1, title: command.title?.trim() ?? candidate.title, outcome: command.outcome?.trim() ?? candidate.outcome, areaId: command.areaId === null ? undefined : command.areaId ?? candidate.areaId, priority: command.priority ?? candidate.priority, targetDate: command.targetDate === null ? undefined : command.targetDate ?? candidate.targetDate, updatedAt: command.changedAt } : candidate),
+      goals: state.goals.map((candidate) => candidate.id === goal.id ? { ...candidate, groupType: nextType, version: (candidate.version ?? 1) + 1, title: command.title?.trim() ?? candidate.title, outcome: command.outcome?.trim() ?? candidate.outcome, areaId: command.areaId === null ? undefined : command.areaId ?? candidate.areaId, priority: command.priority ?? candidate.priority, targetDate: command.targetDate === null ? undefined : command.targetDate ?? candidate.targetDate, updatedAt: command.changedAt } : candidate),
       goalCriteria: command.criteria ? [...state.goalCriteria.filter((criterion) => criterion.goalId !== goal.id), ...command.criteria.filter((criterion) => criterion.title.trim()).map((criterion) => ({ ...criterion, goalId: goal.id, title: criterion.title.trim() }))] : state.goalCriteria
     };
   }

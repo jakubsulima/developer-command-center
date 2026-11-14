@@ -12,7 +12,7 @@ describe("lista Działań", () => {
   it("współdzieli regułę Startu dla Na dziś i nie traktuje przypiętego terminu jako zaległego", () => {
     const state = structuredClone(emptyState);
     state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: "", updatedAt: "" }];
-    state.goals = [{ id: "goal", title: "Cel", outcome: "", kind: "custom", status: "paused", visibility: "active", priority: "normal", areaId: "project" }];
+    state.goals = [{ id: "goal", title: "Grupa działań", outcome: "", kind: "custom", status: "paused", visibility: "active", priority: "normal", areaId: "project" }];
     state.actions = [
       action("pinned", { goalId: "goal", areaId: "project", pinnedToToday: true }),
       action("overdue", { goalId: "goal", areaId: "project", scheduledFor: "2026-09-07" }),
@@ -23,9 +23,9 @@ describe("lista Działań", () => {
     expect(matchesActionListFilter(state, state.actions[0]!, { view: "open", projectId: "other", today: "2026-09-08" })).toBe(false);
   });
 
-  it("ukrywa Działania z archiwalnego rodzica, ale pozwala na wstrzymany Cel", () => {
+  it("ukrywa Działania z archiwalnego rodzica, ale pozwala na wstrzymany Grupa działań", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal", title: "Cel", outcome: "", kind: "custom", status: "paused", visibility: "archived", priority: "normal" }];
+    state.goals = [{ id: "goal", title: "Grupa działań", outcome: "", kind: "custom", status: "paused", visibility: "archived", priority: "normal" }];
     const archived = action("archived-parent", { goalId: "goal" });
     expect(matchesActionListFilter(state, archived, { view: "open", today: "2026-09-08" })).toBe(false);
     state.goals[0]!.visibility = "active";

@@ -3,7 +3,7 @@ import { AIGoalReviewError, decodeAIGoalReview, decodeAIGoalReviewContent } from
 
 const validContent = {
   schemaVersion: 1,
-  headline: "Jeden Cel wymaga uwagi",
+  headline: "Jeden Grupa działań wymaga uwagi",
   summary: "Najpierw usuń blokadę.",
   overallStatus: "attention",
   recommendations: [{ id: "rec-1", title: "Usuń blokadę", reason: "Działanie jest zablokowane.", suggestedNextStep: "Podejmij decyzję.", horizon: "now", confidence: "high", goalIds: ["goal-1"], actionIds: ["action-1"], signalKeys: ["goal:goal-1:blocked:1"] }],
