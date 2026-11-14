@@ -60,12 +60,12 @@ describe("AIInboxTriagePreview", () => {
     expect(screen.getByText("Materiał")).toBeInTheDocument();
   });
 
-  it("pokazuje nazwę dozwolonego powiązania z Celem", () => {
+  it("pokazuje nazwę dozwolonego powiązania z grupą", () => {
     const linkedProposal = structuredClone(proposal);
     linkedProposal.proposal = { ...linkedProposal.proposal, linkedType: "goal", linkedId: "goal-1" };
     const state = structuredClone(emptyState);
     state.goals = [{ id: "goal-1", title: "Budżet", outcome: "Spokój", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
     render(<AIInboxTriagePreview proposal={linkedProposal} state={state} onApprove={vi.fn()} onEdit={vi.fn()} onReject={vi.fn()} onFeedback={vi.fn()} />);
-    expect(screen.getByText("Cel: Budżet")).toBeInTheDocument();
+    expect(screen.getByText("Grupa działań: Budżet")).toBeInTheDocument();
   });
 });

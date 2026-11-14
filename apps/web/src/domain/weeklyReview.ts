@@ -1,3 +1,4 @@
+import { actionGroupType } from "./actionGroups";
 import { selectWeeklyMetrics } from "./weeklyMetrics";
 import type { AppState } from "./types";
 import { isVisibleWorkspaceAction, workspaceWeekBounds } from "./activity";
@@ -30,7 +31,7 @@ export interface WeeklyReviewSummary {
 export const isOpenAction = (action: AppState["actions"][number]) => !["completed", "skipped", "cancelled"].includes(action.status);
 
 export function activeGoalsWithoutNextAction(state: AppState) {
-  const activeGoals = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active");
+  const activeGoals = state.goals.filter((goal) => actionGroupType(goal) === "task" && goal.status === "active" && goal.visibility === "active");
   return activeGoals.filter((goal) => !state.actions.some((action) => action.goalId === goal.id && isVisibleWorkspaceAction(state, action) && action.isNext && ["ready", "in_progress"].includes(action.status)));
 }
 
@@ -79,8 +80,8 @@ export function deriveWeeklyReview(state: AppState, now = new Date(), source: "d
   });
   if (goalsWithoutNextAction.length) suggestions.push({
     id: "next-actions",
-    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednego Celu" : polishCount(goalsWithoutNextAction.length, "Celu", "Celów", "Celów")}`,
-    detail: "Wybierz Cel z pełnej listy i dodaj mu konkretny następny krok.",
+    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednego grupy" : polishCount(goalsWithoutNextAction.length, "grupy", "grup działań", "grup działań")}`,
+    detail: "Wybierz zadanie nadrzędne z pełnej listy i dodaj do niego konkretny następny krok.",
     to: `/goals/${goalsWithoutNextAction[0]!.id}`,
     count: goalsWithoutNextAction.length,
     items: goalsWithoutNextAction.map((goal) => ({ id: goal.id, title: goal.title, to: `/goals/${goal.id}` }))

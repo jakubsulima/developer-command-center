@@ -13,7 +13,7 @@ function signalState(): AppState {
 
 function goal(overrides: Partial<Goal> = {}): Goal {
   return {
-    id: "goal", title: "Bieżący Cel", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project", ...overrides
+    id: "goal", title: "Bieżąca grupa", outcome: "Rezultat", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "project", ...overrides
   };
 }
 
@@ -39,7 +39,7 @@ describe("Project Module", () => {
     const state = {
       ...structuredClone(emptyState),
       areas: [{ id: "project", name: "Projekt", visibility: "active" as const, createdAt: "2026-08-01", updatedAt: "2026-08-01" }],
-      goals: [{ id: "goal", title: "Cel", outcome: "Rezultat", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const, areaId: "project" }],
+      goals: [{ id: "goal", title: "Grupa działań", outcome: "Rezultat", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const, areaId: "project" }],
       actions: [{ id: "action", version: 1, title: "Krok", detail: "", goalId: "goal", status: "ready" as const, position: 0, isNext: true, pinnedToToday: false, checklist: [] }],
       knowledge: [
         { id: "late", type: "note" as const, title: "Późniejsza", detail: "", createdAt: "2026-08-02", updatedAt: "2026-08-03" },
@@ -116,7 +116,7 @@ describe("Project Module", () => {
       action({ id: "next", title: "Wybrany krok", goalId: "goal", areaId: undefined, isNext: true, status: "in_progress", position: 1 })
     ];
 
-    expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "next", actionId: "next", label: "Następny krok", description: "W toku. Cel: Bieżący Cel." });
+    expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "next", actionId: "next", label: "Następny krok", description: "W toku. Grupa: Bieżąca grupa." });
   });
 
   it("keeps future work dated and labels testing actions as Do sprawdzenia", () => {
@@ -163,7 +163,7 @@ describe("Project Module", () => {
     state.goals = [goal({ status: "paused" })];
     expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "empty", label: "Brak następnego kroku", counts: { currentGoals: 1 } });
     state.goals = [];
-    expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "empty", label: "Brak pierwszego Celu", title: "Ustal pierwszy Cel" });
+    expect(projectSignal(state, "project", signalNow)).toMatchObject({ kind: "empty", label: "Brak pierwszej grupy", title: "Utwórz pierwszą grupę działań" });
   });
 
   it("treats an empty Reading Library as neutral while keeping real Action signals", () => {

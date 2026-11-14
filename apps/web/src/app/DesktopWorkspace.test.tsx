@@ -57,10 +57,10 @@ function renderWorkspace(path: string) {
   render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DemoAuthProvider><StoreProvider><App /><LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 }
 
-it("łączy bieżące Działania, Cele i Wiedzę w Przeglądzie właściwego Projektu", async () => {
+it("łączy bieżące Działania, Grupy działań i Wiedzę w Przeglądzie właściwego Projektu", async () => {
   const user = userEvent.setup();
   renderWorkspace("/projects/one");
-  const actions = await screen.findByRole("region", { name: /Bieżące Działania/ });
+  const actions = await screen.findByRole("region", { name: /Działania Projektu/ });
   expect(within(actions).getByRole("link", { name: "Bieżący krok" })).toBeInTheDocument();
   expect(within(actions).queryByText("Historyczny krok")).not.toBeInTheDocument();
   expect(within(actions).queryByText("Inny Projekt")).not.toBeInTheDocument();
@@ -70,18 +70,49 @@ it("łączy bieżące Działania, Cele i Wiedzę w Przeglądzie właściwego Pro
   expect(await within(context).findByRole("link", { name: /Notatka Projektu/ })).toBeInTheDocument();
   expect(within(context).queryByText("Wiedza innego Projektu")).not.toBeInTheDocument();
   await user.click(within(actions).getByRole("button", { name: "Wszystkie Działania" }));
-  expect(screen.getByRole("tab", { name: /Działania/ })).toHaveAttribute("aria-selected", "true");
+  expect(within(screen.getByRole("navigation", { name: "Zawartość Projektu" })).getByRole("button", { name: /Działania/ })).toHaveAttribute("aria-current", "page");
 });
 
 it("zmienia status z Przeglądu przez istniejącą komendę i pozwala cofnąć zmianę", async () => {
   const user = userEvent.setup();
   renderWorkspace("/projects/one");
-  const actions = await screen.findByRole("region", { name: /Bieżące Działania/ });
+  const actions = await screen.findByRole("region", { name: /Działania Projektu/ });
   await user.click(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Bieżący krok" }));
   await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
   expect(await within(actions).findByRole("button", { name: "Zmień status: W toku — Bieżący krok" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cofnij" }));
   expect(await within(actions).findByRole("button", { name: "Zmień status: Do zrobienia — Bieżący krok" })).toBeInTheDocument();
+});
+
+it("filtruje pełną listę Działań w Przeglądzie i zachowuje filtr po przejściu do sekcji", async () => {
+  const user = userEvent.setup();
+  renderWorkspace("/projects/one?other=keep");
+  const actions = await screen.findByRole("region", { name: /Działania Projektu/ });
+  await user.selectOptions(within(actions).getByLabelText("Filtr Działań"), "history");
+  expect(within(actions).getByRole("link", { name: "Historyczny krok" })).toBeInTheDocument();
+  expect(within(actions).queryByRole("link", { name: "Bieżący krok" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("address")).toHaveTextContent("other=keep&actions=history");
+  await user.click(within(actions).getByRole("button", { name: "Wszystkie Działania" }));
+  expect(screen.getByRole("region", { name: "Działania" })).toHaveTextContent("Historyczny krok");
+  expect(screen.getByTestId("address")).toHaveTextContent("actions=history&view=actions");
+});
+
+it("menu Projektu otwiera właściwy formularz, zapisuje opis i przywraca fokus", async () => {
+  const user = userEvent.setup();
+  renderWorkspace("/projects/one");
+  const trigger = await screen.findByRole("button", { name: "Dodaj w Projekcie Projekt one" });
+  await user.click(trigger);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("menuitem", { name: "Działanie" }));
+  const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
+  await user.type(within(dialog).getByLabelText("Co chcesz zrobić?"), "Nowy krok Projektu");
+  await user.type(within(dialog).getByLabelText("Opis"), "Opis bez rozwijania");
+  await user.click(within(dialog).getByRole("button", { name: "Dodaj Działanie" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(trigger).toHaveFocus();
+  const actions = screen.getByRole("region", { name: /Działania Projektu/ });
+  expect(within(actions).getByRole("link", { name: "Nowy krok Projektu" })).toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Kontekst Projektu" })).toHaveTextContent("Bieżący rezultat");
 });
 
 it("pokazuje pełną treść Wiedzy w podglądzie, zachowuje filtry i przywraca fokus po Escape", async () => {
@@ -140,7 +171,7 @@ it("na mobile pozostawia Przegląd bez dodatkowych sekcji desktopowych", async (
   setDesktop(false);
   renderWorkspace("/projects/one");
   await screen.findByRole("region", { name: "Co jest teraz najważniejsze" });
-  expect(screen.queryByRole("region", { name: /Bieżące Działania/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: /Działania Projektu/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("complementary", { name: "Kontekst Projektu" })).not.toBeInTheDocument();
 });
 
@@ -160,4 +191,103 @@ it("przetwarza wpis w bocznym panelu, zachowuje oryginał i tworzy rzeczywiste D
   expect(await screen.findByRole("link", { name: "Pierwsza myśl do przetworzenia" })).toBeInTheDocument();
   await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Działania" }));
   expect(await screen.findByRole("link", { name: "Nowy krok ze Skrzynki" })).toBeInTheDocument();
+});
+
+it("otwiera Grupa działań klawiaturą i wraca do pełnej listy z jej filtrami", async () => {
+  const user = userEvent.setup();
+  renderWorkspace("/goals?status=all&kind=project&other=keep");
+  const goal = await screen.findByRole("link", { name: "Otwórz grupę: Bieżący rezultat" });
+  expect(screen.getByRole("link", { name: "Otwórz grupę: Dawny rezultat" })).toBeInTheDocument();
+  goal.focus();
+  expect(goal.tabIndex).toBe(0);
+  await user.keyboard("{Enter}");
+  expect(await screen.findByRole("heading", { name: "Bieżący rezultat", level: 1 })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Wszystkie grupy" }));
+  await screen.findByRole("link", { name: "Otwórz grupę: Bieżący rezultat" });
+  await waitFor(() => expect(screen.getByRole("link", { name: "Otwórz grupę: Bieżący rezultat" })).toHaveFocus());
+  expect(screen.getByTestId("address")).toHaveTextContent("/goals?status=all&kind=project&other=keep");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Rodzaj zadania" }), "learning");
+  expect(await screen.findByText("Nie ma tu jeszcze grup działań")).toBeInTheDocument();
+  await user.click(screen.getAllByRole("button", { name: "Wyczyść filtry" })[0]!);
+  expect(await screen.findByRole("link", { name: "Otwórz grupę: Bieżący rezultat" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Otwórz grupę: Dawny rezultat" })).not.toBeInTheDocument();
+});
+
+it("przywraca Grupa działań bez Projektu z archiwum do aktywnej listy", async () => {
+  const state = JSON.parse(localStorage.getItem("command-center-state-v1")!) as AppState;
+  state.goals.push({ id: "archived-goal", title: "Wznawiany rezultat", outcome: "Wynik", kind: "custom", status: "active", visibility: "archived", priority: "normal" });
+  localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+  const user = userEvent.setup();
+  renderWorkspace("/goals?status=archived");
+  await user.click(await screen.findByRole("button", { name: "Przywróć" }));
+  expect(await screen.findByText("Nie ma tu jeszcze grup działań")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Aktywny" }));
+  const restored = await screen.findByRole("link", { name: "Otwórz grupę: Wznawiany rezultat" });
+  expect(within(restored).getByText("Bez Projektu")).toBeInTheDocument();
+  expect(within(restored).getByText("Brak następnego Działania")).toBeInTheDocument();
+});
+
+function seedProjectCategories() {
+  const state = JSON.parse(localStorage.getItem("command-center-state-v1")!) as AppState;
+  state.projectCategories = [{ id: "work", name: "Praca", color: "#60a5fa" }, { id: "learning", name: "Nauka", color: "#a78bfa" }];
+  state.areas[0]!.categoryIds = ["work", "learning"];
+  state.areas[1]!.categoryIds = ["learning"];
+  localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+}
+
+it("filtruje i grupuje Projekty z bezpośredniego paska desktopowego", async () => {
+  seedProjectCategories();
+  const user = userEvent.setup();
+  renderWorkspace("/projects");
+  const filter = await screen.findByRole("combobox", { name: "Filtruj po kategorii" });
+  expect(screen.queryByLabelText("Więcej opcji widoku")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("link", { name: "Otwórz projekt Projekt one" })).toHaveLength(2);
+  await user.selectOptions(filter, "work");
+  expect(screen.getAllByRole("link", { name: "Otwórz projekt Projekt one" })).toHaveLength(1);
+  expect(screen.queryByRole("link", { name: "Otwórz projekt Projekt two" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Grupuj kategoriami" }));
+  expect(screen.getByRole("button", { name: "Grupuj kategoriami" })).toHaveAttribute("aria-pressed", "false");
+  await user.selectOptions(filter, "");
+  expect(screen.getAllByRole("link", { name: /Otwórz projekt Projekt/ })).toHaveLength(2);
+  await user.click(screen.getByRole("link", { name: "Otwórz projekt Projekt one" }));
+  expect(await screen.findByRole("heading", { name: "Projekt one", level: 1 })).toBeInTheDocument();
+});
+
+it("odświeża desktopowy filtr po usunięciu wybranej kategorii", async () => {
+  seedProjectCategories();
+  const user = userEvent.setup();
+  renderWorkspace("/projects");
+  await user.selectOptions(await screen.findByRole("combobox", { name: "Filtruj po kategorii" }), "work");
+  await user.click(screen.getByRole("button", { name: "Zarządzaj kategoriami" }));
+  const manager = await screen.findByRole("dialog", { name: "Kategorie projektów" });
+  await user.click(within(manager).getByRole("button", { name: "Usuń kategorię Praca" }));
+  await waitFor(() => expect(within(manager).queryByRole("button", { name: "Usuń kategorię Praca" })).not.toBeInTheDocument());
+  await user.click(within(manager).getByRole("button", { name: "Zamknij" }));
+  expect(screen.getByRole("combobox", { name: "Filtruj po kategorii" })).toHaveValue("");
+  expect(screen.getByRole("link", { name: "Otwórz projekt Projekt two" })).toBeInTheDocument();
+});
+
+it("przywraca Projekt z desktopowego Archiwum", async () => {
+  const state = JSON.parse(localStorage.getItem("command-center-state-v1")!) as AppState;
+  state.areas[1]!.visibility = "archived";
+  localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+  const user = userEvent.setup();
+  renderWorkspace("/projects");
+  await user.click(await screen.findByRole("button", { name: "Archiwum" }));
+  expect(screen.getByRole("heading", { name: "Projekt two" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Projekt one" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Przywróć Projekt" }));
+  await user.click(screen.getByRole("button", { name: "Aktywne" }));
+  expect(await screen.findByRole("link", { name: "Otwórz projekt Projekt two" })).toBeInTheDocument();
+});
+
+it("na mobile zachowuje opcje Projektów w dotychczasowym menu", async () => {
+  setDesktop(false);
+  const user = userEvent.setup();
+  renderWorkspace("/projects");
+  await user.click(await screen.findByLabelText("Więcej opcji widoku"));
+  expect(screen.queryByRole("group", { name: "Widok Projektów" })).not.toBeInTheDocument();
+  const options = screen.getByRole("menu", { name: "Opcje widoku projektów" });
+  await user.click(within(options).getByRole("menuitemradio", { name: "Archiwum" }));
+  expect(await screen.findByText("Brak projektów pasujących do tego widoku.")).toBeInTheDocument();
 });

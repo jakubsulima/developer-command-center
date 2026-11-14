@@ -77,8 +77,8 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
     return {
       kind,
       actionId: action?.id,
-      title: action?.title ?? (currentGoals.length ? "Dodaj następne Działanie" : "Ustal pierwszy Cel"),
-      description: goalTitle ? `${description} Cel: ${goalTitle}.` : description,
+      title: action?.title ?? (currentGoals.length ? "Dodaj następne Działanie" : "Utwórz pierwszą grupę działań"),
+      description: goalTitle ? `${description} Grupa: ${goalTitle}.` : description,
       label,
       statusLabel: action ? statusDescription(action) : undefined,
       scheduledFor: action?.scheduledFor,
@@ -138,8 +138,8 @@ export function projectSignal(state: AppState, projectId: string, now = new Date
   }
 
   const emptyState = projectPresets.standard.emptyState;
-  return signal("empty", undefined, currentGoals.length ? "Brak następnego kroku" : "Brak pierwszego Celu", currentGoals.length
-    ? `Masz ${currentGoals.length} ${currentGoals.length === 1 ? "bieżący Cel" : "bieżące Cele"}, ale żaden nie ma otwartego Działania.`
+  return signal("empty", undefined, currentGoals.length ? "Brak następnego kroku" : "Brak pierwszej grupy", currentGoals.length
+    ? `Masz ${currentGoals.length} ${currentGoals.length === 1 ? "bieżącą grupę działań" : "bieżące grupy działań"}, ale żadna nie ma otwartego Działania.`
     : emptyState.description);
 }
 

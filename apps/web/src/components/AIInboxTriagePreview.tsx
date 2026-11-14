@@ -4,7 +4,7 @@ import type { AppState } from "../domain/types";
 import { Badge, Button } from "./ui";
 import { knowledgeKindLabels } from "../domain/labels";
 
-const decisionLabels = { goal: "Cel", action: "Działanie", knowledge: "Wiedza", keep_inbox: "Pozostaw w Skrzynce" } as const;
+const decisionLabels = { goal: "Grupa działań", action: "Działanie", knowledge: "Wiedza", keep_inbox: "Pozostaw w Skrzynce" } as const;
 const confidenceLabels = { low: "niska pewność", medium: "średnia pewność", high: "wysoka pewność" } as const;
 
 export function AIInboxTriagePreview({ proposal, state, onApprove, onEdit, onReject, onFeedback }: {
@@ -26,7 +26,7 @@ export function AIInboxTriagePreview({ proposal, state, onApprove, onEdit, onRej
     {content.title ? <div className="ai-inbox-preview-field"><small>Tytuł</small><strong>{content.title}</strong></div> : null}
     {content.detail ? <div className="ai-inbox-preview-field"><small>{content.decision === "goal" ? "Oczekiwany rezultat" : "Treść / opis"}</small><p>{content.detail}</p></div> : null}
     {content.knowledgeKind ? <div className="ai-inbox-preview-field"><small>Rodzaj Wiedzy</small><strong>{knowledgeKindLabels[content.knowledgeKind]}</strong></div> : null}
-    {linked ? <div className="ai-inbox-preview-field"><small>Powiązanie</small><strong>{content.linkedType === "goal" ? "Cel" : "Projekt"}: {linked}</strong></div> : null}
+    {linked ? <div className="ai-inbox-preview-field"><small>Powiązanie</small><strong>{content.linkedType === "goal" ? "Grupa działań" : "Projekt"}: {linked}</strong></div> : null}
     {content.targetDate ? <div className="ai-inbox-preview-field"><small><CalendarDays />Termin</small><strong>{content.targetDate}</strong></div> : null}
     <p className="ai-inbox-preview-safety">Nic nie zostanie zapisane bez Twojego zatwierdzenia.</p>
     <div className="modal-actions ai-inbox-preview-actions"><Button variant="ghost" onClick={onReject}><X />Odrzuć</Button>{content.decision === "keep_inbox" ? <Button onClick={onApprove}>Pozostaw w Skrzynce</Button> : <><Button onClick={onEdit}><Edit3 />Edytuj</Button><Button variant="primary" onClick={onApprove}><Check />Zatwierdź</Button></>}</div>

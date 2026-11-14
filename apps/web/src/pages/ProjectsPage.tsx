@@ -10,6 +10,7 @@ import { entityCardVariants } from "../components/ui-variants";
 import { locationAddress } from "../domain/navigation";
 import { useLocation } from "react-router-dom";
 import { projectProjections, projectSignal, type ProjectSignal } from "../domain/projectModule";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 
 const colors = ["violet", "orange", "amber"] as const;
 
@@ -34,6 +35,7 @@ function ProjectSignalIcon({ signal }: { signal: ProjectSignal }) {
 }
 
 export function ProjectsPage() {
+  const desktop = useDesktopLayout();
   const { state, setAreaVisibility } = useStore();
   const location = useLocation();
   const [view, setView] = useState<"active" | "archived" | "trashed">("active");
@@ -58,7 +60,7 @@ export function ProjectsPage() {
   return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", quickAdd: { mode: "project", pinnedToToday: false, draftKey: "projects-list", projectCategoryIds: categoryFilter && categoryFilter !== "uncategorized" ? [categoryFilter] : [] } }}>
     <PageHeading className="project-page-heading" title="Projekty" eyebrow={viewSummary} action={<div className="project-heading-actions">
       <span className={`project-view-status project-view-status-${view}`} aria-label={`Widok: ${viewLabel}`}><span aria-hidden="true" />{viewLabel}</span>
-      <details className="project-category-menu">
+      {!desktop ? <details className="project-category-menu">
         <summary aria-label="Więcej opcji widoku" title="Więcej opcji widoku"><MoreHorizontal /><span className="sr-only">Więcej opcji widoku</span></summary>
         <div className="project-options-popover">
           <label className="project-category-filter"><span>Kategoria</span><span className="project-category-select"><select aria-label="Filtruj po kategorii" value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); closeCategoryMenu(event.currentTarget); }}><option value="">Wszystkie kategorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}<option value="uncategorized">Bez kategorii</option></select><ChevronDown aria-hidden="true" /></span></label>
@@ -72,10 +74,21 @@ export function ProjectsPage() {
             <Button role="menuitem" variant="ghost" onClick={(event) => { setManageCategories(true); closeCategoryMenu(event.currentTarget); }}>Zarządzaj kategoriami</Button>
           </div>
         </div>
-      </details>
+      </details> : null}
     </div>} />
+    <div className="projects-index">
+    {desktop ? <div className="projects-index-toolbar">
+      <div className="projects-index-views" role="group" aria-label="Widok Projektów">
+        <Button variant={view === "active" ? "primary" : "ghost"} aria-pressed={view === "active"} onClick={() => setView("active")}>Aktywne</Button>
+        <Button variant={view === "archived" ? "primary" : "ghost"} aria-pressed={view === "archived"} onClick={() => setView("archived")}><Archive />Archiwum</Button>
+        <Button variant={view === "trashed" ? "primary" : "ghost"} aria-pressed={view === "trashed"} onClick={() => setView("trashed")}><Trash2 />Kosz</Button>
+      </div>
+      <label className="projects-index-category"><span>Kategoria</span><select aria-label="Filtruj po kategorii" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">Wszystkie kategorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}<option value="uncategorized">Bez kategorii</option></select></label>
+      <div className="projects-index-options"><Button variant="ghost" aria-pressed={grouped} onClick={() => setGrouped(!grouped)}>Grupuj kategoriami</Button><Button variant="ghost" onClick={() => setManageCategories(true)}>Zarządzaj kategoriami</Button></div>
+    </div> : null}
     {groups.length ? groups.map((group) => <section className="project-category-section" key={group.id}>
       {grouped ? <h2 className="project-category-heading"><span className="category-dot" style={{ backgroundColor: group.color }} />{group.name}<small>{group.projects.length}</small></h2> : null}
+      {group.projects.length ? <div className="project-list-columns" aria-hidden="true"><span>Projekt</span><span>{view === "active" ? "Najbliższy ruch" : "Opis"}</span><span>Powiązania</span><span /></div> : null}
       {group.projects.length ? <div className="project-card-grid">{group.projects.map((project, index) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
       const signal = view === "active" ? projectSignal(state, project.id) : undefined;
@@ -94,7 +107,7 @@ export function ProjectsPage() {
         </div> : null}
         {view !== "active" && project.description?.trim() ? <p className="line-clamp-1 project-card-description">{project.description.trim()}</p> : null}
         <div className="project-context-metrics">
-          <span><small>Cele</small><strong>{counts.goals}</strong></span>
+          <span><small>Grupy działań</small><strong>{counts.goals}</strong></span>
           <span><small>Działania</small><strong>{counts.actions}</strong></span>
           <span><small>Wiedza</small><strong>{counts.knowledge}</strong></span>
         </div>
@@ -103,7 +116,7 @@ export function ProjectsPage() {
     })}</div> : <div className="category-empty"><FolderKanban /><p>Brak projektów pasujących do tego widoku.</p></div>}
     </section>) : <div className="category-empty"><FolderKanban /><p>Brak projektów pasujących do tego widoku.</p></div>}
     {manageCategories ? <ProjectCategoryManager onClose={() => { setManageCategories(false); if (categoryFilter !== "uncategorized" && !categories.some((category) => category.id === categoryFilter)) setCategoryFilter(""); }} /> : null}
-
+    </div>
 
   </AppShell>;
 }

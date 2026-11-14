@@ -1,3 +1,4 @@
+import { actionGroupAssignment } from "../domain/actionGroups";
 import { AIContextExport } from "../components/AIContextExport";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
@@ -40,7 +41,7 @@ export function ActionDetailPage() {
   });
   const action = state.actions.find((candidate) => candidate.id === actionId) ?? actionQuery.data;
   if (!action && actionQuery.isPending) return <AppShell><div role="status" className="app-loading">Ładowanie Działania…</div></AppShell>;
-  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do Celu albo należy do innej przestrzeni pracy." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
+  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do grupy albo należy do innej przestrzeni pracy." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
   const changePin = async () => {
     const previous = action.pinnedToToday;
     await mutation.run(`action-detail:${action.id}`, async () => {
@@ -70,7 +71,7 @@ export function ActionDetailPage() {
     });
   };
   const editKey = `action-detail-edit:${action.id}`;
-  const saveEdit = (value: ActionEditValue, expectedVersion?: number) => mutation.run(editKey, () => updateAction(action.id, { title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion));
+  const saveEdit = (value: ActionEditValue, expectedVersion?: number) => mutation.run(editKey, () => updateAction(action.id, { ...actionGroupAssignment(state, action, value.goalId), title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion));
   const today = localDateForTimeZone(new Date(), state.workspaceTimezone);
 
   const context = resolveActionContext(action, state);
@@ -78,18 +79,18 @@ export function ActionDetailPage() {
   const project = action.areaId ? state.areas.find((candidate) => candidate.id === action.areaId) : state.areas.find((candidate) => incomingNavigation?.returnTo.startsWith(`/projects/${encodeURIComponent(candidate.id)}`));
   const projectName = project?.name ?? (incomingNavigation?.returnLabel.startsWith("Projekt:") ? incomingNavigation.returnLabel.slice("Projekt:".length).trim() : undefined);
   const fallbackBreadcrumbs: NavigationBreadcrumb[] = context.kind === "goal"
-    ? [{ label: "Cele", to: "/goals" }, ...(projectName ? [{ label: projectName, to: project ? `/projects/${encodeURIComponent(project.id)}` : incomingNavigation?.returnTo }] : []), { label: `Cel: ${context.name}`, to: context.to }]
+    ? [{ label: "Grupy działań", to: "/goals" }, ...(projectName ? [{ label: projectName, to: project ? `/projects/${encodeURIComponent(project.id)}` : incomingNavigation?.returnTo }] : []), { label: `Grupa: ${context.name}`, to: context.to }]
     : context.kind === "project" && projectName ? [{ label: "Projekty", to: "/projects" }, { label: projectName, to: context.to }]
       : [{ label: "Start", to: "/" }];
   const actionRoute = `/actions/${encodeURIComponent(action.id)}`;
   const currentBreadcrumb = { label: `Działanie: ${action.title}`, to: actionRoute };
   const breadcrumbs = breadcrumbsForPage(location.state, fallbackBreadcrumbs, currentBreadcrumb);
-  const parentLabel = context.kind === "goal" ? "Cel" : context.kind === "project" ? "Projekt" : undefined;
+  const parentLabel = context.kind === "goal" ? "Grupa działań" : context.kind === "project" ? "Projekt" : undefined;
   const parentIcon = context.kind === "goal" ? <Flag /> : <FolderKanban />;
   return <AppShell appearance="focus-detail"><div className="action-detail-page">
-    <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Cel: ${context.name}` : "Start"} showBack />
+    <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs.slice(0, -1).length ? fallbackBreadcrumbs : [{ label: "Start", to: "/" }]} fallbackReturnTo={context.to} fallbackReturnLabel={context.kind === "project" ? `Projekt: ${context.name}` : context.kind === "goal" ? `Grupa: ${context.name}` : "Start"} showBack />
     <header className="detail-title-block action-detail-header"><div className="action-detail-heading-row"><h1>{action.title}</h1><div className="action-heading-tools"><details className="detail-tools-menu"><summary aria-label="Więcej opcji Działania"><MoreHorizontal aria-hidden="true" /></summary><div><AIContextExport target={{ type: "action", id: action.id }} /></div></details><Button variant="ghost" onClick={() => setEditOpen(true)}><Pencil />Edytuj</Button></div></div>
-      {parentLabel && context.name ? <NavigationLink className="action-parent-link" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><span className="action-parent-icon">{parentIcon}</span><span>{parentLabel}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
+      {parentLabel && context.name ? <NavigationLink aria-label={`${parentLabel}: ${context.name}`} className="action-parent-link" to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Działanie: ${action.title}`}><span className="action-parent-icon">{parentIcon}</span><span>{parentLabel}</span><strong>{context.name}</strong><ChevronRight /></NavigationLink> : context.kind === "missing-project" ? <p className="muted-copy action-missing-parent" role="status">Projekt tego Działania jest niedostępny. Działanie nie jest samodzielne.</p> : null}
       <div className="action-status-row"><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="detail" disabled={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusView("statuses")} /></div>
     </header>
     <div className="action-detail-layout">

@@ -98,7 +98,7 @@ export function buildWeeklyReviewMarkdown(review: ReviewRecord, options: WeeklyR
   if (options.includeDecision && snapshot.note.trim()) lines.push("", "## Decyzja", "", snapshot.note.trim());
   if (options.includePlan) {
     lines.push("", "## Plan na kolejny tydzień", "");
-    if (snapshot.plan.selectedGoals.length) lines.push("Priorytetowe Cele:", ...snapshot.plan.selectedGoals.map((goal) => `- ${goal.title}`), "");
+    if (snapshot.plan.selectedGoals.length) lines.push("Priorytetowe Grupy działań:", ...snapshot.plan.selectedGoals.map((goal) => `- ${goal.title}`), "");
     lines.push("Działania:");
     if (snapshot.plan.actions.length) lines.push(...snapshot.plan.actions.map((action) => `- ${action.title}${action.scheduledFor ? ` — ${action.scheduledFor}` : " — bez terminu"} (${actionStatusLabel[action.status]})`));
     else lines.push("- Brak zapisanych Działań.");

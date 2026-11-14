@@ -113,7 +113,7 @@ Deno.serve(async (request: Request) => {
       throw error;
     }
     const { hash } = await hashGoalReviewContext(context);
-    const promptVersion = numberEnv("AI_PROMPT_VERSION", GOAL_REVIEW_PROMPT_VERSION, 1, 1000);
+    const promptVersion = numberEnv("AI_PROMPT_VERSION", GOAL_REVIEW_PROMPT_VERSION, GOAL_REVIEW_PROMPT_VERSION, 1000);
     const now = new Date();
     const identity = describeAIProvider(CAPABILITY, (name) => env(name));
 

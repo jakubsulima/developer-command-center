@@ -16,7 +16,7 @@ function renderApp(path: string) {
 function seedNavigationState() {
   const state = structuredClone(emptyState);
   state.areas = [{ id: "nav-project", name: "Projekt Nawigacji", description: "", visibility: "active", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
-  state.goals = [{ id: "nav-goal", title: "Cel Nawigacji", outcome: "Gotowy kontekst", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "nav-project", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
+  state.goals = [{ id: "nav-goal", title: "Grupa działań Nawigacji", outcome: "Gotowy kontekst", kind: "custom", status: "active", visibility: "active", priority: "normal", areaId: "nav-project", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
   state.actions = [{ id: "nav-action", version: 1, title: "Wykonać krok", detail: "", goalId: "nav-goal", areaId: "nav-project", status: "ready", position: 0, isNext: true, pinnedToToday: false, checklist: [], createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:00:00.000Z" }];
   state.knowledge = [{ id: "nav-knowledge", type: "note", title: "Wiedza Nawigacji", detail: "" }];
   state.knowledgeLinks = [{ id: "nav-link", knowledgeItemId: "nav-knowledge", actionId: "nav-action", meaning: "reference", createdAt: "2026-08-01T08:00:00.000Z" }];
@@ -63,18 +63,18 @@ describe("spójna nawigacja kontekstowa", () => {
     }
   });
 
-  it("przenosi pełny kontekst przez Projekt → Cel → Działanie → Wiedza i wraca do źródła", async () => {
+  it("przenosi pełny kontekst przez Projekt → Grupa działań → Działanie → Wiedza i wraca do źródła", async () => {
     seedNavigationState();
     const user = userEvent.setup();
     renderApp("/projects/nav-project?view=goals");
 
-    await user.click(await screen.findByRole("link", { name: "Otwórz Cel: Cel Nawigacji" }));
-    expect(await screen.findByRole("heading", { name: "Cel Nawigacji" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("link", { name: "Otwórz grupę: Grupa działań Nawigacji" }));
+    expect(await screen.findByRole("heading", { name: "Grupa działań Nawigacji" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Projekt Nawigacji");
 
     await user.click(screen.getByRole("link", { name: "Wykonać krok" }));
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Cel Nawigacji");
+    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Grupa działań Nawigacji");
 
     expect(screen.getByRole("link", { name: /Wiedza Nawigacji/ })).toBeVisible();
     await user.click(screen.getByRole("link", { name: /Wiedza Nawigacji/ }));
@@ -85,8 +85,8 @@ describe("spójna nawigacja kontekstowa", () => {
 
     await user.click(within(breadcrumbs).getByRole("link", { name: "Działanie: Wykonać krok" }));
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Cel: Cel Nawigacji" }));
-    expect(await screen.findByRole("heading", { name: "Cel Nawigacji" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Grupa: Grupa działań Nawigacji" }));
+    expect(await screen.findByRole("heading", { name: "Grupa działań Nawigacji" })).toBeInTheDocument();
   });
 
   it("nie zapętla ścieżki przy przejściu Projekt → Wiedza → Projekt → Wiedza", async () => {
@@ -112,7 +112,7 @@ describe("spójna nawigacja kontekstowa", () => {
     seedNavigationState();
     renderApp("/goals/nav-goal?action=nav-action");
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Cel Nawigacji");
+    expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Grupa działań Nawigacji");
   });
 
   it("edytuje Działanie i otwiera powód blokady bezpośrednio ze szczegółu", async () => {
@@ -144,10 +144,10 @@ describe("spójna nawigacja kontekstowa", () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     const user = userEvent.setup();
     renderApp("/projects/nav-project?view=goals");
-    const goalLink = await screen.findByRole("link", { name: "Otwórz Cel: Cel Nawigacji" });
+    const goalLink = await screen.findByRole("link", { name: "Otwórz grupę: Grupa działań Nawigacji" });
     await user.click(goalLink);
     await user.click(within(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).getByRole("link", { name: "Projekt Nawigacji" }));
-    const card = await screen.findByText("Cel Nawigacji");
+    const card = await screen.findByText("Grupa działań Nawigacji");
     await waitFor(() => expect(card.closest("[data-navigation-card-id=\"goal-nav-goal\"]")).toHaveFocus());
     expect(card.closest("[data-navigation-card-id=\"goal-nav-goal\"]")).toHaveClass("navigation-card-highlight");
     expect(scrollTo).toHaveBeenCalled();

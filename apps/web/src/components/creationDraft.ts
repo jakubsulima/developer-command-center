@@ -1,5 +1,5 @@
 import { quickAddModes, splitQuickAddContent, type QuickAddMode } from "../domain/quickAdd";
-import type { GoalKind, ProjectPreset, ReadingStatus } from "../domain/types";
+import type { ActionGroupType, GoalKind, ProjectPreset, ReadingStatus } from "../domain/types";
 import type { CreatableKnowledgeKind } from "../domain/knowledge-kinds";
 export type QuickAddRequest = {
   mode?: QuickAddMode;
@@ -16,17 +16,19 @@ export type QuickAddRequest = {
   sourceBookId?: string;
   sourceBookTitle?: string;
   goalKind?: GoalKind;
+  groupType?: ActionGroupType;
   /** Distinguishes drafts belonging to contextual entry points. */
   draftKey?: string;
 };
 
 export type CreationReceipt = { id: string; url: string; message: string; pendingOccurrences?: boolean };
-export type QuickAddDraft = { schemaVersion?: 2 | 3; attempted?: boolean; goalKind?: GoalKind; goalTemplateId?: string; goalCriteria?: string; firstActionTitle?: string; isBook?: boolean; resourceAuthor?: string; readingStatus?: ReadingStatus; sourceBookId?: string; sourceBookTitle?: string; actionId?: string; actionMeaning?: "material" | "reference" | "decision"; routineEndsOn?: string; routineChecklist?: string; routineMissedPolicy?: "skip_missed" | "carry_one"; receipt?: CreationReceipt; materialKnowledgeIds?: string[]; projectCategoryIds?: string[]; projectPreset?: ProjectPreset; projectPresetManuallyChosen?: boolean; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; knowledgeIdempotencyKey: string; contexts?: Partial<Record<QuickAddMode, string>> };
+export type QuickAddDraft = { groupType?: ActionGroupType; schemaVersion?: 2 | 3; attempted?: boolean; goalKind?: GoalKind; goalTemplateId?: string; goalCriteria?: string; firstActionTitle?: string; isBook?: boolean; resourceAuthor?: string; readingStatus?: ReadingStatus; sourceBookId?: string; sourceBookTitle?: string; actionId?: string; actionMeaning?: "material" | "reference" | "decision"; routineEndsOn?: string; routineChecklist?: string; routineMissedPolicy?: "skip_missed" | "carry_one"; receipt?: CreationReceipt; materialKnowledgeIds?: string[]; projectCategoryIds?: string[]; projectPreset?: ProjectPreset; projectPresetManuallyChosen?: boolean; mode: QuickAddMode; content: string; title: string; detail: string; context: string; scheduledFor: string; pinnedToToday: boolean; libraryKind: CreatableKnowledgeKind; sourceUrl: string; goalIds: string[]; routineUnit: "day" | "week" | "month"; routineInterval: string; routineStartsOn: string; routineWeekdays: number[]; knowledgeIdempotencyKey: string; contexts?: Partial<Record<QuickAddMode, string>> };
 export const emptyDraft: QuickAddDraft = { schemaVersion: 3, mode: "action", content: "", title: "", detail: "", context: "", scheduledFor: "", pinnedToToday: false, libraryKind: "note", sourceUrl: "", goalIds: [], routineUnit: "week", routineInterval: "1", routineStartsOn: "", routineWeekdays: [], knowledgeIdempotencyKey: "", projectPreset: "standard", projectPresetManuallyChosen: false };
 export const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
   if (!value || typeof value !== "object") return false;
   const draft = value as QuickAddDraft;
   return draft.schemaVersion === 3 && [draft.content, draft.title, draft.detail, draft.context, draft.scheduledFor, draft.sourceUrl, draft.routineInterval, draft.routineStartsOn].every((field) => typeof field === "string")
+    && (draft.groupType === undefined || ["category", "task"].includes(draft.groupType))
     && typeof draft.pinnedToToday === "boolean"
     && (quickAddModes as readonly string[]).includes(draft.mode)
     && ["note", "resource", "decision"].includes(draft.libraryKind)
@@ -48,7 +50,7 @@ export function migrateQuickAddDraft(value: unknown, initialDraft: QuickAddDraft
   const mode = legacy.mode === "knowledge" ? "inbox" : (quickAddModes as readonly unknown[]).includes(legacy.mode) ? legacy.mode! : initialDraft.mode;
   const content = typeof legacy.content === "string" ? legacy.content : legacy.title!;
   const split = splitQuickAddContent(content);
-  const migrated = { ...initialDraft, mode, content, title: split.title, detail: split.detail };
+  const migrated = { ...initialDraft, groupType: legacy.groupType ?? "task", mode, content, title: split.title, detail: split.detail };
   if ("unit" in legacy && "startsOn" in legacy) {
     const routine = legacy as unknown as { unit: QuickAddDraft["routineUnit"]; interval: string; startsOn: string; endsOn: string; weekdays: number[]; checklist: string; missedPolicy: QuickAddDraft["routineMissedPolicy"] };
     Object.assign(migrated, { routineUnit: routine.unit, routineInterval: routine.interval, routineStartsOn: routine.startsOn, routineEndsOn: routine.endsOn, routineWeekdays: routine.weekdays, routineChecklist: routine.checklist, routineMissedPolicy: routine.missedPolicy });
@@ -60,7 +62,7 @@ export function migrateQuickAddDraft(value: unknown, initialDraft: QuickAddDraft
   if (legacy.idempotencyKey) migrated.knowledgeIdempotencyKey = legacy.idempotencyKey;
   if (legacy.sourceBookId) migrated.sourceBookId = legacy.sourceBookId;
   if (mode === "library" && migrated.libraryKind === "note" && typeof legacy.content === "string" && legacy.detail === undefined) { migrated.title = legacy.title ?? ""; migrated.detail = legacy.content; }
-  for (const field of ["isBook", "resourceAuthor", "readingStatus", "goalKind", "goalTemplateId", "goalCriteria", "firstActionTitle", "routineEndsOn", "routineChecklist", "routineMissedPolicy", "attempted", "receipt", "materialKnowledgeIds", "projectCategoryIds", "projectPreset", "projectPresetManuallyChosen", "contexts", "sourceBookTitle", "actionId", "actionMeaning"] as const) {
+  for (const field of ["isBook", "resourceAuthor", "readingStatus", "groupType", "goalKind", "goalTemplateId", "goalCriteria", "firstActionTitle", "routineEndsOn", "routineChecklist", "routineMissedPolicy", "attempted", "receipt", "materialKnowledgeIds", "projectCategoryIds", "projectPreset", "projectPresetManuallyChosen", "contexts", "sourceBookTitle", "actionId", "actionMeaning"] as const) {
     if (legacy[field] !== undefined) Object.assign(migrated, { [field]: legacy[field] });
   }
   // v2 could alias keys across types. Unsubmitted drafts can safely get their

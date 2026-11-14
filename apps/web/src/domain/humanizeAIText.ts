@@ -13,8 +13,8 @@ export function humanizeEntityReferences(text: string, labels: Array<[string, st
   });
 
   return withShortNames
-    .replace(/\bgoalIds\b/gi, "Cele")
-    .replace(/\bgoalId\b/gi, "Cel")
+    .replace(/\bgoalIds\b/gi, "Grupy działań")
+    .replace(/\bgoalId\b/gi, "Grupa działań")
     .replace(/\bactionIds\b/gi, "Działania")
     .replace(/\bactionId\b/gi, "Działanie")
     .replace(/\bsignalKeys?\b/gi, "sygnały")
@@ -31,7 +31,7 @@ export function humanizeEntityReferences(text: string, labels: Array<[string, st
     .replace(/\bmissing[_-]next[_-]action\b/gi, "brak następnego Działania")
     .replace(/\bblocked[_-]actions\b/gi, "zablokowane Działania")
     .replace(/\boverdue[_-]actions\b/gi, "zaległe Działania")
-    .replace(/\boverdue[_-]goal\b/gi, "przekroczony termin Celu")
+    .replace(/\boverdue[_-]goal\b/gi, "przekroczony termin grupy")
     .replace(/\bdue[_-]soon\b/gi, "bliski termin")
     .replace(/\btoo[_-]many[_-]open[_-]actions\b/gi, "zbyt wiele otwartych Działań")
     .replace(/stallują/gi, "wstrzymują")

@@ -23,7 +23,7 @@ interface SkillRow { entity_id: string }
 interface GoalSkillRow { learning_goal_id: string; skill_id: string }
 interface ProposalRow { id: string; status: "pending" | "approved" | "rejected"; created_at: string }
 interface ReviewRow { completed_at: string }
-interface GoalRow { id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
+interface GoalRow { group_type?: "category" | "task"; id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
 interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; preset?: "standard" | "reading" | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalTemplateRow { id: string; name: string; kind: AppState["goalTemplates"][number]["kind"]; outcome_prompt: string; criterion_prompt: string | null; default_actions: Array<{ title: string; detail?: string }>; is_system: boolean; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalCriterionRow { id: string; goal_id: string; title: string; completed: boolean; legacy_source_id: string | null }
@@ -108,7 +108,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     client.from("learning_goal_skills").select("learning_goal_id,skill_id"),
     client.from("ai_proposals").select("id,status,created_at").in("status", ["pending", "approved", "rejected"]).order("created_at", { ascending: false }).limit(1),
     client.from("reviews").select("completed_at").order("completed_at", { ascending: false }).limit(1),
-    client.from("goals").select("id,version,title,outcome,kind,status,priority,area_id,template_id,target_date,archived_at,trashed_at,legacy_source,created_at,updated_at"),
+    client.from("goals").select("id,version,title,outcome,group_type,kind,status,priority,area_id,template_id,target_date,archived_at,trashed_at,legacy_source,created_at,updated_at"),
     client.from("areas").select("id,name,description,parent_project_id,category_ids,color,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_templates").select("id,name,kind,outcome_prompt,criterion_prompt,default_actions,is_system,archived_at,trashed_at,created_at,updated_at"),
     client.from("goal_criteria").select("id,goal_id,title,completed,legacy_source_id").order("position"),
@@ -133,12 +133,12 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
   const goalSkillRows = dataOrThrow(goalSkillsResult, "Learning goal skills") as GoalSkillRow[];
   const proposals = dataOrThrow(proposalsResult, "AI proposals") as ProposalRow[];
   const reviews = dataOrThrow(reviewsResult, "Reviews") as ReviewRow[];
-  const unifiedGoals = dataOrThrow(unifiedGoalsResult, "Cele") as GoalRow[];
+  const unifiedGoals = dataOrThrow(unifiedGoalsResult, "Grupy działań") as GoalRow[];
   const areas = dataOrThrow(areasResult, "Projekty") as AreaRow[];
-  const templates = dataOrThrow(templatesResult, "Szablony Celów") as GoalTemplateRow[];
-  const criteria = dataOrThrow(criteriaResult, "Kryteria Celów") as GoalCriterionRow[];
+  const templates = dataOrThrow(templatesResult, "Szablony zadań") as GoalTemplateRow[];
+  const criteria = dataOrThrow(criteriaResult, "Kryteria grup działań") as GoalCriterionRow[];
   const actionRows = dataOrThrow(actionsResult, "Działania") as ActionRow[];
-  const progressRows = dataOrThrow(progressResult, "Postęp Celów") as ProgressRow[];
+  const progressRows = dataOrThrow(progressResult, "Postęp grup działań") as ProgressRow[];
   const recurringRows = dataOrThrow(recurringResult, "Działania cykliczne") as RecurringRow[];
   const knowledgeLinkRows = dataOrThrow(knowledgeLinksResult, "Powiązania Wiedzy") as KnowledgeLinkRow[];
   const knowledgeContents = dataOrThrow(knowledgeContentsResult, "Treść Wiedzy") as KnowledgeContentRow[];
@@ -214,7 +214,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     projectCategories: (dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów") as Array<{ id: string; name: string; color: string }>).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) === "reading" || categoryPresetById.get(category.id) === "standard" ? categoryPresetById.get(category.id) : undefined })),
     areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, preset: projectPresetById.get(area.id) === "reading" ? "reading" : "standard", name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
     goalTemplates: templates.map((template) => ({ id: template.id, name: template.name, kind: template.kind, outcomePrompt: template.outcome_prompt, criterionPrompt: template.criterion_prompt ?? undefined, defaultActions: template.default_actions, system: template.is_system, visibility: template.trashed_at ? "trashed" : template.archived_at ? "archived" : "active", createdAt: template.created_at, updatedAt: template.updated_at })),
-    goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
+    goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, groupType: goal.group_type ?? "task", kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
     goalCriteria: criteria.map((criterion) => ({ id: criterion.id, goalId: criterion.goal_id, title: criterion.title, completed: criterion.completed, legacySourceId: criterion.legacy_source_id ?? undefined })),
     actions: actionRows.map((action) => ({ id: action.id, version: action.version, goalId: action.goal_id ?? undefined, areaId: action.area_id ?? undefined, title: action.title, detail: action.detail, status: action.status, blocker: action.blocker ?? undefined, position: action.position, isNext: action.is_next, pinnedToToday: action.pinned_to_today, scheduledFor: action.scheduled_for ?? undefined, completedAt: action.completed_at ?? undefined, skippedAt: action.skipped_at ?? undefined, cancelledAt: action.cancelled_at ?? undefined, recurringTemplateId: action.recurring_template_id ?? undefined, occurrenceDate: action.occurrence_date ?? undefined, checklist: action.checklist, legacySourceId: action.legacy_source_id ?? undefined, createdAt: action.created_at, updatedAt: action.updated_at })),
     progressEntries: progressRows.map((entry) => ({ id: entry.id, goalId: entry.goal_id, actionId: entry.action_id ?? undefined, knowledgeItemId: entry.knowledge_entity_id ?? undefined, kind: entry.kind, content: entry.content, legacySource: entry.legacy_source ?? undefined, legacySourceId: entry.legacy_source_id ?? undefined, createdAt: entry.created_at })),
@@ -457,12 +457,13 @@ export async function createProjectRemote(workspaceId: string, input: NewProject
 }
 
 export async function createGoalRemote(workspaceId: string, goalId: string, actionId: string | undefined, input: NewGoalInput, criteria: Array<{ id: string; title: string; completed: boolean }>, idempotencyKey: string, materialLinks: Array<{ id: string; knowledgeItemId: string }> = []) {
-  return dataOrThrow(await getSupabase().rpc("create_goal_with_action_v2", {
+  return dataOrThrow(await getSupabase().rpc("create_action_group", {
     target_workspace_id: workspaceId,
     target_goal_id: goalId,
     target_action_id: actionId ?? null,
     goal_title: input.title,
     goal_outcome: input.outcome,
+    goal_group_type: input.groupType ?? "task",
     goal_kind: input.kind ?? "custom",
     target_area_id: input.areaId ?? null,
     first_action_title: input.firstActionTitle ?? null,
@@ -470,11 +471,11 @@ export async function createGoalRemote(workspaceId: string, goalId: string, acti
     goal_criteria: criteria,
     command_idempotency_key: idempotencyKey,
     ...(materialLinks.length ? { goal_material_links: materialLinks } : {})
-  }), "Utworzenie Celu");
+  }), "Utworzenie grupy");
 }
 
-export async function updateGoalRemote(goalId: string, expectedVersion: number, changes: { title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) {
-  dataOrThrow(await getSupabase().rpc("update_goal_details_checked", { target_goal_id: goalId, expected_version: expectedVersion, goal_changes: changes, command_idempotency_key: crypto.randomUUID() }), "Edycja Celu");
+export async function updateGoalRemote(goalId: string, expectedVersion: number, changes: { groupType?: "category" | "task"; title?: string; outcome?: string; areaId?: string | null; priority?: "low" | "normal" | "high"; targetDate?: string | null; criteria?: Array<{ id: string; title: string; completed: boolean }> }) {
+  dataOrThrow(await getSupabase().rpc("update_goal_details_checked", { target_goal_id: goalId, expected_version: expectedVersion, goal_changes: changes, command_idempotency_key: crypto.randomUUID() }), "Edycja grupy");
 }
 
 export async function createActionRemote(workspaceId: string, id: string, input: NewActionInput, materialLinks: Array<{ id: string; knowledgeItemId: string }> = []) {
@@ -582,7 +583,7 @@ export async function updateAreaRemote(areaId: string, changes: { name?: string;
 export async function createGoalTemplateRemote(workspaceId: string, id: string, name: string, kind: GoalKind, defaultActions?: Array<{ title: string; detail?: string }>) {
   dataOrThrow(await getSupabase().from("goal_templates").insert({
     id, workspace_id: workspaceId, name: name.trim(), kind, default_actions: defaultActions ?? [], is_system: false
-  }).select("id").single(), "Utworzenie szablonu Celu");
+  }).select("id").single(), "Utworzenie szablonu grupy");
 }
 
 export async function updateGoalTemplateRemote(templateId: string, changes: { name?: string; kind?: GoalKind; defaultActions?: Array<{ title: string; detail?: string }> }) {
@@ -590,11 +591,11 @@ export async function updateGoalTemplateRemote(templateId: string, changes: { na
   if (changes.name !== undefined) payload.name = changes.name.trim();
   if (changes.kind !== undefined) payload.kind = changes.kind;
   if (changes.defaultActions !== undefined) payload.default_actions = changes.defaultActions;
-  dataOrThrow(await getSupabase().from("goal_templates").update(payload).eq("id", templateId).eq("is_system", false).select("id").single(), "Edycja szablonu Celu");
+  dataOrThrow(await getSupabase().from("goal_templates").update(payload).eq("id", templateId).eq("is_system", false).select("id").single(), "Edycja szablonu grupy");
 }
 
 export async function setGoalStatusRemote(goalId: string, status: "active" | "paused" | "achieved" | "abandoned", reason: string | undefined, progressId: string, progressContent: string) {
-  dataOrThrow(await getSupabase().rpc("set_goal_outcome_status", { target_goal_id: goalId, target_status: status, change_reason: reason ?? null, target_progress_id: progressId, target_progress_content: progressContent, command_idempotency_key: crypto.randomUUID() }), "Zmiana stanu Celu");
+  dataOrThrow(await getSupabase().rpc("set_goal_outcome_status", { target_goal_id: goalId, target_status: status, change_reason: reason ?? null, target_progress_id: progressId, target_progress_content: progressContent, command_idempotency_key: crypto.randomUUID() }), "Zmiana stanu grupy");
 }
 
 export async function setGoalVisibilityRemote(goalId: string, visibility: "active" | "archived" | "trashed") {
@@ -602,7 +603,7 @@ export async function setGoalVisibilityRemote(goalId: string, visibility: "activ
     target_goal_id: goalId,
     target_visibility: visibility,
     command_idempotency_key: crypto.randomUUID()
-  }), "Zmiana widoczności Celu");
+  }), "Zmiana widoczności grupy");
 }
 
 export async function setAreaVisibilityRemote(areaId: string, visibility: "active" | "archived" | "trashed") {

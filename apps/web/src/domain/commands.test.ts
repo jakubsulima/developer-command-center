@@ -483,10 +483,10 @@ describe("komendy domenowe Workspace", () => {
     expect(() => executeDomainCommand(state, { type: "link_knowledge", id: "bad-decision", knowledgeItemId: "note", targetKnowledgeItemId: "decision", meaning: "decision", createdAt: "now" })).toThrow("knowledge_decision_requires_decision");
   });
 
-  it("tworzy rezultat, relację i historię Celu atomowo oraz jest idempotentne", () => {
+  it("tworzy rezultat, relację i historię grupy atomowo oraz jest idempotentne", () => {
     const state = {
       ...structuredClone(emptyState),
-      goals: [{ id: "goal", title: "Cel", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }],
+      goals: [{ id: "goal", title: "Grupa działań", outcome: "Wynik", kind: "custom" as const, status: "active" as const, visibility: "active" as const, priority: "normal" as const }],
       actions: [{ id: "action", version: 1, title: "Wykonać krok", detail: "", goalId: "goal", status: "completed" as const, position: 0, isNext: false, pinnedToToday: false, checklist: [] }]
     };
     const command = { type: "record_action_result" as const, actionId: "action", result: { kind: "new" as const, title: "Gotowy wynik", detail: "Opis wyniku" }, knowledgeId: "artifact", linkId: "result-link", progressId: "progress-result", createdAt: "now" };

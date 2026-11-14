@@ -13,7 +13,7 @@ export interface ActionContext {
 export function resolveActionContext(action: GoalAction, state: AppState): ActionContext {
   if (action.goalId) {
     const goal = state.goals.find((candidate) => candidate.id === action.goalId);
-    if (goal) return { kind: "goal", label: "Działanie w Celu", name: goal.title, to: routeForEntity({ type: "goal", id: goal.id }) };
+    if (goal) return { kind: "goal", label: "Działanie w grupie", name: goal.title, to: routeForEntity({ type: "goal", id: goal.id }) };
   }
 
   if (action.areaId) {
@@ -30,7 +30,7 @@ export function describeActionContext(context: ActionContext) {
 }
 
 export function describeCompactActionContext(context: ActionContext) {
-  if (context.kind === "goal") return context.name ? `Cel · ${context.name}` : "Cel";
+  if (context.kind === "goal") return context.name ? `Grupa działań · ${context.name}` : "Grupa działań";
   if (context.kind === "project") return context.name ? `Projekt · ${context.name}` : "Projekt";
   if (context.kind === "missing-project") return "Projekt niedostępny";
   return "Samodzielne";

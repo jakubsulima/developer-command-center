@@ -67,23 +67,23 @@ describe("create_goal", () => {
   });
 
   it("creates criteria atomically and edits them without losing completion", () => {
-    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-criteria", title: "Cel", outcome: "Rezultat", kind: "custom", criteria: [{ id: "criterion-1", title: "Dowód", completed: false }], createdAt: "now" });
-    const updated = executeDomainCommand(created, { type: "update_goal", goalId: "goal-criteria", title: "Lepszy Cel", criteria: [{ id: "criterion-1", title: "Dowód", completed: true }], changedAt: "later" });
-    expect(updated.goals[0]?.title).toBe("Lepszy Cel");
+    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-criteria", title: "Grupa działań", outcome: "Rezultat", kind: "custom", criteria: [{ id: "criterion-1", title: "Dowód", completed: false }], createdAt: "now" });
+    const updated = executeDomainCommand(created, { type: "update_goal", goalId: "goal-criteria", title: "Lepszy Grupa działań", criteria: [{ id: "criterion-1", title: "Dowód", completed: true }], changedAt: "later" });
+    expect(updated.goals[0]?.title).toBe("Lepszy Grupa działań");
     expect(updated.goalCriteria).toEqual([expect.objectContaining({ id: "criterion-1", completed: true })]);
   });
 
   it("requires a reason before abandoning a goal", () => {
-    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-abandoned", title: "Cel", outcome: "Rezultat", kind: "custom", createdAt: "now" });
+    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-abandoned", title: "Grupa działań", outcome: "Rezultat", kind: "custom", createdAt: "now" });
     expect(() => executeDomainCommand(created, { type: "set_goal_status", goalId: "goal-abandoned", status: "abandoned", changedAt: "later" })).toThrow("goal_abandon_reason_required");
     expect(executeDomainCommand(created, { type: "set_goal_status", goalId: "goal-abandoned", status: "abandoned", reason: "Zmiana priorytetów", changedAt: "later" }).goals[0]?.status).toBe("abandoned");
   });
 
   it("records the status decision in the same domain transition", () => {
-    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-done", title: "Cel", outcome: "Rezultat", kind: "custom", createdAt: "now" });
-    const achieved = executeDomainCommand(created, { type: "set_goal_status", goalId: "goal-done", status: "achieved", progressId: "progress-done", progressContent: "Cel osiągnięty.", changedAt: "later" });
+    const created = executeDomainCommand(emptyState, { type: "create_goal", goalId: "goal-done", title: "Grupa działań", outcome: "Rezultat", kind: "custom", createdAt: "now" });
+    const achieved = executeDomainCommand(created, { type: "set_goal_status", goalId: "goal-done", status: "achieved", progressId: "progress-done", progressContent: "Grupa działań osiągnięty.", changedAt: "later" });
     expect(achieved.goals[0]?.status).toBe("achieved");
-    expect(achieved.progressEntries[0]).toMatchObject({ id: "progress-done", goalId: "goal-done", content: "Cel osiągnięty." });
+    expect(achieved.progressEntries[0]).toMatchObject({ id: "progress-done", goalId: "goal-done", content: "Grupa działań osiągnięty." });
   });
 });
 
@@ -93,7 +93,7 @@ describe("goal actions", () => {
       type: "create_goal",
       goalId: "goal-1",
       actionId: "action-1",
-      title: "Cel",
+      title: "Grupa działań",
       outcome: "Rezultat",
       firstActionTitle: "Krok",
       kind: "custom",
@@ -119,7 +119,7 @@ describe("goal actions", () => {
 
   it("requires a reason for a blocker and preserves it in progress history after unblocking", () => {
     const state = executeDomainCommand(emptyState, {
-      type: "create_goal", goalId: "goal-1", actionId: "action-1", title: "Cel", outcome: "Rezultat",
+      type: "create_goal", goalId: "goal-1", actionId: "action-1", title: "Grupa działań", outcome: "Rezultat",
       firstActionTitle: "Krok", kind: "custom", createdAt: "2026-08-04T12:00:00.000Z"
     });
     expect(() => executeDomainCommand(state, {

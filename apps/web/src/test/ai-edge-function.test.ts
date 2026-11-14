@@ -157,7 +157,7 @@ describe("AI Edge Function building blocks", () => {
   });
 
   it("wyłącza reasoning i wersjonuje zmianę promptu", () => {
-    expect(GOAL_REVIEW_PROMPT_VERSION).toBe(5);
+    expect(GOAL_REVIEW_PROMPT_VERSION).toBe(6);
     expect(buildGoalReviewSystemPrompt("prompt")).toContain("Zwróć wyłącznie JSON");
     expect(buildGoalReviewSystemPrompt("prompt")).toContain("completed7Days jest osobnym licznikiem stałych 7 dni");
   });

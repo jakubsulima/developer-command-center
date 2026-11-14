@@ -73,7 +73,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
     setDraftError("");
     try {
       const goal = state.goals.find((candidate) => candidate.id === draft.goalId);
-      if (!goal || goal.status !== "active" || goal.visibility !== "active") throw new Error("Cel tej propozycji nie jest już aktywny. Odśwież analizę.");
+      if (!goal || goal.status !== "active" || goal.visibility !== "active") throw new Error("Grupa tej propozycji nie jest już aktywna. Odśwież analizę.");
       await createAction({ goalId: draft.goalId, title: draft.title, detail: draft.detail, pinnedToToday: true });
       notifySuccess("Działanie dodane po Twoim zatwierdzeniu.");
       setDraft(undefined);
@@ -91,7 +91,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
     : selection?.cta.kind === "action"
       ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Otwórz Działanie<ArrowRight /></Link>
       : selection?.cta.kind === "goal"
-        ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Przejdź do Celu<ArrowRight /></Link>
+        ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Przejdź do grupy<ArrowRight /></Link>
         : null;
 
   return <>
@@ -101,16 +101,16 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
         {aiGoalReview ? <Button variant="ghost" loading={busy} disabled={busy} onClick={begin}><RefreshCw />Odśwież</Button> : null}
       </div>
 
-      {!aiGoalReview && !busy ? <div className="ai-start-empty"><p>AI może podsumować aktywne Cele i wskazać następny krok.</p>{activeGoals.length ? <Button variant="primary" onClick={begin}><Sparkles />Przeanalizuj moje Cele</Button> : <><Button variant="primary" disabled><Sparkles />Przeanalizuj moje Cele</Button><Link className="section-link" to="/goals?create=true">Utwórz aktywny Cel<ChevronRight /></Link></>}</div> : null}
+      {!aiGoalReview && !busy ? <div className="ai-start-empty"><p>AI może podsumować aktywne grupy i wskazać następny krok.</p>{activeGoals.length ? <Button variant="primary" onClick={begin}><Sparkles />Przeanalizuj moje grupy działań</Button> : <><Button variant="primary" disabled><Sparkles />Przeanalizuj moje grupy działań</Button><Link className="section-link" to="/goals?create=true">Utwórz aktywną grupę<ChevronRight /></Link></>}</div> : null}
       {!aiGoalReview && aiGoalReviewReadStatus === "checking" ? <p className="muted-copy" role="status">Sprawdzam zapisaną analizę. Ten odczyt nie uruchamia modelu.</p> : null}
-      {!aiGoalReview && busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>Analizuję aktywne Cele…</strong><small>Możesz nadal korzystać ze Startu.</small></div></div> : null}
+      {!aiGoalReview && busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>Analizuję aktywne grupy…</strong><small>Możesz nadal korzystać ze Startu.</small></div></div> : null}
       {aiGoalReview && busy ? <div className="ai-start-refreshing" role="status"><RefreshCw className="spin" />Odświeżam analizę…</div> : null}
       {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{aiGoalReviewErrorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{aiGoalReviewError.code === "AI_GENERATION_IN_PROGRESS" ? <Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Sprawdź status</Button> : !terminalErrors.has(aiGoalReviewError.code) ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(false)}>Spróbuj ponownie</Button> : null}</div> : null}
       {aiGoalReviewReadError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>Nie udało się sprawdzić aktualności.</strong><small>{aiGoalReviewReadError}</small></div><Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Ponów odczyt</Button></div> : null}
 
       {aiGoalReview && (aiGoalReview.stale || aiGoalReviewFreshness !== "current") ? <div className="ai-start-stale-summary" role="status"><CalendarClock /><div><strong>Analiza z {new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date(aiGoalReview.generatedAt))} jest nieaktualna</strong><span>{aiGoalReviewFreshnessCopy(aiGoalReviewFreshness)}</span><Link to="/review?tab=ai">Zobacz poprzednią analizę</Link><details><summary>Szczegóły analizy</summary><span>Ostatnie {aiGoalReview.windowDays} dni · {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)}{aiGoalReviewCheckedAt ? ` · sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}</span><Link to="/settings">Ustawienia</Link></details></div></div> : null}
       {aiGoalReview && !aiGoalReview.stale && aiGoalReviewFreshness === "current" ? <div className="ai-start-result">
-        <div className="ai-start-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{aiGoalStatusLabels[aiGoalReview.review.overallStatus]}</Badge><span>{polishCount(aiGoalReview.analyzedGoalIds.length, "przeanalizowany Cel", "przeanalizowane Cele", "przeanalizowanych Celów")}</span></div>
+        <div className="ai-start-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{aiGoalStatusLabels[aiGoalReview.review.overallStatus]}</Badge><span>{polishCount(aiGoalReview.analyzedGoalIds.length, "przeanalizowana grupa działań", "przeanalizowane grupy działań", "przeanalizowanych grup działań")}</span></div>
         <div className="ai-start-direction"><h3>{humanize(aiGoalReview.review.headline)}</h3>{summary ? <p aria-label={summary.truncated ? summary.full : undefined}>{summary.visible}</p> : null}</div>
         {selection?.recommendation ? <article className="ai-start-recommendation">
           <div className="ai-start-recommendation-heading"><span>Główna rekomendacja</span><Badge tone={selection.recommendation.horizon === "now" ? "danger" : "neutral"}>{aiReviewHorizonLabels[selection.recommendation.horizon]}</Badge></div>
@@ -121,7 +121,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
           <div className="ai-feedback" role="group" aria-label={`Oceń zalecenie: ${humanize(selection.recommendation.title)}`}><span>Czy to pomocne?</span><button type="button" aria-pressed={ratings[selection.recommendation.id] === "helpful"} aria-label="Pomocne" onClick={() => void rate(selection.recommendation!.id, "helpful")}><ThumbsUp /></button><button type="button" aria-pressed={ratings[selection.recommendation.id] === "not_helpful"} aria-label="Niepomocne" onClick={() => void rate(selection.recommendation!.id, "not_helpful")}><ThumbsDown /></button></div>
           {feedbackError ? <p className="inline-mutation-error" role="alert">{feedbackError}</p> : null}
         </article> : <div className="ai-start-actions"><Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę<ChevronRight /></Link></div>}
-        <footer className="muted-copy">Przegląd Celów · ostatnie {aiGoalReview.windowDays} dni · {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)} · wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}{aiGoalReview.cached ? " · wynik z cache" : ""} · <Link to="/settings">Ustawienia</Link></footer>
+        <footer className="muted-copy">Przegląd grup działań · ostatnie {aiGoalReview.windowDays} dni · {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)} · wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}{aiGoalReview.cached ? " · wynik z cache" : ""} · <Link to="/settings">Ustawienia</Link></footer>
       </div> : null}
 
       <section className="start-overview ai-start-signals" aria-label="Sygnały i dalszy plan">

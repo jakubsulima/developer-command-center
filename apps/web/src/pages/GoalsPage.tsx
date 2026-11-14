@@ -1,3 +1,4 @@
+import { actionGroupType, actionGroupTypeLabels } from "../domain/actionGroups";
 import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CreationBody, CreationDialog, CreationFooter } from "../components/CreationForm";
@@ -17,10 +18,10 @@ import { locationAddress, navigationCardId } from "../domain/navigation";
 
 
 function goalCountLabel(count: number) {
-  if (count === 1) return "1 Cel";
+  if (count === 1) return "1 Grupa działań";
   const mod10 = count % 10;
   const mod100 = count % 100;
-  return mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? `${count} Cele` : `${count} Celów`;
+  return mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? `${count} Grupy działań` : `${count} grup działań`;
 }
 
 export function GoalsPage() {
@@ -35,8 +36,9 @@ export function GoalsPage() {
   const [editingTemplateId, setEditingTemplateId] = useState<string>();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const status = (params.get("status") ?? "active") as GoalStatus | "archived" | "trashed" | "all";
+  const groupType = params.get("groupType");
   const kind = params.get("kind") as GoalKind | null;
-  const activeFilterCount = Number(status !== "active") + Number(Boolean(kind));
+  const activeFilterCount = Number(status !== "active") + Number(Boolean(kind)) + Number(Boolean(groupType));
   const statusTabs = (mobile = false) => <Tabs value={status} onValueChange={(value) => { const next = new URLSearchParams(params); next.set("status", value); setParams(next); if (mobile) setFiltersOpen(false); }} className="filter-pills">
     <TabsList className={mobile ? "grid h-auto w-full grid-cols-2 items-stretch border-0 bg-transparent p-0" : "h-auto flex-wrap border-0 bg-transparent p-0"}>
       {(["active", "paused", "achieved", "abandoned", "all"] as const).map((value) => <TabsTrigger className="min-h-10 justify-start" role="button" value={value} key={value}>{value === "all" ? "Wszystkie" : statusLabels[value]}</TabsTrigger>)}
@@ -48,17 +50,20 @@ export function GoalsPage() {
     const next = new URLSearchParams(params);
     let changed = false;
     if (!["active", "paused", "achieved", "abandoned", "archived", "trashed", "all"].includes(status)) { next.set("status", "active"); changed = true; }
+    if (groupType && !["category", "task"].includes(groupType)) { next.delete("groupType"); changed = true; }
     if (kind && !Object.prototype.hasOwnProperty.call(kindLabels, kind)) { next.delete("kind"); changed = true; }
     if (changed) setParams(next, { replace: true });
-  }, [kind, params, setParams, status]);
-  useEffect(() => { if (params.get("create") === "true") { requestAppQuickAdd({ mode: "goal", draftKey: "goals-list", goalKind: kind ?? undefined }); const next = new URLSearchParams(params); next.delete("create"); setParams(next, { replace: true }); } }, [kind, params, setParams]);
+  }, [groupType, kind, params, setParams, status]);
+  useEffect(() => { if (params.get("create") === "true") { requestAppQuickAdd({ mode: "goal", draftKey: "goals-list", groupType: groupType === "task" ? "task" : "category", goalKind: kind ?? undefined }); const next = new URLSearchParams(params); next.delete("create"); setParams(next, { replace: true }); } }, [groupType, kind, params, setParams]);
 
   const goals = useMemo(() => state.goals.filter((goal) => {
     const visibilityMatches = status === "archived" ? goal.visibility === "archived"
       : status === "trashed" ? goal.visibility === "trashed"
         : goal.visibility === "active" && (status === "all" || goal.status === status);
-    return visibilityMatches && (!kind || goal.kind === kind);
-  }), [kind, state.goals, status]);
+    return visibilityMatches && (!kind || goal.kind === kind) && (!groupType || actionGroupType(goal) === groupType);
+  }), [groupType, kind, state.goals, status]);
+
+  const groupTypeFilter = (id: string) => <><label className="sr-only" htmlFor={id}>Typ grupy</label><select id={id} value={groupType ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("groupType", event.target.value); else next.delete("groupType"); setParams(next); }}><option value="">Każdy typ grupy</option><option value="category">Kategorie</option><option value="task">Zadania nadrzędne</option></select></>;
 
   const saveTemplate = async () => {
     if (templateLocked.current || !template.name.trim()) return;
@@ -75,48 +80,51 @@ export function GoalsPage() {
 
 
   return (
-    <AppShell addAction={{ label: "Nowy Cel", shortLabel: "Cel", ariaLabel: "Dodaj nowy Cel", quickAdd: { mode: "goal", pinnedToToday: false, draftKey: "goals-list", goalKind: kind ?? undefined } }}>
-      <PageHeading title="Cele" eyebrow="Proste rezultaty do wykonania" />
+    <AppShell addAction={{ label: "Nowa grupa działań", shortLabel: "Grupa działań", ariaLabel: "Dodaj nową grupę działań", quickAdd: { mode: "goal", pinnedToToday: false, draftKey: "goals-list", groupType: groupType === "task" ? "task" : "category", goalKind: kind ?? undefined } }}>
+      <PageHeading title="Grupy działań" eyebrow="Kategorie i zadania nadrzędne z Działaniami" />
+      <div className="goals-index">
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
         {statusTabs()}
-        <div className="goal-toolbar-side">
-          <select aria-label="Typ Celu" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <Button onClick={() => setSettingsOpen(true)}><Settings2 />Szablony Celów</Button>
-          {(kind || status !== "active") ? <Button variant="ghost" onClick={() => setParams({})}>Wyczyść filtry</Button> : null}
+        <div className="goal-toolbar-side">{groupTypeFilter("desktop-group-type")}
+          <select aria-label="Rodzaj zadania" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <Button onClick={() => setSettingsOpen(true)}><Settings2 />Szablony zadań</Button>
+          {(kind || groupType || status !== "active") ? <Button variant="ghost" onClick={() => setParams({})}>Wyczyść filtry</Button> : null}
         </div>
       </div>
-      <Modal open={filtersOpen} title={`Filtry Celów (${activeFilterCount})`} onClose={() => setFiltersOpen(false)}>
-        <div className="mobile-filter-sheet">
+      <Modal open={filtersOpen} title={`Filtry grup działań (${activeFilterCount})`} onClose={() => setFiltersOpen(false)}>
+        <div className="mobile-filter-sheet">{groupTypeFilter("mobile-group-type")}
           {statusTabs(true)}
-          <label className="field-label" htmlFor="mobile-goal-kind">Typ Celu</label>
+          <label className="field-label" htmlFor="mobile-goal-kind">Rodzaj zadania</label>
           <select id="mobile-goal-kind" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <div className="modal-actions"><Button variant="ghost" disabled={!activeFilterCount} onClick={() => setParams({})}>Wyczyść filtry</Button><Button variant="primary" onClick={() => setFiltersOpen(false)}>Pokaż {goals.length} Celów</Button></div>
+          <div className="modal-actions"><Button variant="ghost" disabled={!activeFilterCount} onClick={() => setParams({})}>Wyczyść filtry</Button><Button variant="primary" onClick={() => setFiltersOpen(false)}>Pokaż {goals.length} grup działań</Button></div>
         </div>
       </Modal>
       <p className="results-summary">{goalCountLabel(goals.length)}{kind ? ` · typ: ${kindLabels[kind]}` : ""}</p>
-      {storeLoading ? <ListSkeleton label="Ładowanie Celów" /> : null}
+      {storeLoading ? <ListSkeleton label="Ładowanie grup działań" /> : null}
 
-      {goals.length ? <div className="goal-grid">{goals.map((goal) => {
+      {goals.length ? <><div className="goal-list-columns" aria-hidden="true"><span>Grupa / typ</span><span>Status</span><span>Projekt</span><span>Następne Działanie / sygnały</span></div><div className="goal-grid">{goals.map((goal) => {
         const areaName = state.areas.find((item) => item.id === goal.areaId)?.name;
         const next = state.actions.find((action) => action.goalId === goal.id && action.isNext && ["ready", "in_progress"].includes(action.status));
         const blocked = state.actions.some((action) => action.goalId === goal.id && action.status === "blocked");
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
         const overdue = state.actions.some((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status));
         const card = <>
-          <h2 className="line-clamp-2">{goal.title}</h2><div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{kindLabels[goal.kind]}</Badge><span>{statusLabels[goal.status]}</span></div>
-          {areaName || next ? <div className="goal-card-context">{areaName ? <span><Layers3 />{areaName}</span> : null}{next ? <span><Flag />{next.title}</span> : null}</div> : null}
-          <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
+          <h2 className="line-clamp-2">{goal.title}</h2><div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{actionGroupTypeLabels[actionGroupType(goal)]}</Badge><span>{statusLabels[goal.status]}</span></div>
+          {areaName || next ? <div className="goal-card-context">{areaName ? <span className="goal-card-project"><Layers3 />{areaName}</span> : null}{next ? <span className="goal-card-next"><Flag />{next.title}</span> : null}</div> : null}
+          {!areaName ? <span className="collection-desktop-placeholder goal-card-project">Bez Projektu</span> : null}
+          {!next ? <span className="collection-desktop-placeholder goal-card-next">—</span> : null}
+          <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && actionGroupType(goal) === "task" && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
         </>;
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
-          : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} tabIndex={-1} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Cele", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Cele" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz Cel: ${goal.title}`}>{card}</NavigationLink>;
-      })}</div> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze Celów" detail={status === "active" ? "Użyj przycisku + w nagłówku i zacznij od rezultatu, który jest dla Ciebie ważny." : "Zmień filtr albo przywróć Cel z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
+          : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Grupy działań", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie grupy" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz grupę: ${goal.title}`}>{card}</NavigationLink>;
+      })}</div></> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze grup działań" detail={status === "active" ? "Użyj przycisku + w nagłówku i dodaj kategorię, np. UI/UX, albo zadanie nadrzędne." : "Zmień filtr albo przywróć grupę z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
-      <CreationDialog open={settingsOpen} title="Własne szablony Celów" closeDisabled={templateSaving} onClose={() => { if (!templateLocked.current) setSettingsOpen(false); }}>
+      <CreationDialog open={settingsOpen} title="Własne szablony zadań" closeDisabled={templateSaving} onClose={() => { if (!templateLocked.current) setSettingsOpen(false); }}>
         <div className="quick-add"><CreationBody>
           <form id="goal-template-settings" onSubmit={(event) => { event.preventDefault(); void saveTemplate(); }}><fieldset className="creation-fields" disabled={templateSaving}>
-            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon Celu"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tej przestrzeni pracy.</p>
+            <h3>{editingTemplateId ? "Edytuj własny szablon" : "Własny szablon zadania"}</h3><p>Gotowe propozycje pozostają niezmienne; własny szablon należy tylko do tej przestrzeni pracy.</p>
             <label className="field-label" htmlFor="template-name">Nazwa</label><input id="template-name" value={template.name} onChange={(event) => setTemplate((current) => ({ ...current, name: event.target.value }))} required />
             <label className="field-label" htmlFor="template-kind">Charakter</label><select id="template-kind" value={template.kind} onChange={(event) => setTemplate((current) => ({ ...current, kind: event.target.value as GoalKind }))}>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <label className="field-label" htmlFor="template-action">Domyślne pierwsze Działanie</label><input id="template-action" value={template.firstAction} onChange={(event) => setTemplate((current) => ({ ...current, firstAction: event.target.value }))} />
@@ -125,6 +133,7 @@ export function GoalsPage() {
           </fieldset></form>{templateError ? <p role="alert">{templateError}</p> : null}
         </CreationBody><CreationFooter><Button type="button" disabled={templateSaving} onClick={() => setSettingsOpen(false)}>Zamknij</Button><Button type="submit" form="goal-template-settings" loading={templateSaving} disabled={!template.name.trim()}>Zapisz szablon</Button></CreationFooter></div>
       </CreationDialog>
+      </div>
     </AppShell>
   );
 }

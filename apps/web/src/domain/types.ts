@@ -10,6 +10,7 @@ export type KnowledgeRelationMeaning = "material" | "result" | "decision" | "ref
 export type ProjectPreset = "standard" | "reading";
 export type ReadingStatus = "to_read" | "reading" | "read" | "paused" | "abandoned";
 export type GoalKind = "project" | "learning" | "personal" | "maintenance" | "custom";
+export type ActionGroupType = "category" | "task";
 export type GoalStatus = "active" | "paused" | "achieved" | "abandoned";
 export type Visibility = "active" | "archived" | "trashed";
 export type GoalPriority = "low" | "normal" | "high";
@@ -69,6 +70,8 @@ export interface GoalTemplate {
 }
 
 export interface Goal {
+  /** Missing in older snapshots; interpreted as a parent task. */
+  groupType?: ActionGroupType;
   id: string;
   version?: number;
   title: string;

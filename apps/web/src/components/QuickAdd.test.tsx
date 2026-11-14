@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactElement } from "react";
-import { act, fireEvent, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickAdd } from "./QuickAdd";
@@ -43,8 +43,8 @@ describe("Dodaj — formularze i kontekst", () => {
     try {
       render(<QuickAdd open request={{ mode, materialKnowledgeIds: ["book"] }} onClose={vi.fn()} />);
       expect(screen.getByText("Książka źródłowa")).toBeVisible();
-      await user.type(screen.getByLabelText(mode === "action" ? "Co chcesz zrobić?" : "Co chcesz osiągnąć?"), "Krok z książki");
-      await user.click(screen.getByRole("button", { name: mode === "action" ? "Dodaj Działanie" : "Utwórz Cel" }));
+      await user.type(screen.getByLabelText(mode === "action" ? "Co chcesz zrobić?" : "Nazwa grupy"), "Krok z książki");
+      await user.click(screen.getByRole("button", { name: mode === "action" ? "Dodaj Działanie" : "Utwórz grupę" }));
       expect(screen.getByRole("button", { name: "Odłącz materiał: Książka źródłowa" })).toBeDisabled();
       expect(create.mock.calls[0][0]).toMatchObject({ materialKnowledgeIds: ["book"] });
       await act(async () => finish("created-from-book"));
@@ -181,9 +181,9 @@ describe("Dodaj — formularze i kontekst", () => {
       render(<QuickAdd open request={{ mode: "action", goalId: "goal" }} onClose={vi.fn()} />);
       expect(screen.getByLabelText("Co chcesz zrobić?")).toBeEnabled();
       await user.click(screen.getByRole("button", { name: "Odłącz niedostępne powiązanie" }));
-      await user.type(screen.getByLabelText("Co chcesz zrobić?"), " bez Celu");
+      await user.type(screen.getByLabelText("Co chcesz zrobić?"), " bez grupy");
       await user.click(screen.getByRole("button", { name: "Dodaj Działanie" }));
-      expect(store.createAction.mock.calls[1][0]).toMatchObject({ title: "Do poprawy bez Celu", goalId: undefined });
+      expect(store.createAction.mock.calls[1][0]).toMatchObject({ title: "Do poprawy bez grupy", goalId: undefined });
       expect(store.createAction.mock.calls[1][1]).not.toBe(rejectedKey);
     } finally { store.state.goals = goals; }
   });
@@ -276,8 +276,8 @@ describe("Dodaj — formularze i kontekst", () => {
     render(<QuickAdd open onClose={vi.fn()} />);
     expect(screen.getByRole("dialog", { name: "Dodaj" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cel" }));
-    expect(screen.getByLabelText("Co chcesz osiągnąć?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Grupa działań" }));
+    expect(screen.getByLabelText("Nazwa grupy")).toBeInTheDocument();
   });
   it("po ponownym otwarciu częściowej Rutyny ponawia tylko przygotowanie wystąpień", async () => {
     const user = userEvent.setup();
@@ -317,18 +317,19 @@ describe("Dodaj — formularze i kontekst", () => {
     expect(store.createArea).toHaveBeenCalledOnce();
   });
 
-  it.each([320, 390, 767, 768, 1440])("przy szerokości %s zachowuje kryteria i pierwszy krok Celu", async (width) => {
+  it.each([320, 390, 767, 768, 1440])("przy szerokości %s zachowuje kryteria i pierwszy krok grupy", async (width) => {
     const previous = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
     try {
       const user = userEvent.setup();
-      render(<QuickAdd open request={{ mode: "goal" }} onClose={vi.fn()} />);
-      await user.type(screen.getByLabelText("Co chcesz osiągnąć?"), "Rezultat");
+      render(<QuickAdd open request={{ mode: "goal", groupType: "task" }} onClose={vi.fn()} />);
+      await user.type(screen.getByLabelText("Nazwa grupy"), "Rezultat");
       await user.click(screen.getByText("Więcej opcji"));
-      await user.selectOptions(screen.getByLabelText("Rodzaj Celu"), "learning");
+      await user.selectOptions(screen.getByLabelText("Typ grupy"), "task");
+    await user.selectOptions(screen.getByLabelText("Rodzaj zadania"), "learning");
       await user.type(screen.getByLabelText(/Jaki jest pierwszy krok/), "Otworzyć materiał");
       await user.type(screen.getByLabelText(/Kryteria sukcesu/), "Pokazać wynik\nOcenić próbę");
-      await user.click(screen.getByRole("button", { name: "Utwórz Cel" }));
+      await user.click(screen.getByRole("button", { name: "Utwórz grupę" }));
       expect(store.createGoal.mock.calls[0][0]).toMatchObject({ kind: "learning", firstActionTitle: "Otworzyć materiał", criteria: ["Pokazać wynik", "Ocenić próbę"] });
     } finally { Object.defineProperty(window, "innerWidth", { configurable: true, value: previous }); }
   });
@@ -352,7 +353,7 @@ describe("Dodaj — formularze i kontekst", () => {
   });
   it.each([
     ["action", "Co chcesz zrobić?", "Dodaj Działanie", "createAction"],
-    ["goal", "Co chcesz osiągnąć?", "Utwórz Cel", "createGoal"],
+    ["goal", "Nazwa grupy", "Utwórz grupę", "createGoal"],
     ["project", "Jaki Projekt utworzyć?", "Utwórz Projekt", "createArea"],
     ["routine", "Co ma się powtarzać?", "Utwórz Rutynę", "createRecurringAction"],
     ["library", "Treść notatki", "Zapisz notatkę", "createKnowledge"],
@@ -375,16 +376,15 @@ describe("Dodaj — formularze i kontekst", () => {
     const user = userEvent.setup();
     render(<QuickAdd open request={{ mode: "action", goalId: "goal" }} onClose={vi.fn()} />);
     expect(screen.getByLabelText("Co chcesz zrobić?")).toBeVisible();
-    expect(screen.getByLabelText("Opis")).not.toBeVisible();
-    await user.click(screen.getByText("Opis i powiązania").closest("summary")!);
+    expect(screen.getByLabelText("Opis")).toBeVisible();
     await user.type(screen.getByLabelText(/Opis/), "Opis rezultatu");
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "/cel Nowy wynik");
     expect(screen.getByLabelText(/Projekt opcjonalnie/)).toHaveValue("area:project");
-    await user.click(screen.getByRole("button", { name: "Utwórz Cel" }));
+    await user.click(screen.getByRole("button", { name: "Utwórz grupę" }));
     expect(store.createGoal).toHaveBeenCalledWith(expect.objectContaining({ areaId: "project", title: "Nowy wynik", outcome: "Opis rezultatu" }));
   });
 
-  it("Biblioteka pokazuje odziedziczony Cel i pozwala jawnie go odłączyć", async () => {
+  it("Biblioteka pokazuje odziedziczony Grupa działań i pozwala jawnie go odłączyć", async () => {
     const user = userEvent.setup();
     render(<QuickAdd open request={{ mode: "action", goalId: "goal" }} onClose={vi.fn()} />);
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Notatka");
@@ -412,14 +412,11 @@ describe("Dodaj — formularze i kontekst", () => {
 
   it("utrzymuje otwarte i aktywne pole opisu po usunięciu ostatniego znaku", async () => {
     const user = userEvent.setup();
-    render(<QuickAdd open request={{ mode: "goal" }} onClose={vi.fn()} />);
-    const disclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
-    await user.click(within(disclosure).getByText("Dodaj opis"));
+    render(<QuickAdd open request={{ mode: "goal", groupType: "task" }} onClose={vi.fn()} />);
     const detail = screen.getByLabelText("Rezultat");
     await user.type(detail, "Opis do skasowania");
     await user.clear(detail);
 
-    expect(disclosure.open).toBe(true);
     expect(detail).toBeVisible();
     expect(detail).toHaveFocus();
     await user.type(detail, "Nowy opis");
@@ -427,23 +424,18 @@ describe("Dodaj — formularze i kontekst", () => {
     expect(detail).toHaveFocus();
   });
 
-  it("otwiera odtworzony opis, pozwala go ręcznie zwinąć i zachowuje go po zmianie typu", async () => {
+  it("pokazuje odtworzony opis i zachowuje go po zmianie typu", async () => {
     const user = userEvent.setup();
     const close = vi.fn();
     const first = render(<QuickAdd open request={{ mode: "project", draftKey: "project-description" }} onClose={close} />);
-    const disclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
-    await user.click(within(disclosure).getByText("Dodaj opis"));
     await user.type(screen.getByLabelText("Opis"), "Kontekst Projektu");
     await user.click(screen.getByRole("button", { name: "Zamknij okno" }));
     expect(close).toHaveBeenCalledOnce();
     first.unmount();
 
     render(<QuickAdd open request={{ mode: "project", draftKey: "project-description" }} onClose={vi.fn()} />);
-    const restoredDisclosure = document.querySelector<HTMLDetailsElement>(".quick-add-detail-disclosure")!;
     expect(screen.getByLabelText("Opis")).toBeVisible();
     expect(screen.getByLabelText("Opis")).toHaveValue("Kontekst Projektu");
-    await user.click(within(restoredDisclosure).getByText("Dodaj opis"));
-    expect(screen.getByLabelText("Opis")).not.toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Zmień typ wpisu" }));
     await user.click(screen.getByRole("button", { name: "Działanie" }));
@@ -451,15 +443,15 @@ describe("Dodaj — formularze i kontekst", () => {
     expect(screen.getByLabelText("Opis")).toHaveValue("Kontekst Projektu");
   });
 
-  it("powrót przez Projekt zachowuje Cel, termin i niezależne przypięcie", async () => {
+  it("powrót przez Projekt zachowuje Grupa działań, termin i niezależne przypięcie", async () => {
     const user = userEvent.setup();
     render(<QuickAdd open request={{ mode: "action", goalId: "goal", scheduledFor: workspaceToday(), pinnedToToday: false }} onClose={vi.fn()} />);
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Krok");
     await switchType(user, "Projekt");
     expect(screen.getByText("Nowy samodzielny Projekt")).toBeInTheDocument();
     await switchType(user, "Działanie");
-    await user.click(screen.getByText("Opis i powiązania"));
-    expect(screen.getByLabelText("Cel lub Projekt")).toHaveValue("goal:goal");
+    await user.click(screen.getByText("Powiązania i opcje"));
+    expect(screen.getByLabelText("Grupa działań lub Projekt")).toHaveValue("goal:goal");
     expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
     expect(screen.queryByLabelText(/Dokładna data/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Jutro" }));
@@ -470,7 +462,7 @@ describe("Dodaj — formularze i kontekst", () => {
     const user = userEvent.setup();
     const customDate = shiftActionDate(workspaceToday(), 16);
     render(<QuickAdd open request={{ mode: "action", scheduledFor: customDate, pinnedToToday: true }} onClose={vi.fn()} />);
-    await user.click(screen.getByText("Opis i powiązania"));
+    await user.click(screen.getByText("Powiązania i opcje"));
     expect(screen.getByRole("radio", { name: "Inna data" })).toBeChecked();
     expect(screen.getByLabelText(/Dokładna data/)).toHaveValue(customDate);
     await user.click(screen.getByRole("radio", { name: "Bez terminu" }));

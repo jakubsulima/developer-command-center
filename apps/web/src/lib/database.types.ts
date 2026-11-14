@@ -1111,6 +1111,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -1129,10 +1130,11 @@ export type Database = {
           archived_at?: string | null
           area_id?: string | null
           created_at?: string
+          group_type?: string
           id?: string
           kind?: string
           legacy_source?: string | null
-          outcome: string
+          outcome?: string
           priority?: string
           status?: string
           target_date?: string | null
@@ -1147,6 +1149,7 @@ export type Database = {
           archived_at?: string | null
           area_id?: string | null
           created_at?: string
+          group_type?: string
           id?: string
           kind?: string
           legacy_source?: string | null
@@ -2602,6 +2605,48 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_action_group: {
+        Args: {
+          command_idempotency_key: string
+          first_action_detail: string
+          first_action_title: string
+          goal_criteria: Json
+          goal_group_type?: string
+          goal_kind: string
+          goal_material_links?: Json
+          goal_outcome: string
+          goal_title: string
+          target_action_id: string
+          target_area_id: string
+          target_goal_id: string
+          target_workspace_id: string
+        }
+        Returns: {
+          archived_at: string | null
+          area_id: string | null
+          created_at: string
+          group_type: string
+          id: string
+          kind: string
+          legacy_source: string | null
+          outcome: string
+          priority: string
+          status: string
+          target_date: string | null
+          template_id: string | null
+          title: string
+          trashed_at: string | null
+          updated_at: string
+          version: number
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goals"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_action_item: {
         Args: {
           action_detail: string
@@ -2666,6 +2711,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -2706,6 +2752,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -3434,6 +3481,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -3465,6 +3513,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -3765,6 +3814,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null
@@ -3797,6 +3847,7 @@ export type Database = {
           archived_at: string | null
           area_id: string | null
           created_at: string
+          group_type: string
           id: string
           kind: string
           legacy_source: string | null

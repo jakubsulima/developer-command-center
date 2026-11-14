@@ -119,7 +119,7 @@ describe("adapter Biblioteki Wiedzy Supabase", () => {
     });
   });
 
-  it("przekazuje filtry Projektu, Celu i widoczności przed paginacją", async () => {
+  it("przekazuje filtry Projektu, grupy i widoczności przed paginacją", async () => {
     const rpc = vi.fn(async () => ({ data: { items: [], nextCursor: null, totalCount: 0 }, error: null }));
     getClient.mockReturnValue({ rpc });
     await createSupabaseWorkspaceRepository().loadPage({

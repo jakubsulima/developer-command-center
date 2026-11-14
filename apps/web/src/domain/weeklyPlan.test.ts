@@ -11,7 +11,7 @@ describe("weekly plan", () => {
 
   it("selects only open, visible actions in chosen goals or standalone work", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal-1", title: "Cel", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active", createdAt: "", updatedAt: "", version: 1 }];
+    state.goals = [{ id: "goal-1", title: "Grupa działań", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active", createdAt: "", updatedAt: "", version: 1 }];
     state.actions = [
       { id: "selected", version: 1, title: "Krok", detail: "", goalId: "goal-1", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
       { id: "standalone", version: 1, title: "Samodzielny", detail: "", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [] },
@@ -29,7 +29,7 @@ describe("weekly plan", () => {
 
   it("keeps every already scheduled action visible even when its Goal is not a selected priority", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal-1", title: "Cel poza priorytetami", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active" }];
+    state.goals = [{ id: "goal-1", title: "Grupa działań poza priorytetami", outcome: "", kind: "personal", status: "active", priority: "normal", visibility: "active" }];
     state.actions = [{ id: "scheduled", version: 1, title: "Zaplanowane", detail: "", goalId: "goal-1", status: "ready", position: 0, isNext: false, pinnedToToday: false, scheduledFor: "2026-08-11", checklist: [] }];
     expect(weeklyPlanActions(state, [], false, ["2026-08-10", "2026-08-11", "2026-08-12"])).toEqual(state.actions);
     expect(weeklyPlanActions(state, [], false, ["2026-08-03", "2026-08-09"])).toEqual([]);

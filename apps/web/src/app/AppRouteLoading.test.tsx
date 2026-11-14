@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +36,7 @@ describe("ekran ładowania widoku", () => {
     for (const button of captureButtons) expect(button).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu Więcej" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu profilu" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Szukaj w Projektach, Celach, Działaniach i Wiedzy" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Dodaj nowe Działanie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Otwórz wyszukiwanie" })).not.toBeInTheDocument();
 
@@ -59,8 +59,10 @@ describe("ekran ładowania widoku", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
     const dialog = await screen.findByRole("dialog", { name: "Nowe Działanie" });
-    expect(dialog).toHaveTextContent("Cel: Zbudować spokojny budżet domowy");
+    expect(dialog).toHaveTextContent("Grupa: Zbudować spokojny budżet domowy");
     await user.type(screen.getByLabelText("Co chcesz zrobić?"), "Krok po załadowaniu");
     expect(screen.getByLabelText("Co chcesz zrobić?")).toHaveValue("Krok po załadowaniu");
+    await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Dodaj nowe Działanie" })).toHaveFocus());
   });
 });

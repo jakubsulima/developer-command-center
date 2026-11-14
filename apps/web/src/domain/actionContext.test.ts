@@ -5,10 +5,10 @@ import { describeActionContext, describeCompactActionContext, resolveActionConte
 const baseAction = { id: "action-1", version: 1, title: "Krok", detail: "", status: "ready" as const, position: 0, isNext: false, pinnedToToday: false, checklist: [] };
 
 describe("resolver kontekstu Działania", () => {
-  it("rozpoznaje Działanie należące do Celu", () => {
+  it("rozpoznaje Działanie należące do grupy", () => {
     const state = structuredClone(emptyState);
-    state.goals = [{ id: "goal-1", title: "Cel", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
-    expect(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state)).toEqual({ kind: "goal", label: "Działanie w Celu", name: "Cel", to: "/goals/goal-1" });
+    state.goals = [{ id: "goal-1", title: "Grupa działań", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
+    expect(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state)).toEqual({ kind: "goal", label: "Działanie w grupie", name: "Grupa działań", to: "/goals/goal-1" });
   });
 
   it("rozpoznaje Działanie należące bezpośrednio do Projektu", () => {
@@ -26,8 +26,8 @@ describe("resolver kontekstu Działania", () => {
   it("ma krótkie etykiety do list mobilnych bez utraty nazwy kontekstu", () => {
     const state = structuredClone(emptyState);
     state.goals = [{ id: "goal-1", title: "Ten sam krok", outcome: "Wynik", kind: "custom", status: "active", visibility: "active", priority: "normal" }];
-    expect(describeActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Działanie w Celu · Ten sam krok");
-    expect(describeCompactActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Cel · Ten sam krok");
+    expect(describeActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Działanie w grupie · Ten sam krok");
+    expect(describeCompactActionContext(resolveActionContext({ ...baseAction, goalId: "goal-1" }, state))).toBe("Grupa działań · Ten sam krok");
     expect(describeCompactActionContext(resolveActionContext(baseAction, state))).toBe("Samodzielne");
   });
 });

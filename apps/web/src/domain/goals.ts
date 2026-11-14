@@ -155,7 +155,7 @@ export function migrateLegacyWorkspaceState(state: AppState): AppState {
   return {
     ...state,
     areas: state.areas.filter((area) => !(legacyIds.has(area.id) && area.createdAt === projectedTimestamp)),
-    goals: state.goals.filter((goal) => !goal.legacySource),
+    goals: state.goals.filter((goal) => !goal.legacySource).map((goal) => ({ ...goal, groupType: goal.groupType ?? "task" })),
     actions: state.actions.filter((action) => !action.legacySourceId),
     goalCriteria: state.goalCriteria.filter((criterion) => !criterion.legacySourceId)
   };

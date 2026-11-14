@@ -21,10 +21,10 @@ describe("tydzień Workspace", () => {
     expect(bounds.end.getTime() - bounds.start.getTime()).toBe(6 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000);
   });
 
-  it("liczy koniec tygodnia wyłącznie i pomija aktywność archiwalnego Celu", () => {
+  it("liczy koniec tygodnia wyłącznie i pomija aktywność archiwalnego grupy", () => {
     const state = {
       ...structuredClone(emptyState),
-      goals: [{ id: "archived", title: "Stary Cel", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "archived" as const, priority: "normal" as const }],
+      goals: [{ id: "archived", title: "Stary Grupa działań", outcome: "", kind: "custom" as const, status: "active" as const, visibility: "archived" as const, priority: "normal" as const }],
       actions: [
         { id: "inside", version: 1, title: "W środku", detail: "", status: "completed" as const, goalId: "archived", position: 0, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-08-23T21:59:59.999Z" },
         { id: "boundary", version: 1, title: "Na końcu", detail: "", status: "completed" as const, position: 1, isNext: false, pinnedToToday: false, checklist: [], completedAt: "2026-08-24T22:00:00.000Z" }

@@ -74,7 +74,7 @@ describe("repozytorium Supabase", () => {
     await createActionRemote(workspaceId, workItemId, { title: "Czytaj", materialKnowledgeIds: ["book"] }, links);
     expect(client.rpc).toHaveBeenCalledWith("create_action_item", expect.objectContaining({ action_material_links: links }));
     await createGoalRemote(workspaceId, projectId, undefined, { title: "Zastosuj", outcome: "Rezultat", materialKnowledgeIds: ["book"] }, [], projectId, links);
-    expect(client.rpc).toHaveBeenCalledWith("create_goal_with_action_v2", expect.objectContaining({ goal_material_links: links }));
+    expect(client.rpc).toHaveBeenCalledWith("create_action_group", expect.objectContaining({ goal_material_links: links }));
   });
 
   it("buduje spójną projekcję Workspace z rekordów chronionych przez RLS", async () => {

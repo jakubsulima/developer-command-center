@@ -19,19 +19,19 @@ describe("quick add commands", () => {
     expect(parseQuickAddCommand("/nieznana treść")).toBeUndefined();
   });
 
-  it("dziedziczy Projekt z Celu dla Działania i nie pozwala na sprzeczną parę", () => {
+  it("dziedziczy Projekt z grupy dla Działania i nie pozwala na sprzeczną parę", () => {
     const goals = [{ id: "goal-1", title: "Wynik", areaId: "area-1", visibility: "active" as const, status: "active" as const }];
     const areas = [{ id: "area-1", name: "Projekt", visibility: "active" as const }];
     expect(normalizeQuickAddContext({ mode: "action", goalId: "goal-1", areaId: "other", activeGoals: goals, activeAreas: areas })).toMatchObject({ goalId: "goal-1", areaId: "area-1", goalIds: [] });
   });
 
-  it("przenosi źródłowy Cel do Biblioteki bez duplikatów i oznacza nieaktywny kontekst", () => {
+  it("przenosi źródłowy Grupa działań do Biblioteki bez duplikatów i oznacza nieaktywny kontekst", () => {
     const goals = [{ id: "goal-1", title: "Wynik", areaId: "area-1", visibility: "active" as const, status: "active" as const }];
     const areas = [{ id: "area-1", name: "Projekt", visibility: "active" as const }];
     expect(normalizeQuickAddContext({ mode: "library", goalId: "goal-1", goalIds: ["goal-1", "goal-1"], activeGoals: goals, activeAreas: areas })).toMatchObject({ areaId: "area-1", goalIds: ["goal-1"] });
-    expect(normalizeQuickAddContext({ mode: "action", goalId: "gone", activeGoals: goals, activeAreas: areas }).unavailable).toEqual({ kind: "goal", id: "gone", label: "Nieaktualny Cel" });
+    expect(normalizeQuickAddContext({ mode: "action", goalId: "gone", activeGoals: goals, activeAreas: areas }).unavailable).toEqual({ kind: "goal", id: "gone", label: "Nieaktualna grupa" });
   });
-  it.each(["action", "goal", "routine", "library"] as const)("nie używa zarchiwizowanego Celu w %s", (mode) => {
+  it.each(["action", "goal", "routine", "library"] as const)("nie używa zarchiwizowanego grupy w %s", (mode) => {
     expect(normalizeQuickAddContext({ mode, goalId: "archived", activeGoals: [{ id: "archived", title: "Stary", visibility: "archived", status: "active" }], activeAreas: [] }).unavailable?.kind).toBe("goal");
   });
 
@@ -39,11 +39,11 @@ describe("quick add commands", () => {
     expect(normalizeQuickAddContext({ mode: "library", goalIds: ["gone"], activeGoals: [], activeAreas: [] }).unavailable?.id).toBe("gone");
   });
 
-  it("Wiedza zachowuje możliwość powiązania z osiągniętym, widocznym Celem", () => {
+  it("Wiedza zachowuje możliwość powiązania z osiągniętym, widocznym grupą", () => {
     expect(normalizeQuickAddContext({ mode: "library", goalIds: ["done"], activeGoals: [{ id: "done", title: "Osiągnięty", visibility: "active", status: "achieved" }], activeAreas: [] })).toMatchObject({ goalIds: ["done"], unavailable: undefined });
   });
 
-  it("Cel dziedziczy Projekt źródłowego Celu również przy komendzie tekstowej", () => {
+  it("Grupa działań dziedziczy Projekt źródłowego grupy również przy komendzie tekstowej", () => {
     expect(normalizeQuickAddContext({ mode: "goal", goalId: "goal", activeGoals: [{ id: "goal", title: "Wynik", areaId: "area", visibility: "active", status: "active" }], activeAreas: [{ id: "area", name: "Projekt", visibility: "active" }] })).toMatchObject({ areaId: "area", goalIds: [], unavailable: undefined });
   });
 

@@ -18,9 +18,9 @@ function LegacyGoalActionRedirect() {
   const currentState = readNavigationState(location.state);
   const goal = goalId ? state.goals.find((item) => item.id === goalId) : undefined;
   const fallbackState = goalId ? {
-    breadcrumbs: [{ label: "Cele", to: "/goals" }, { label: `Cel: ${goal?.title ?? goalId}`, to: `/goals/${encodeURIComponent(goalId)}` }],
+    breadcrumbs: [{ label: "Grupy działań", to: "/goals" }, { label: `Grupa: ${goal?.title ?? goalId}`, to: `/goals/${encodeURIComponent(goalId)}` }],
     returnTo: `/goals/${encodeURIComponent(goalId)}`,
-    returnLabel: `Cel: ${goal?.title ?? goalId}`,
+    returnLabel: `Grupa: ${goal?.title ?? goalId}`,
   } : undefined;
   if (!actionId) return <Navigate to="/goals" replace />;
   return <Navigate replace to={`/actions/${encodeURIComponent(actionId)}`} state={currentState ?? fallbackState} />;

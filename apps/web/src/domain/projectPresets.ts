@@ -14,13 +14,13 @@ export const projectPresets: Record<ProjectPreset, ProjectPresetDefinition> = {
   standard: {
     id: "standard",
     label: "Standardowy",
-    description: "Cele, Działania i Wiedza we wspólnym kontekście.",
+    description: "Grupy działań, Działania i Wiedza we wspólnym kontekście.",
     defaultView: "overview",
     sectionOrder: ["overview", "goals", "actions", "knowledge"],
     mainActionLabel: "Dodaj w Projekcie",
     emptyState: {
-      title: "Ustal pierwszy Cel",
-      description: "Projekt potrzebuje pierwszego konkretnego rezultatu."
+      title: "Utwórz pierwszą grupę działań",
+      description: "Dodaj kategorię pracy lub zadanie nadrzędne, a pod nim konkretne Działania."
     }
   },
   reading: {
