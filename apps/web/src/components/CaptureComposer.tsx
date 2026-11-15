@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { InboxItem, InboxKind } from "../domain/types";
 import { normalizeCapture } from "../domain/capture";
+import { isOperationRejected } from "../lib/operationFailure";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { Button } from "./ui";
 import { Textarea } from "./ui/textarea";
@@ -72,8 +73,9 @@ export function CaptureComposer({ draftKey, id, onSubmit, onClose, onSuccess, cl
   const submit = async () => {
     if (locked.current || !draft.value.content.trim() || cleanupPending) return;
     const normalized = normalizeCapture(draft.value.content);
+    const previousAttempt = draft.value.attempted;
     draft.setValue((current) => ({ ...current, attempted: true }));
-    if (!draft.flush()) { draft.setValue((current) => ({ ...current, attempted: false })); setError("Nie udało się zachować szkicu. Skopiuj treść lub ponów zapis."); return; }
+    if (!draft.flush()) { draft.setValue((current) => ({ ...current, attempted: previousAttempt })); setError("Nie udało się zachować szkicu. Skopiuj treść lub ponów zapis."); return; }
     locked.current = true;
     setSaving(true); onSavingChange?.(true); setError(""); setSaved(false);
     try {
@@ -90,6 +92,10 @@ export function CaptureComposer({ draftKey, id, onSubmit, onClose, onSuccess, cl
         draft.setValue((current) => ({ ...current, commandId: crypto.randomUUID(), attempted: false }));
         draft.flush();
         setError("Ten szkic zmienił się w innym oknie. Twoja treść pozostała w polu — zapisz ją ponownie jako osobny wpis.");
+      } else if (!previousAttempt && isOperationRejected(caught)) {
+        draft.setValue((current) => ({ ...current, commandId: crypto.randomUUID(), attempted: false }));
+        draft.flush();
+        setError("Zapis został odrzucony. Treść pozostała na tym urządzeniu. Spróbuj ponownie lub popraw treść.");
       } else setError("Nie potwierdzono zapisu. Treść pozostała na tym urządzeniu. Ponów tę samą próbę, aby uniknąć duplikatu.");
     } finally { locked.current = false; setSaving(false); onSavingChange?.(false); }
   };
