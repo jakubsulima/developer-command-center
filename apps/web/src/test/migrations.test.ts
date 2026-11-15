@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { emptyDraft, forkCreationDraft } from "../components/creationDraft";
+import { normalizeCapture } from "../domain/capture";
 
 const bootstrapUrl = new URL("../../../../supabase/tests/bootstrap.sql", import.meta.url);
 const migrationUrls = [
@@ -254,6 +255,23 @@ describe("migracje Supabase", () => {
     await database.query("select public.undo_capture($1)",[capture]);
     expect(await scalar("select status from public.inbox_items where id=$1",[capture])).toBe("discarded");
     await expect(database.query("select public.undo_capture($1)",[old])).rejects.toThrow("capture_changed_or_unavailable");
+  });
+
+  it("saves a URL with a description from a restored quick capture without losing text or duplicating retries", async () => {
+    const user = crypto.randomUUID(), command = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id=$1", [user]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub',$1,false)", [user]);
+    const content = "https://runrepeat.com/\nStrona z ocenami butów";
+    // The old client sent this as a link. That rejection must leave the key reusable.
+    await expect(database.query("select public.capture_item($1,$2,'link',$3)", [workspace, content, command])).rejects.toThrow("invalid_capture_url");
+    const normalized = normalizeCapture(content);
+    const save = () => scalar<{ id: string; kind: string; raw_content: string }>("select to_jsonb(public.capture_item($1,$2,$3::public.capture_kind,$4))", [workspace, normalized.content, normalized.kind, command]);
+    const saved = await save();
+    expect(saved).toMatchObject({ kind: "text", raw_content: content });
+    expect((await save()).id).toBe(saved.id);
+    expect(await scalar("select count(*)::int from public.inbox_items where workspace_id=$1 and idempotency_key=$2", [workspace, command])).toBe(1);
   });
 
   it("isolates reminder settings, rejects invalid timezones and claims once per local day", async () => {

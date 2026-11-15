@@ -25,7 +25,11 @@ export function normalizeCapture(raw: string, requestedKind?: InboxKind): Normal
   if (requestedKind === "voice" || requestedKind === "file") throw new Error("capture_asset_required");
   let parsed: URL | undefined;
   try { parsed = new URL(candidate); } catch { /* A regular text capture is valid. */ }
-  const isWebUrl = parsed?.protocol === "http:" || parsed?.protocol === "https:";
+  // URL() accepts spaces and removes line breaks. The database accepts only
+  // a standalone URL (with optional ASCII space padding), so keep mixed input as text.
+  const isWebUrl = /^https?:\/\//i.test(candidate)
+    && !/\s/.test(raw.replace(/^ +| +$/g, ""))
+    && (parsed?.protocol === "http:" || parsed?.protocol === "https:");
   if (requestedKind === "link" && !isWebUrl) throw new Error("invalid_capture_url");
   return isWebUrl
     ? { content, kind: "link", previewDomain: parsed!.hostname.replace(/^www\./, "") }

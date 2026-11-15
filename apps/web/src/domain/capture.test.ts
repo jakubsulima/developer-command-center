@@ -11,4 +11,15 @@ describe("normalizeCapture", () => {
     expect(() => normalizeCapture("nagranie", "voice")).toThrow("capture_asset_required");
     expect(() => normalizeCapture("plik", "file")).toThrow("capture_asset_required");
   });
+  it.each([
+    "https://runrepeat.com/\nStrona z ocenami butów",
+    "https://runrepeat.com/ Strona z ocenami butów",
+    "https://example.com/\tpath",
+    "https://example.com/\npath",
+    "https://example.com/\n",
+    "https:example.com"
+  ])("keeps mixed content as text instead of a URL: %j", (content) => {
+    expect(normalizeCapture(content)).toEqual({ content, kind: "text" });
+    expect(() => normalizeCapture(content, "link")).toThrow("invalid_capture_url");
+  });
 });
