@@ -237,7 +237,7 @@ export function ProjectDetailPage() {
         <Button role="menuitemradio" variant="ghost" className={actionFilter === "history" ? "is-active" : ""} aria-label={`${projectActionFilterLabels.history}: ${historicalActions.length}`} aria-checked={actionFilter === "history"} onClick={(event) => { closeProjectMenu(event.currentTarget); setActionFilter("history"); }}><span className="project-menu-option-icon">{actionFilter === "history" ? <Check /> : <History />}</span>{projectActionFilterLabels.history}<span className="project-menu-count">{historicalActions.length}</span></Button>
       </div></details></div></div>
         {actionFilter !== "open" ? <div className="project-history-banner project-filter-banner"><span><Filter /><span><strong>Filtr: {projectActionFilterLabels[actionFilter]}</strong><small>{displayedActions.length} {displayedActions.length === 1 ? "pasujące Działanie" : "pasujących Działań"}</small></span></span><Button variant="ghost" onClick={() => setActionFilter("open")}><RotateCcw />Wszystkie otwarte</Button></div> : null}
-        {displayedActions.length ? <GroupedProjectActions actions={displayedActions} goals={goals} navigation={projectNavigation} className="project-action-list" renderAction={(action) => {
+        {displayedActions.length ? <GroupedProjectActions actions={displayedActions} className="project-action-list" renderAction={(action) => {
           const StatusIcon = projectActionStatusIcons[action.status];
           const schedule = describeActionSchedule(action, today, state.workspaceTimezone);
           const routineTitle = resolveRoutineTitle(action, state.recurringActionTemplates);
