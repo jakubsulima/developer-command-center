@@ -1,0 +1,47 @@
+.modal.action-form-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.action-form-dialog .modal-head {
+  position: static;
+  flex: none;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  background: transparent;
+}
+
+.action-edit-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.action-form-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+}
+
+.action-form-dialog .action-origin-marker { white-space: normal; }
+.action-form-dialog .action-form-body > .field-label:first-child { margin-top: 0; }
+
+.action-form-dialog .modal-actions {
+  position: static;
+  flex: none;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+
+@media (max-width: 767px) {
+  .modal.action-form-dialog { max-height: var(--modal-viewport-height, 100dvh); padding-block: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-bottom)); }
+}

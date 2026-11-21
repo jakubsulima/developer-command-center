@@ -1,4 +1,5 @@
 import type { FocusSessionRecord, GoalAction, KnowledgeItem } from "../domain/types";
+import { isProjectPreset, normalizeProjectPreset } from "../domain/projectPresets";
 import { getSupabase } from "../lib/supabase";
 import type { Page, PageCursor, SearchResult, WorkspaceCore, WorkspaceExport, WorkspacePageItem, WorkspacePageQuery, WorkspaceRepository } from "./workspaceRepository";
 import { AIGoalReviewError, decodeAIGoalReview, type AIGoalReviewFeedbackRating, type AIGoalReviewFreshness } from "../domain/aiGoalReview";
@@ -139,8 +140,8 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       ]);
       if (projectFields.error && projectFields.error.code !== "42703") throw new Error(`ProjectPresets: ${projectFields.error.message}`);
       if (categoryFields.error && categoryFields.error.code !== "42703") throw new Error(`CategoryPresets: ${categoryFields.error.message}`);
-      const projectPresetById = new Map<string, "standard" | "reading">((projectFields.data ?? []).map((row) => [row.id, row.preset === "reading" ? "reading" : "standard"]));
-      const categoryPresetById = new Map((categoryFields.data ?? []).map((row) => [row.id, row.default_preset === "reading" || row.default_preset === "standard" ? row.default_preset : undefined]));
+      const projectPresetById = new Map((projectFields.data ?? []).map((row) => [row.id, normalizeProjectPreset(row.preset)]));
+      const categoryPresetById = new Map((categoryFields.data ?? []).map((row) => [row.id, isProjectPreset(row.default_preset) ? row.default_preset : undefined]));
       core.areas = core.areas.map((area) => ({ ...area, preset: projectPresetById.get(area.id) ?? "standard" }));
       core.projectCategories = (core.projectCategories ?? []).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) }));
       const settingsResult = await getSupabase().from("workspaces")

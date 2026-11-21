@@ -34,7 +34,7 @@ export function QuickCapture({ onClose, closeGuard, onSavingChange }: { onClose?
     <CaptureComposer id="quick-capture-content" draftKey="quick-capture" closeGuard={closeGuard} onSavingChange={onSavingChange} onSubmit={capture} onClose={onClose} onSuccess={(item) => {
       if (!item) return;
       setReceipt(item);
-      notifyUndo({ message: "Zapisano w Skrzynce.", undo: () => undoCapture(item.id), action: { label: "Otwórz", onClick: () => navigate(address(item)) } });
+      notifyUndo({ event: "saved", message: "Zapisano w Skrzynce.", undo: () => undoCapture(item.id), action: { label: "Otwórz", onClick: () => navigate(address(item)) } });
       onClose?.();
     }} />
     {receipt && !onClose ? <div className="capture-receipt"><Link to={address(receipt)}>Otwórz zapis</Link><Link to={`${address(receipt)}&organize=true`}>Uporządkuj</Link><Button variant="ghost" onClick={() => { setReceipt(undefined); document.getElementById("quick-capture-content")?.focus(); }}>Zapisz kolejną myśl</Button></div> : null}

@@ -71,6 +71,7 @@ it("przenosi Działanie do innej grupy w tym samym Projekcie bez zmiany ID i opi
   await user.selectOptions(within(edit).getByLabelText("Grupa działań"), "performance");
   await user.click(within(edit).getByRole("button", { name: "Zapisz zmiany" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(screen.getByRole("link", { name: /Grupa działań: Wydajność/ })).toBeInTheDocument();
+  const breadcrumbs = screen.getByRole("navigation", { name: "Ścieżka kontekstu" });
+  expect(within(breadcrumbs).getByRole("link", { name: "Grupa: Wydajność" })).toHaveAttribute("href", "/goals/performance");
   expect(screen.getByText("Zachowany opis")).toBeInTheDocument();
 });

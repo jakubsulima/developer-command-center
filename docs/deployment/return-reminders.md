@@ -1,6 +1,12 @@
 # Szybki zapis i dobrowolne przypomnienia
 
-Kod przygotowano lokalnie 25 października 2026. Migracje bazy zastosowano 26 października 2026 w projekcie Supabase `command` (`khlhhwfsxfxffawlghxh`), łącznie z zaległymi migracjami od `20260927195000` oraz korektą deklaracji funkcji kontekstu AI. Potwierdzono historię migracji, RLS nowych tabel i ograniczenia dostępu do nowych RPC. Wysyłka push pozostaje niewdrożona: wymaga funkcji, kluczy VAPID i harmonogramu opisanych poniżej. Szybki zapis działa bez konfiguracji push; przypomnienie jest domyślnie wyłączone.
+Kod przygotowano lokalnie 25 października 2026. Migracje bazy zastosowano 26 października 2026 w projekcie Supabase `command` (`khlhhwfsxfxffawlghxh`), łącznie z zaległymi migracjami od `20260927195000` oraz korektą deklaracji funkcji kontekstu AI. Potwierdzono historię migracji, RLS nowych tabel i ograniczenia dostępu do nowych RPC.
+
+12 listopada 2026 wdrożono i włączono wysyłkę push: funkcję `send-return-reminders` w wersji 1, parę kluczy VAPID w sekretach Supabase, dedykowany token harmonogramu w sekretach funkcji i Vault oraz aktywne zadanie Cron `command-return-reminders` co minutę. Prywatny klucz i token nie są zapisane w repozytorium. Publiczny klucz `VITE_WEB_PUSH_PUBLIC_KEY` skonfigurowano wyłącznie dla produkcji Vercel.
+
+Przebudowano dotychczasową wersję produkcyjną z commita `1bf2ced6649ca6739786e26028d4a6c531c9b94c`, bez publikowania dodatkowych zmian z gałęzi `dev`. Wdrożenie `dpl_9EPZKnX2Xzq77EQ7k4XcncswsEu1` ma stan READY i jest dostępne pod [adresem aplikacji](https://developer-command-center-wheat.vercel.app/settings). Potwierdzono zgodność publicznego klucza w opublikowanym formularzu, manifest PWA i import obsługi push w service workerze.
+
+Weryfikacja: 44 testy reguł i migracji oraz 2 testy Deno przeszły. Wdrożona funkcja odrzuca brak autoryzacji (401) i metodę GET (405), respektuje wyłącznik wysyłki, a po włączeniu poprawnie odpytuje bazę (200). Automatyczny przebieg Cron z 12 listopada 2026, 19:54 Europe/Warsaw zakończył się odpowiedzią 200 bez błędów. W tym momencie nie było zapisanych subskrypcji. Odbiór powiadomienia na fizycznym iPhonie pozostaje do sprawdzenia po świadomym włączeniu przez użytkownika. Przypomnienie użytkownika pozostaje domyślnie wyłączone.
 
 ## Kolejność wdrożenia
 

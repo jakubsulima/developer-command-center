@@ -132,6 +132,7 @@ export function KnowledgePage() {
     const previous = item.trashedAt ? "trashed" : item.archivedAt ? "archived" : "active";
     await setVisibility("knowledge", item.id, visibility);
     notifyUndo({
+      event: visibility === "archived" ? "archived" : "changed",
       message: visibility === "archived" ? `„${item.title}” przeniesiono do Archiwum.` : `„${item.title}” przeniesiono do Kosza.`,
       undo: () => setVisibility("knowledge", item.id, previous)
     });

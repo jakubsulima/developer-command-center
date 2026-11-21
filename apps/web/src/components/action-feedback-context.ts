@@ -1,10 +1,20 @@
 import { createContext, useContext } from "react";
+import type { ActionStatus } from "../domain/types";
+
+export type ActionFeedbackEvent = "saved" | "changed" | "completed" | "blocked" | "archived";
 
 export interface UndoNoticeInput {
   message: string;
+  event?: ActionFeedbackEvent;
   undo: () => Promise<void> | void;
   action?: { label: string; onClick: () => Promise<void> | void };
   durationMs?: number;
+}
+
+export function actionStatusFeedbackEvent(status: ActionStatus): ActionFeedbackEvent {
+  if (status === "completed") return "completed";
+  if (status === "blocked") return "blocked";
+  return "changed";
 }
 
 export interface ActionFeedbackValue {

@@ -2,6 +2,7 @@ import { loadSavedActionViews } from "./savedActionViewsRepository";
 import type { ActionResultInput, ActionStatus, AppState, CreateKnowledgeInput, GoalKind, InboxItem, InboxKind, KnowledgeKind, KnowledgeRelationInput, NewLearningGoalInput, NewProjectInput, LegacyProjectRecord, ProjectPreset, ProjectStatus, RecurringActionTemplate, WeeklyReviewSnapshot } from "../domain/types";
 import type { NewActionInput, NewGoalInput, NewRecurringActionInput } from "../app/store-context";
 import type { InboxTriageIntent } from "../domain/commands";
+import { isProjectPreset, normalizeProjectPreset } from "../domain/projectPresets";
 import { migrateLegacyWorkspaceState } from "../domain/goals";
 import { getSupabase } from "../lib/supabase";
 import { OperationResponseError } from "../lib/operationFailure";
@@ -24,7 +25,7 @@ interface GoalSkillRow { learning_goal_id: string; skill_id: string }
 interface ProposalRow { id: string; status: "pending" | "approved" | "rejected"; created_at: string }
 interface ReviewRow { completed_at: string }
 interface GoalRow { group_type?: "category" | "task"; id: string; version: number; title: string; outcome: string; kind: AppState["goals"][number]["kind"]; status: AppState["goals"][number]["status"]; priority: AppState["goals"][number]["priority"]; area_id: string | null; template_id: string | null; target_date: string | null; archived_at: string | null; trashed_at: string | null; legacy_source: "project" | "learning_goal" | null; created_at: string; updated_at: string }
-interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; preset?: "standard" | "reading" | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
+interface AreaRow { category_ids?: string[]; parent_project_id?: string | null; preset?: ProjectPreset | null; id: string; name: string; description: string; color: string | null; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalTemplateRow { id: string; name: string; kind: AppState["goalTemplates"][number]["kind"]; outcome_prompt: string; criterion_prompt: string | null; default_actions: Array<{ title: string; detail?: string }>; is_system: boolean; archived_at: string | null; trashed_at: string | null; created_at: string; updated_at: string }
 interface GoalCriterionRow { id: string; goal_id: string; title: string; completed: boolean; legacy_source_id: string | null }
 interface ActionRow { id: string; version: number; goal_id: string | null; area_id: string | null; title: string; detail: string; status: ActionStatus; blocker: string | null; position: number; is_next: boolean; pinned_to_today: boolean; scheduled_for: string | null; completed_at: string | null; skipped_at: string | null; cancelled_at: string | null; recurring_template_id: string | null; occurrence_date: string | null; checklist: AppState["actions"][number]["checklist"]; legacy_source_id: string | null; created_at: string; updated_at: string }
@@ -151,7 +152,7 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     if (result.error && result.error.code !== "42703") throw new Error(`${label}: ${result.error.message}`);
   }
   const projectPresetById = new Map((projectPresetsResult.data ?? []).map((item) => [item.id, item.preset]));
-  const categoryPresetById = new Map((categoryPresetsResult.data ?? []).map((item) => [item.id, item.default_preset]));
+  const categoryPresetById = new Map((categoryPresetsResult.data ?? []).map((item) => [item.id, isProjectPreset(item.default_preset) ? item.default_preset : undefined]));
   const knowledgeMetadataById = new Map((knowledgeMetadataResult.data ?? []).map((item) => [item.entity_id, item]));
   for (const item of knowledgeContents) {
     const metadata = knowledgeMetadataById.get(item.entity_id);
@@ -211,8 +212,8 @@ async function loadSupabaseStateLegacy(userId: string): Promise<AppState> {
     ...emptyState,
     workspaceId,
     workspaceTimezone: workspace.timezone || "Europe/Warsaw",
-    projectCategories: (dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów") as Array<{ id: string; name: string; color: string }>).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) === "reading" || categoryPresetById.get(category.id) === "standard" ? categoryPresetById.get(category.id) : undefined })),
-    areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, preset: projectPresetById.get(area.id) === "reading" ? "reading" : "standard", name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
+    projectCategories: (dataOrThrow(await client.from("project_categories").select("id,name,color"), "Kategorie projektów") as Array<{ id: string; name: string; color: string }>).map((category) => ({ ...category, defaultPreset: categoryPresetById.get(category.id) })),
+    areas: areas.map((area) => ({ id: area.id, categoryIds: area.category_ids ?? [], parentProjectId: area.parent_project_id ?? undefined, preset: normalizeProjectPreset(projectPresetById.get(area.id)), name: area.name, description: area.description, color: area.color ?? undefined, visibility: area.trashed_at ? "trashed" : area.archived_at ? "archived" : "active", createdAt: area.created_at, updatedAt: area.updated_at })),
     goalTemplates: templates.map((template) => ({ id: template.id, name: template.name, kind: template.kind, outcomePrompt: template.outcome_prompt, criterionPrompt: template.criterion_prompt ?? undefined, defaultActions: template.default_actions, system: template.is_system, visibility: template.trashed_at ? "trashed" : template.archived_at ? "archived" : "active", createdAt: template.created_at, updatedAt: template.updated_at })),
     goals: unifiedGoals.map((goal) => ({ id: goal.id, version: goal.version, title: goal.title, outcome: goal.outcome, groupType: goal.group_type ?? "task", kind: goal.kind, status: goal.status, priority: goal.priority, areaId: goal.area_id ?? undefined, templateId: goal.template_id ?? undefined, targetDate: goal.target_date ?? undefined, visibility: goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "active", legacySource: goal.legacy_source ?? undefined, createdAt: goal.created_at, updatedAt: goal.updated_at })),
     goalCriteria: criteria.map((criterion) => ({ id: criterion.id, goalId: criterion.goal_id, title: criterion.title, completed: criterion.completed, legacySourceId: criterion.legacy_source_id ?? undefined })),

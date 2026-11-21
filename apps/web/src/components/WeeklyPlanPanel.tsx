@@ -114,7 +114,7 @@ export function WeeklyPlanPanel({ state, week, value, onChange, updateAction, se
     if (saved.length) {
       const savedIds = new Set(saved.map(({ action }) => action.id));
       onChange((current) => ({ ...current, changes: Object.fromEntries(Object.entries(current.changes).filter(([id]) => !savedIds.has(id))) }));
-      notifyUndo({ message: saved.length === 1 ? "Zapisano termin Działania." : `Zapisano terminy ${saved.length} Działań.`, undo: async () => {
+      notifyUndo({ event: "saved", message: saved.length === 1 ? "Zapisano termin Działania." : `Zapisano terminy ${saved.length} Działań.`, undo: async () => {
         for (const { action } of saved) await updateAction(action.id, { scheduledFor: action.scheduledFor ?? null }, action.version + 1);
       } });
     }
@@ -167,7 +167,7 @@ export function WeeklyPlanPanel({ state, week, value, onChange, updateAction, se
     if (saved.length) {
       const savedIds = new Set(saved.map(({ action }) => action.id));
       setSelectedOverdueIds((current) => current.filter((id) => !savedIds.has(id)));
-      notifyUndo({ message: saved.length === 1 ? "Zapisano decyzję o zaległym Działaniu." : `Zapisano decyzje dla ${saved.length} Działań.`, undo: async () => {
+      notifyUndo({ event: "saved", message: saved.length === 1 ? "Zapisano decyzję o zaległym Działaniu." : `Zapisano decyzje dla ${saved.length} Działań.`, undo: async () => {
         const undoErrors: string[] = [];
         for (const { action, decision } of saved) {
           try {

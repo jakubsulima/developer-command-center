@@ -1,0 +1,126 @@
+.undo-stack {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 80;
+  width: min(440px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.undo-notice-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  filter: drop-shadow(0 12px 20px #0004);
+  animation: notice-expand 420ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.undo-notice-clip { min-height: 0; overflow: hidden; }
+.undo-notice {
+  --notice-accent: #6ee7b7;
+  --notice-tint: #6ee7b71a;
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 0 12px;
+  margin: 5px 0;
+  padding: 16px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid #426357;
+  border-radius: 16px;
+  background: linear-gradient(115deg, #172e30, #141f30 65%);
+  box-shadow: inset 0 1px 0 #ffffff08;
+  color: var(--foreground);
+  pointer-events: auto;
+  animation: notice-enter 420ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.undo-notice-error {
+  --notice-accent: #fda4af;
+  --notice-tint: #fda4af1a;
+  border-color: #724350;
+  background: linear-gradient(115deg, #35232e, #1d2030 65%);
+}
+.undo-notice-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--notice-accent) 25%, transparent);
+  border-radius: 50%;
+  color: var(--notice-accent);
+  background: var(--notice-tint);
+  animation: notice-icon-enter 500ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.undo-notice-icon svg { width: 20px; height: 20px; stroke-width: 2.2; }
+.undo-notice-icon .lucide-check path {
+  stroke-dasharray: 30;
+  animation: notice-check 380ms 140ms ease-out both;
+}
+.undo-notice-copy { min-width: 0; padding-top: 1px; overflow-wrap: anywhere; }
+.undo-notice-label { display: block; margin-bottom: 4px; color: var(--notice-accent); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.undo-notice strong { display: block; font-size: 13px; font-weight: 500; line-height: 1.55; }
+.undo-notice small { display: block; margin-top: 6px; color: #fecdd3; font-size: 12px; line-height: 1.5; }
+.undo-notice-actions { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.undo-notice-actions .button {
+  min-height: 34px;
+  height: auto;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--notice-accent) 22%, transparent);
+  border-radius: 8px;
+  color: var(--notice-accent);
+  background: var(--notice-tint);
+  font-size: 12px;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.undo-notice-actions .button:hover { border-color: var(--notice-accent); background: color-mix(in srgb, var(--notice-accent) 18%, transparent); }
+.undo-notice-actions .button svg { width: 14px; height: 14px; }
+.undo-notice .undo-notice-close {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: background 150ms ease, color 150ms ease;
+}
+.undo-notice .undo-notice-close:hover { color: var(--foreground); background: #ffffff0d; }
+.undo-notice-close svg { width: 16px; height: 16px; }
+.undo-notice-progress { position: absolute; inset: auto 0 0; height: 2px; background: var(--notice-tint); }
+.undo-notice-progress > span { display: block; height: 100%; background: var(--notice-accent); opacity: .65; transform-origin: left; transition: transform 100ms linear; }
+.undo-notice-slot[data-leaving] { animation: notice-collapse 240ms ease-in both; }
+.undo-notice-slot[data-leaving] .undo-notice { pointer-events: none; animation: notice-exit 240ms ease-in both; }
+
+@keyframes notice-expand { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
+@keyframes notice-enter {
+  from { opacity: 0; transform: translate3d(24px, 12px, 0) scale(.96); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes notice-icon-enter {
+  from { opacity: 0; transform: scale(.65) rotate(-12deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes notice-check { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+@keyframes notice-exit { to { opacity: 0; transform: translate3d(18px, 0, 0) scale(.97); } }
+@keyframes notice-collapse { to { grid-template-rows: 0fr; opacity: 0; } }
+
+@media (max-width: 640px) {
+  .undo-stack { right: max(12px, env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+  .undo-notice { padding: 14px; gap: 0 10px; }
+  .undo-notice-actions .button { min-height: 44px; padding-inline: 12px; }
+  .undo-notice .undo-notice-close { width: 44px; height: 44px; margin: -8px -8px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-notice-slot, .undo-notice, .undo-notice-icon, .undo-notice-icon .lucide-check path,
+  .undo-notice-slot[data-leaving], .undo-notice-slot[data-leaving] .undo-notice { animation: none; }
+  .undo-notice-slot[data-leaving] { opacity: 0; }
+  .undo-notice-progress { display: none; }
+  .undo-notice-actions .button, .undo-notice .undo-notice-close { transition: none; }
+}

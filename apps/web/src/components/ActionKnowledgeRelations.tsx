@@ -44,28 +44,29 @@ export function ActionKnowledgeRelations({ action, navigation, variant = "compac
 
 
   const renderLink = (link: typeof links[number]) => { const item = state.knowledge.find((candidate) => candidate.id === link.knowledgeItemId); return <span className="action-relation-chip" key={link.id} data-navigation-card-id={item ? navigationCardId("knowledge", item.id) : undefined} tabIndex={item ? -1 : undefined}>{item ? navigation ? <NavigationLink to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={navigation.breadcrumbs} returnTo={navigation.returnTo} returnLabel={navigation.returnLabel} sourceCardId={navigationCardId("knowledge", item.id)}><KnowledgeKindBadge kind={item.type} compact /><span>{item.title}</span></NavigationLink> : <Link to={routeForEntity({ type: "knowledge", id: item.id })}><KnowledgeKindBadge kind={item.type} compact /><span>{item.title}</span></Link> : <span>Niedostępna Wiedza</span>}<Button variant="ghost" aria-label={`Odłącz ${item?.title ?? "Wiedzę"} od Działania`} onClick={() => void mutation.run(`action-relations:${action.id}`, () => unlinkKnowledge(link.id))}><X /></Button></span>; };
-  const emptyLabels: Record<KnowledgeRelationMeaning, string> = { material: "Brak materiałów", result: "Brak rezultatów", decision: "Brak decyzji", reference: "Brak innych powiązań", source: "Brak źródeł" };
   const renderGroup = (group: typeof groups[number]) => {
     const groupLinks = links.filter((link) => link.meaning === group.meaning);
     const showAll = expandedGroups[group.meaning] ?? groupLinks.some((link) => navigationCardId("knowledge", link.knowledgeItemId) === restoreCardId);
     const visibleLinks = showAll ? groupLinks : groupLinks.slice(0, 3);
-    return <div className={`action-relation-group${!groupLinks.length ? " is-empty" : ""}`} key={group.meaning}>
+    return <div className="action-relation-group" key={group.meaning}>
       <strong>{group.label}</strong><div className="action-relation-items">
-        {groupLinks.length ? visibleLinks.map(renderLink) : group.meaning === "result" && onAddResult ? null : <span className="action-relation-empty">{emptyLabels[group.meaning]}</span>}
+        {visibleLinks.map(renderLink)}
         {groupLinks.length > 3 ? <Button variant="ghost" aria-expanded={showAll} onClick={() => setExpandedGroups((current) => ({ ...current, [group.meaning]: !showAll }))}>{showAll ? "Pokaż mniej" : `Pokaż wszystkie (${groupLinks.length})`}</Button> : null}
-        {group.meaning === "result" && onAddResult ? <Button variant="ghost" onClick={onAddResult}><Plus />Dodaj rezultat</Button> : null}
       </div>
     </div>;
   };
   if (variant === "detail") return <section className="action-relations-detail" aria-labelledby={`action-relations-${action.id}`}>
-    <div className="action-relations-detail-heading"><h2 id={`action-relations-${action.id}`} aria-label="Wiedza Działania">Wiedza</h2><span>{links.length ? `${links.length} ${links.length === 1 ? "powiązanie" : "powiązania"}` : "Materiały i rezultaty"}</span></div>
-    <div className="action-relations-detail-groups">{groups.filter((group) => group.meaning === "material" || group.meaning === "result" || links.some((link) => link.meaning === group.meaning)).map(renderGroup)}</div>
+    <h2 id={`action-relations-${action.id}`} aria-label="Wiedza Działania">Wiedza</h2>
+    <div className="action-knowledge-tools">
+      {onAddResult ? <Button variant="ghost" onClick={onAddResult}><Plus aria-hidden="true" />Dodaj rezultat</Button> : null}
+      <details className="detail-connect-disclosure">
+        <summary><Link2 aria-hidden="true" />Połącz wiedzę</summary>
+        <div className="action-relation-connect action-relation-connect-detail"><select aria-label={`Podepnij Wiedzę do Działania: ${action.title}`} value={selectedId} onChange={(event) => { const next = state.knowledge.find((item) => item.id === event.target.value); setSelectedId(event.target.value); setMeaning(next ? knowledgeDefaultRelationMeaning(next.type) : "reference"); }}><option value="">Podepnij istniejącą Wiedzę…</option>{available.map((item) => <option key={item.id} value={item.id}>{knowledgeKindLabels[item.type]} · {item.title}</option>)}</select>{selectedId ? <select aria-label="Rola relacji Wiedzy" value={meaning} onChange={(event) => setMeaning(event.target.value as KnowledgeRelationMeaning)}>{roleOptions.map((option) => <option key={option} value={option}>{knowledgeRelationMeaningLabels[option]}</option>)}</select> : null}<Button disabled={!selectedId} loading={mutation.isBusy(`action-relations:${action.id}`)} onClick={() => void connect()}>Połącz</Button></div>
+        <Button variant="ghost" onClick={openCreate}><Plus aria-hidden="true" />Dodaj materiał</Button>
+      </details>
+    </div>
     {mutation.error(`action-relations:${action.id}`) ? <p className="inline-mutation-error" role="alert">{mutation.error(`action-relations:${action.id}`)} <button type="button" onClick={() => void mutation.retry(`action-relations:${action.id}`)?.()}>Spróbuj ponownie</button></p> : null}
-    <details className="detail-connect-disclosure"><summary><Plus />Połącz wiedzę</summary>
-      <Button variant="ghost" onClick={openCreate}><Plus />Dodaj materiał</Button>
-    <div className="action-relation-connect action-relation-connect-detail"><select aria-label={`Podepnij Wiedzę do Działania: ${action.title}`} value={selectedId} onChange={(event) => { const next = state.knowledge.find((item) => item.id === event.target.value); setSelectedId(event.target.value); setMeaning(next ? knowledgeDefaultRelationMeaning(next.type) : "reference"); }}><option value="">Podepnij istniejącą Wiedzę…</option>{available.map((item) => <option key={item.id} value={item.id}>{knowledgeKindLabels[item.type]} · {item.title}</option>)}</select>{selectedId ? <select aria-label="Rola relacji Wiedzy" value={meaning} onChange={(event) => setMeaning(event.target.value as KnowledgeRelationMeaning)}>{roleOptions.map((option) => <option key={option} value={option}>{knowledgeRelationMeaningLabels[option]}</option>)}</select> : null}<Button disabled={!selectedId} loading={mutation.isBusy(`action-relations:${action.id}`)} onClick={() => void connect()}>Połącz</Button></div>
-    </details>
-
+    {groups.filter((group) => links.some((link) => link.meaning === group.meaning)).map(renderGroup)}
   </section>;
   return <Panel className="action-relations-panel" aria-labelledby={`action-relations-${action.id}`}>
     <div className="action-relations-heading"><h3 id={`action-relations-${action.id}`}><Link2 />Wiedza Działania</h3><Button variant="ghost" className={`action-relations-toggle${links.length ? "" : " action-relations-toggle-empty"}`} aria-label={links.length ? `Wiedza · ${links.length}` : "Dodaj materiał"} aria-expanded={expanded} aria-controls={`action-relations-content-${action.id}`} onClick={() => setExpanded((current) => !current)}>{links.length ? `Wiedza · ${links.length}` : "Dodaj materiał"}</Button></div>

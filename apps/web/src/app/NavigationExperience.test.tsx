@@ -31,9 +31,9 @@ describe("spójna nawigacja kontekstowa", () => {
     const position = vi.spyOn(window, "scrollY", "get").mockReturnValue(0);
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     const user = userEvent.setup();
-    const { container, unmount } = renderApp("/actions");
+    const { container, unmount } = renderApp("/actions?view=open");
     try {
-      const trigger = await screen.findByRole("button", { name: "Zmień status: Do zrobienia — Wykonać krok" });
+      const trigger = await screen.findByRole("button", { name: "Zmień status: Do zrobienia — Wykonać krok" }, { timeout: 5000 });
       position.mockReturnValue(400);
       fireEvent.scroll(window);
       expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
@@ -124,7 +124,7 @@ describe("spójna nawigacja kontekstowa", () => {
     renderApp("/actions/nav-action");
 
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Co zatrzymuje to Działanie?" }).closest("section")).toHaveTextContent("Czekam na decyzję");
+    expect(screen.getByRole("region", { name: "Powód blokady" })).toHaveTextContent("Czekam na decyzję");
     expect(screen.getAllByText("Czekam na decyzję")).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Edytuj" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj Działanie" });

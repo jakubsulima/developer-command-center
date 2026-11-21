@@ -204,32 +204,30 @@ describe("goal-centric workspace", () => {
     ];
     localStorage.setItem("command-center-state-v1", JSON.stringify(state));
 
-    renderApp("/projects/project-history");
+    const projectView = renderApp("/projects/project-history");
     await screen.findByRole("heading", { name: "Projekt z historią" });
-    expect(screen.getByRole("tab", { name: "Grupy działań" })).toHaveTextContent("1");
-    expect(screen.getByRole("tab", { name: "Działania" })).toHaveTextContent("1");
     expect(screen.queryByRole("region", { name: "Grupy działań" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Działania" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Grupy działań" }));
     const goals = screen.getByRole("region", { name: "Grupy działań" });
-    const mobileNavigation = screen.getByRole("main");
+    const projectAdd = within(screen.getByRole("main")).getByRole("button", { name: "Dodaj w Projekcie Projekt z historią" });
 
     expect(within(goals).getByText("Bieżąca grupa")).toBeInTheDocument();
     expect(within(goals).queryByText("Osiągnięty Grupa działań")).not.toBeInTheDocument();
-    await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj grupę" }));
+    await user.click(projectAdd);
+    await user.click(screen.getByRole("menuitem", { name: "Grupa działań" }));
     expect(await screen.findByRole("dialog", { name: "Nowa grupa działań" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    await user.click(within(goals).getByText("Więcej opcji grup działań"));
-    await user.click(within(goals).getByRole("button", { name: /Pokaż historię/ }));
+    const groupView = within(goals).getByRole("combobox", { name: "Widok grup działań" });
+    await user.selectOptions(groupView, "history");
     expect(within(goals).getByText("Osiągnięty Grupa działań")).toBeInTheDocument();
     expect(within(goals).queryByText("Bieżąca grupa")).not.toBeInTheDocument();
-    expect(within(goals).getByText("Historia grup działań")).toBeInTheDocument();
+    expect(groupView).toHaveValue("history");
 
     await user.click(screen.getByRole("tab", { name: "Działania" }));
     const actions = screen.getByRole("region", { name: "Działania" });
     expect(within(actions).getByText("Otwarte Działanie")).toBeInTheDocument();
-    expect(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Otwarte Działanie" })).toHaveTextContent("Do zrobienia");
     expect(within(actions).queryByText("Ukończone Działanie")).not.toBeInTheDocument();
     expect(within(actions).queryByRole("button", { name: "Więcej opcji: Otwarte Działanie" })).not.toBeInTheDocument();
     expect(within(actions).queryByRole("button", { name: "Ukończ: Otwarte Działanie" })).not.toBeInTheDocument();
@@ -239,19 +237,32 @@ describe("goal-centric workspace", () => {
     expect(within(statusDialog).getByRole("button", { name: /W trakcie testowania/ })).toBeInTheDocument();
     await user.click(within(statusDialog).getByRole("button", { name: /W toku/ }));
     await waitFor(() => expect(actions.querySelector('[data-action-id="action-current"]')).toHaveClass("in_progress"));
-    await user.click(within(mobileNavigation).getByRole("button", { name: "Dodaj Działanie" }));
+    await user.click(projectAdd);
+    await user.click(screen.getByRole("menuitem", { name: "Działanie" }));
     expect(await screen.findByRole("dialog", { name: "Nowe Działanie" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await user.click(within(actions).getByLabelText(/Filtruj Działania/));
-    expect(within(actions).getByRole("menuitemradio", { name: "Otwarte: 1" })).toHaveAttribute("aria-checked", "true");
-    await user.click(within(actions).getByRole("menuitemradio", { name: "Historia: 1" }));
+    const filters = screen.getByRole("dialog", { name: "Filtry Działań" });
+    expect(within(filters).getByRole("button", { name: "Otwarte: 1", pressed: true })).toBeInTheDocument();
+    await user.click(within(filters).getByRole("button", { name: "Historia: 1" }));
     expect(within(actions).getByText("Ukończone Działanie")).toBeInTheDocument();
     expect(actions.querySelector('[data-action-id="action-history"]')).toHaveClass("completed");
     expect(within(actions).queryByText("Otwarte Działanie")).not.toBeInTheDocument();
-    expect(within(actions).getByText("Filtr: Historia")).toBeInTheDocument();
+    expect(within(actions).getByLabelText("Filtruj Działania. Wybrano: Historia")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Wiedza" }));
-    expect(within(mobileNavigation).getByRole("button", { name: "Dodaj Wiedzę" })).toBeInTheDocument();
+    await user.click(projectAdd);
+    expect(screen.getByRole("menuitem", { name: "Notatka" })).toBeInTheDocument();
+
+    projectView.unmount();
+    const restored = renderApp("/projects/project-history?view=actions");
+    expect(await screen.findByRole("button", { name: "Filtruj Działania. Wybrano: Historia" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Działania" })).toHaveTextContent("Ukończone Działanie");
+    restored.unmount();
+
+    renderApp("/projects/project-history?view=actions&actions=open");
+    expect(await screen.findByRole("button", { name: "Filtruj Działania. Wybrano: Otwarte" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Działania" })).toHaveTextContent("Otwarte Działanie");
   });
 
   it("otwiera od razu formularz Działania z Przeglądu i zapisuje Projekt oraz wybrana grupa", async () => {
@@ -387,7 +398,7 @@ describe("goal-centric workspace", () => {
     await screen.findByRole("heading", { name: "Projekt menu" });
     await user.click(screen.getByLabelText("Opcje Projektu: Projekt menu"));
 
-    expect(screen.getByRole("menuitem", { name: "Edytuj informacje" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Edytuj Projekt" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Archiwizuj Projekt" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Przenieś do Kosza" })).toBeInTheDocument();
 
@@ -414,22 +425,18 @@ describe("goal-centric workspace", () => {
     expect(screen.getByRole("tab", { name: "Grupy działań" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("pokazuje pętlę pracy jako zwiniętą wskazówkę", async () => {
-    const user = userEvent.setup();
+  it("udostępnia sekcje Projektu w jednym pasku nawigacji", async () => {
     renderApp("/projects/area-finanse");
     await screen.findByRole("heading", { name: "Finanse" });
 
-    const summary = screen.getByText("Pętla pracy — wskazówka").closest("summary") as HTMLElement;
-    const guide = summary.closest("details") as HTMLDetailsElement;
-    const flowHeading = screen.getByRole("heading", { name: "Od kierunku do wiedzy", hidden: true });
-
-    expect(guide).not.toHaveAttribute("open");
-    expect(flowHeading).not.toBeVisible();
-
-    await user.click(summary);
-
-    expect(guide).toHaveAttribute("open");
-    expect(flowHeading).toBeVisible();
+    const navigation = screen.getByRole("tablist", { name: "Zawartość Projektu" });
+    const tabs = within(navigation).getAllByRole("tab");
+    expect(tabs).toHaveLength(4);
+    expect(tabs[0]).toHaveAccessibleName("Przegląd");
+    expect(tabs[1]).toHaveAccessibleName("Grupy działań");
+    expect(tabs[2]).toHaveAccessibleName("Działania");
+    expect(tabs[3]).toHaveAccessibleName("Wiedza");
+    expect(screen.queryByText("Pętla pracy — wskazówka")).not.toBeInTheDocument();
   });
 
   it("tworzy, edytuje i wzbogaca własną serię cykliczną", async () => {
@@ -453,7 +460,7 @@ describe("goal-centric workspace", () => {
     expect(await screen.findByRole("heading", { name: "Plan posiłków i zakupów" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Start" }));
     const recurringAction = await screen.findByText("Plan posiłków i zakupów");
-    expect(recurringAction.closest(".today-action")).toHaveTextContent("Rutyna: Plan posiłków i zakupów");
+    expect(recurringAction.closest("[data-action-id]")).toHaveTextContent("Z Rutyny");
   });
 
   it("dodaje Działanie ze Startu przez przycisk w nagłówku strony", async () => {
@@ -476,7 +483,7 @@ describe("goal-centric workspace", () => {
     expect(screen.queryByRole("link", { name: "Przejdź do decyzji" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Zapisz do Skrzynki" })).toHaveAttribute("href", "/capture");
     expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
-    expect(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowe Działanie na Starcie" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Na dziś" })).getByRole("button", { name: "Dodaj Działanie" })).toBeInTheDocument();
   });
 
   it("pokazuje propozycję AI i nie zmienia Skrzynki przed zatwierdzeniem", async () => {

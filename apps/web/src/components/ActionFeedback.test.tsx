@@ -11,6 +11,9 @@ function Probe({ firstUndo, secondUndo, noticeAction }: { firstUndo: () => Promi
     {secondUndo && <button onClick={() => notifyUndo({ message: "Druga operacja zapisana.", undo: secondUndo })}>Druga</button>}
     <button onClick={() => notifySuccess("Zapisano.")}>Sukces</button>
     <button onClick={() => notifyError("Brak połączenia.")}>Błąd</button>
+    <button onClick={() => notifyUndo({ event: "completed", message: "Działanie ukończone.", undo: firstUndo })}>Ukończ</button>
+    <button onClick={() => notifyUndo({ event: "blocked", message: "Ustawiono blokadę.", undo: firstUndo })}>Zablokuj</button>
+    <button onClick={() => notifyUndo({ event: "archived", message: "Przeniesiono do Archiwum.", undo: firstUndo })}>Archiwizuj</button>
   </>;
 }
 
@@ -70,6 +73,21 @@ describe("ActionFeedback", () => {
     await user.click(within(notice).getByRole("button", { name: "Cofnij" }));
     expect(undo).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByText("Pierwsza operacja zapisana.")).not.toBeInTheDocument());
+    expect(screen.getByRole("status")).toHaveTextContent("Cofnięto");
+    expect(screen.queryByRole("button", { name: "Cofnij" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Ukończ", "Ukończono", "success", "lucide-circle-check"],
+    ["Zablokuj", "Blokada", "warning", "lucide-lock-keyhole"],
+    ["Archiwizuj", "Archiwum", "info", "lucide-archive"],
+  ])("rozróżnia komunikat dla operacji %s etykietą, ikoną i kolorem", (name, label, tone, icon) => {
+    render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    fireEvent.click(screen.getByRole("button", { name }));
+    const notice = screen.getByRole("status");
+    expect(within(notice).getByText(label)).toBeInTheDocument();
+    expect(notice).toHaveClass(`undo-notice-${tone}`);
+    expect(notice.querySelector(`.undo-notice-icon .${icon}`)).toBeInTheDocument();
   });
 
   it("zachowuje kilka szybkich możliwości cofnięcia", async () => {

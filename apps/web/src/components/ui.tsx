@@ -34,8 +34,8 @@ export function StatusDot({ tone = "info" }: { tone?: "info" | "success" | "warn
 export function EmptyState({ icon, title, detail, action }: { icon: ReactNode; title: string; detail: string; action?: ReactNode }) {
   return (
     <div className="empty-state flex min-h-72 flex-col items-center justify-center p-8 text-center">
-      <span className="empty-icon mb-3.5 grid size-14 place-items-center rounded-full bg-secondary text-ring">{icon}</span>
-      <h3 className="mb-1.5 text-lg font-semibold">{title}</h3>
+      <span className="empty-icon mb-4 grid size-14 place-items-center rounded-full bg-secondary text-ring">{icon}</span>
+      <h3 className="mb-2 text-lg font-semibold">{title}</h3>
       <p className="max-w-[420px] text-sm text-muted-foreground">{detail}</p>
       {action}
     </div>
@@ -43,5 +43,5 @@ export function EmptyState({ icon, title, detail, action }: { icon: ReactNode; t
 }
 
 export function ListSkeleton({ rows = 3, label = "Ładowanie listy" }: { rows?: number; label?: string }) {
-  return <div className="list-skeleton grid gap-3 py-3" role="status" aria-label={label}>{Array.from({ length: rows }, (_, index) => <div className="grid min-h-20 grid-cols-[38px_minmax(0,1fr)_110px] items-center gap-3.5 rounded-lg border border-border p-3.5" key={index}><Skeleton className="size-9 rounded-full" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /></div>)}</div>;
+  return <div className="list-skeleton grid gap-4 py-4" role="status" aria-label={label}>{Array.from({ length: rows }, (_, index) => <div className="grid min-h-20 grid-cols-[38px_minmax(0,1fr)_110px] items-center gap-4 rounded-lg border border-border p-4" key={index}><Skeleton className="size-9 rounded-full" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-full" /></div>)}</div>;
 }

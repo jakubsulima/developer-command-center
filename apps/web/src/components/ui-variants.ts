@@ -1,11 +1,11 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-export const mobileSheetVariants = cva("w-full overflow-y-auto rounded-t-2xl border border-border bg-popover shadow-2xl", {
-  variants: { side: { bottom: "max-h-[calc(100dvh-1rem)]", top: "max-h-[calc(100dvh-1rem)] rounded-b-2xl rounded-t-none" } },
+export const mobileSheetVariants = cva("w-full overflow-y-auto rounded-t-xl border border-border bg-popover shadow-2xl", {
+  variants: { side: { bottom: "max-h-[calc(100dvh-1rem)]", top: "max-h-[calc(100dvh-1rem)] rounded-b-xl rounded-t-none" } },
   defaultVariants: { side: "bottom" }
 });
 
-export const entityCardVariants = cva("relative min-w-0 rounded-xl border border-border bg-card", {
+export const entityCardVariants = cva("relative min-w-0 rounded-lg border border-border bg-card", {
   variants: { density: { default: "p-4", compact: "p-3" } },
   defaultVariants: { density: "default" }
 });

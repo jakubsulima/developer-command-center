@@ -4,6 +4,7 @@ import { useStore } from "../app/useStore";
 import type { ProjectPreset } from "../domain/types";
 import { CreationBody, CreationDialog, CreationFooter } from "./CreationForm";
 import { Button } from "./ui";
+import { projectPresets } from "../domain/projectPresets";
 import { categoryColors } from "../domain/projectCategories";
 import "./ProjectCategories.css";
 
@@ -23,12 +24,12 @@ export function ProjectCategoryManager({ onClose }: { onClose: () => void }) {
   };
   return <CreationDialog open title="Kategorie projektów" onClose={() => { if (!locked.current) onClose(); }} closeDisabled={saving}><div className="quick-add"><CreationBody>
     <p className="modal-intro">Porządkuj projekty po swojemu. Usunięcie kategorii zachowuje wszystkie projekty.</p>
-    <ul className="category-manager-list">{(state.projectCategories ?? []).map((category) => <li key={category.id}><span className="category-dot" style={{ backgroundColor: category.color }} /><strong>{category.name}</strong><small>{category.defaultPreset === "reading" ? "Czytelnia" : category.defaultPreset === "standard" ? "Standardowy" : "Bez propozycji"}</small><small>{state.areas.filter((area) => area.categoryIds?.includes(category.id)).length}</small><Button disabled={saving} variant="ghost" aria-label={`Edytuj kategorię ${category.name}`} onClick={() => setForm(category)}><Pencil /></Button><Button disabled={saving} variant="ghost" aria-label={`Usuń kategorię ${category.name}`} onClick={() => void run(() => deleteProjectCategory(category.id))}><Trash2 /></Button></li>)}</ul>
+    <ul className="category-manager-list">{(state.projectCategories ?? []).map((category) => <li key={category.id}><span className="category-dot" style={{ backgroundColor: category.color }} /><strong>{category.name}</strong><small>{category.defaultPreset ? projectPresets[category.defaultPreset].label : "Bez propozycji"}</small><small>{state.areas.filter((area) => area.categoryIds?.includes(category.id)).length}</small><Button disabled={saving} variant="ghost" aria-label={`Edytuj kategorię ${category.name}`} onClick={() => setForm(category)}><Pencil /></Button><Button disabled={saving} variant="ghost" aria-label={`Usuń kategorię ${category.name}`} onClick={() => void run(() => deleteProjectCategory(category.id))}><Trash2 /></Button></li>)}</ul>
     <form id="category-create-form" className="project-create-form" onSubmit={(event) => { event.preventDefault(); const snapshot = { ...form }; void run(() => saveProjectCategory(snapshot.id || undefined, snapshot.name, snapshot.color, snapshot.defaultPreset)); }}><fieldset className="creation-fields" disabled={saving}>
       <label className="field-label" htmlFor="category-name">{form.id ? "Zmień nazwę kategorii" : "Nowa kategoria"}</label>
       <input id="category-name" required maxLength={100} value={form.name} placeholder="Np. Pomysły na produkty" onChange={(event) => setForm({ ...form, name: event.target.value })} />
       <label className="field-label" htmlFor="category-default-preset">Proponowany szablon Projektu <span className="optional-label">opcjonalnie</span></label>
-      <select id="category-default-preset" value={form.defaultPreset ?? ""} onChange={(event) => setForm({ ...form, defaultPreset: event.target.value ? event.target.value as ProjectPreset : undefined })}><option value="">Bez propozycji</option><option value="standard">Standardowy</option><option value="reading">Czytelnia</option></select>
+      <select id="category-default-preset" value={form.defaultPreset ?? ""} onChange={(event) => setForm({ ...form, defaultPreset: event.target.value ? event.target.value as ProjectPreset : undefined })}><option value="">Bez propozycji</option>{Object.values(projectPresets).map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select>
       <div className="category-color-options" role="group" aria-label="Kolor kategorii">{categoryColors.map((color, i) => <button key={color} type="button" aria-label={`Kolor ${i + 1}`} aria-pressed={form.color === color} style={{ backgroundColor: color }} onClick={() => setForm({ ...form, color })} />)}</div>
       {error ? <p role="alert" className="auth-message error">{error}</p> : null}
     </fieldset></form></CreationBody>

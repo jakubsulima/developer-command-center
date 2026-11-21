@@ -2,7 +2,7 @@ import { CurrentWeekPlanNotice } from "../components/CurrentWeekPlanNotice";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { useCurrentWeekPlan } from "../hooks/useCurrentWeekPlan";
 import { WeeklyMetricsNotice } from "../components/WeeklyMetricsNotice";
-import { ArrowRight, BookMarked, CalendarCheck, CalendarDays, Check, CheckCircle2, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
+import { BookMarked, CalendarCheck, CalendarDays, Check, CheckCircle2, Lightbulb, ListChecks, RefreshCw, Sparkles } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
@@ -268,7 +268,7 @@ export function ReviewPage() {
                 {activityPage.isPending ? <p className="muted-copy">Wczytuję szczegóły tego tygodnia…</p> : null}
                 {activityPage.isError ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać szczegółów. <Button variant="ghost" onClick={() => void activityPage.refetch()}>Spróbuj ponownie</Button></p> : null}
                 {!activityPage.isPending && !activityPage.isError && !activityItems.length ? <p className="muted-copy">Brak pasujących wpisów w tym okresie.</p> : null}
-                <ul className="weekly-activity-list">{activityItems.map((item) => <li key={item.id}><Link to={activityRoute(item)}><span><strong>{item.title}</strong>{item.detail ? <small>{item.detail}</small> : null}</span><time dateTime={item.occurredAt}>{new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeZone: state.workspaceTimezone }).format(new Date(item.occurredAt))}</time><ArrowRight /></Link></li>)}</ul>
+                <ul className="weekly-activity-list">{activityItems.map((item) => <li key={item.id}><Link to={activityRoute(item)}><span><strong>{item.title}</strong>{item.detail ? <small>{item.detail}</small> : null}</span><time dateTime={item.occurredAt}>{new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeZone: state.workspaceTimezone }).format(new Date(item.occurredAt))}</time></Link></li>)}</ul>
                 {activityPage.data ? <p className="weekly-activity-count">Wyświetlono {activityItems.length} z {activityPage.data.totalCount ?? activityItems.length} wpisów.</p> : null}
                 {activityPage.hasNextPage ? <Button loading={activityPage.isFetchingNextPage} onClick={() => void activityPage.fetchNextPage()}>Pokaż kolejne</Button> : null}
               </section> : null}
@@ -302,11 +302,11 @@ export function ReviewPage() {
               {weekly.suggestions[0] ? <section className="weekly-primary-suggestion" aria-labelledby="weekly-attention-title">
                 <div className="weekly-attention-heading"><h3 id="weekly-attention-title"><Lightbulb />Wymaga decyzji</h3><span>{weekly.suggestions.length} {polishPluralForm(weekly.suggestions.length, "kategoria", "kategorie", "kategorii")}</span></div>
                 <span className="weekly-primary-suggestion-source"><Lightbulb />Sugestia na podstawie bieżących danych</span>
-                <Link className="weekly-primary-suggestion-link" to={weekly.suggestions[0].to}><span><strong>{weekly.suggestions[0].title}</strong><small>{weekly.suggestions[0].detail}</small></span><ArrowRight /></Link>
+                <Link className="weekly-primary-suggestion-link" to={weekly.suggestions[0].to}><span><strong>{weekly.suggestions[0].title}</strong><small>{weekly.suggestions[0].detail}</small></span></Link>
                 {weekly.suggestions.length > 1 ? <details className="weekly-other-suggestions">
                   <summary>Zobacz wszystkie sprawy ({weekly.suggestions.slice(1).reduce((sum, suggestion) => sum + (suggestion.count ?? 0), 0)})</summary>
                   <p className="weekly-signal-note">Suma kategorii to liczba sygnałów; to samo Działanie może pojawić się w więcej niż jednej kategorii.</p>
-                  <div className="weekly-suggestion-list">{weekly.suggestions.slice(1).map((suggestion) => <div className="weekly-suggestion-group" key={suggestion.id}><Link to={suggestion.to}><span><strong>{suggestion.title}</strong><small>{suggestion.detail}</small></span><ArrowRight /></Link>{suggestion.items?.length ? <ul>{suggestion.items.map((item) => <li key={item.id}><Link to={item.to}>{item.title}</Link></li>)}</ul> : null}</div>)}</div>
+                  <div className="weekly-suggestion-list">{weekly.suggestions.slice(1).map((suggestion) => <div className="weekly-suggestion-group" key={suggestion.id}><Link to={suggestion.to}><span><strong>{suggestion.title}</strong><small>{suggestion.detail}</small></span></Link>{suggestion.items?.length ? <ul>{suggestion.items.map((item) => <li key={item.id}><Link to={item.to}>{item.title}</Link></li>)}</ul> : null}</div>)}</div>
                 </details> : null}
                 {weekly.suggestions.length === 1 && weekly.suggestions[0].id === "continue" ? <p className="weekly-signal-note">Nie wykryto zaległości, blokad, grup działań bez kroku ani nowych elementów w Skrzynce.</p> : null}
               </section> : null}
@@ -319,7 +319,7 @@ export function ReviewPage() {
               <label className="field-label" htmlFor="review-note">Najważniejsza decyzja <span className="optional-label">opcjonalnie</span></label>
               <textarea id="review-note" rows={2} disabled={saving} placeholder="Np. Najpierw odblokowuję budżet, pozostałe Grupy działań czekają." value={draft.value.note} onChange={(event) => draft.setValue({ ...draft.value, note: event.target.value })} />
               <div className="weekly-decision-footer"><div><DraftStatus status={draft.status} />{draft.dirty ? <Button variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div></div>
-              <Link className="button button-primary weekly-next-plan-link" to={tabHref("plan")}><CalendarDays />Zaplanuj kolejny tydzień<ArrowRight /></Link>
+              <Link className="button button-primary weekly-next-plan-link" to={tabHref("plan")}><CalendarDays />Zaplanuj kolejny tydzień</Link>
             </Panel>
             <details className="weekly-current-state">
               <summary>Stan przestrzeni na teraz</summary>
@@ -329,7 +329,7 @@ export function ReviewPage() {
 
           <div id="weekly-review-panel-plan" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-plan" hidden={activeTab !== "plan"} tabIndex={0}>
             <WeeklyPlanPanel state={state} week={nextWeek} value={planDraft.value} onChange={planDraft.setValue} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />
-            <Link className="weekly-plan-close-link" to={tabHref("summary")}>Przejdź do zamknięcia tygodnia<ArrowRight /></Link>
+            <Link className="weekly-plan-close-link" to={tabHref("summary")}>Przejdź do zamknięcia tygodnia</Link>
           </div>
 
           <div id="weekly-review-panel-ai" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-ai" hidden={activeTab !== "ai"} tabIndex={0}>

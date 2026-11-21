@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight, Inbox, Plus, Smartphone } from "lucide-react";
+import { ArrowLeft, Inbox, Plus, Smartphone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { QuickCapture } from "../components/QuickCapture";
 import { useState } from "react";
@@ -12,6 +12,6 @@ export function CapturePage() {
       <QuickCapture onSavingChange={setSaving} />
       <p className="capture-hint"><Inbox />Znajdziesz go później w Skrzynce lub wyszukiwaniu.</p>
     </section>
-    <Link className="capture-setup-link" to="/settings#quick-capture"><Smartphone /><span>Dodaj skrót na iPhonie</span><ArrowUpRight /></Link>
+    <Link className="capture-setup-link" to="/settings#quick-capture"><Smartphone /><span>Dodaj skrót na iPhonie</span></Link>
   </main>;
 }

@@ -61,6 +61,7 @@ it("łączy bieżące Działania, Grupy działań i Wiedzę w Przeglądzie wła�
   const user = userEvent.setup();
   renderWorkspace("/projects/one");
   const actions = await screen.findByRole("region", { name: /Działania Projektu/ });
+  expect(screen.getAllByRole("link", { name: /Bieżący krok/ })).toHaveLength(1);
   expect(within(actions).getByRole("link", { name: "Bieżący krok" })).toBeInTheDocument();
   expect(within(actions).queryByText("Historyczny krok")).not.toBeInTheDocument();
   expect(within(actions).queryByText("Inny Projekt")).not.toBeInTheDocument();
@@ -69,7 +70,7 @@ it("łączy bieżące Działania, Grupy działań i Wiedzę w Przeglądzie wła�
   expect(within(context).queryByText("Dawny rezultat")).not.toBeInTheDocument();
   expect(await within(context).findByRole("link", { name: /Notatka Projektu/ })).toBeInTheDocument();
   expect(within(context).queryByText("Wiedza innego Projektu")).not.toBeInTheDocument();
-  await user.click(within(actions).getByRole("button", { name: "Wszystkie Działania" }));
+  await user.click(within(screen.getByRole("navigation", { name: "Zawartość Projektu" })).getByRole("button", { name: "Działania" }));
   expect(within(screen.getByRole("navigation", { name: "Zawartość Projektu" })).getByRole("button", { name: /Działania/ })).toHaveAttribute("aria-current", "page");
 });
 
@@ -92,7 +93,7 @@ it("filtruje pełną listę Działań w Przeglądzie i zachowuje filtr po przej�
   expect(within(actions).getByRole("link", { name: "Historyczny krok" })).toBeInTheDocument();
   expect(within(actions).queryByRole("link", { name: "Bieżący krok" })).not.toBeInTheDocument();
   expect(screen.getByTestId("address")).toHaveTextContent("other=keep&actions=history");
-  await user.click(within(actions).getByRole("button", { name: "Wszystkie Działania" }));
+  await user.click(within(screen.getByRole("navigation", { name: "Zawartość Projektu" })).getByRole("button", { name: "Działania" }));
   expect(screen.getByRole("region", { name: "Działania" })).toHaveTextContent("Historyczny krok");
   expect(screen.getByTestId("address")).toHaveTextContent("actions=history&view=actions");
 });

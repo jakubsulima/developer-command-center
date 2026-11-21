@@ -5,35 +5,34 @@ import { KnowledgeRevisitSignal } from "../components/KnowledgeRevisitSignal";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { useCurrentWeekPlan } from "../hooks/useCurrentWeekPlan";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, CalendarClock, ChevronRight, Plus } from "lucide-react";
+import { CalendarClock, ChevronDown, Plus, ShieldAlert, Sparkles } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
-import { ActionSignals } from "../components/ActionSignals";
-import { useActionFeedback } from "../components/action-feedback-context";
-import { Button, EmptyState, Panel } from "../components/ui";
+import { ActionListRow } from "../components/ActionListRow";
+import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
+import { Button } from "../components/ui";
 import { deriveHomeSummary } from "../domain/homeSummary";
 import type { GoalAction } from "../domain/types";
-import { routeForEntity } from "../domain/routes";
-import { describeActionContext, describeCompactActionContext, resolveActionContext, type ActionContext } from "../domain/actionContext";
+import { resolveActionContext, type ActionContext } from "../domain/actionContext";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
 import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
-import { NavigationLink } from "../components/ContextNavigation";
-import { locationAddress, navigationCardId } from "../domain/navigation";
+import { locationAddress } from "../domain/navigation";
 import { actionStatusLabels, polishCount } from "../domain/labels";
 import { AIStartGuidance } from "../components/AIStartGuidance";
-import { resolveRoutineTitle } from "../domain/actionPresentation";
+import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
+import "./start-workspace.css";
 
-function StartActionRow({ action, context, relationSummary, openStatus, onComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
+function StartActionRow({ action, context, knowledgeCount, openStatus, onComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
   action: GoalAction;
   context: ActionContext;
-  relationSummary: string[];
-  openStatus: (actionId: string) => void;
-  onComplete: (action: GoalAction) => void;
+  knowledgeCount: number;
+  openStatus: () => void;
+  onComplete: () => void;
   busy: boolean;
   error?: string;
   retry?: () => Promise<boolean>;
@@ -43,12 +42,16 @@ function StartActionRow({ action, context, relationSummary, openStatus, onComple
   today: string;
   routineTitle?: string;
 }) {
-  const compactContext = describeCompactActionContext(context);
-  return <div className={`today-action ${action.status}`} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-    <div className="today-action-complete">{action.status !== "completed" && action.status !== "cancelled" && action.status !== "skipped" && action.status !== "blocked" ? <ActionPrimaryControls action={action} busy={busy} onToggleComplete={() => onComplete(action)} /> : null}</div>
-    <div className="action-copy"><div className="action-title-row"><NavigationLink to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={timeZone} today={today} routineTitle={routineTitle} density="compact" disabled={busy} onOpenStatus={() => openStatus(action.id)} /><small className="action-context-full">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</small><small className="action-context-compact">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{compactContext}</NavigationLink> : compactContext}</small>{relationSummary.length ? <small className="action-relation-summary">{relationSummary.join(" · ")}</small> : null}</div>
+  const navigation = { breadcrumbs, returnTo, returnLabel: "Start" };
+  return <ActionListRow action={action} navigation={navigation}
+    timeZone={timeZone} today={today} routineTitle={routineTitle} showUnscheduled={false}
+    busy={busy} onOpenStatus={openStatus}
+    context={context.kind === "standalone" ? undefined : { label: context.name ?? context.label, to: context.to === "/" ? undefined : context.to }}
+    description={knowledgeCount ? `Wiedza: ${knowledgeCount}` : undefined}
+    indicator={action.isNext ? <span className="action-next-badge">Następne</span> : null}
+    tools={<ActionPrimaryControls action={action} busy={busy} appearance="check" onToggleComplete={onComplete} />}>
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
-  </div>;
+  </ActionListRow>;
 }
 
 export function StartPage() {
@@ -78,7 +81,7 @@ export function StartPage() {
   const changeActionStatus = (action: GoalAction, status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => mutation.run(`start-status:${action.id}`, async () => {
     const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     await setActionStatus(action.id, status, blocker, action.version, reviewOn);
-    notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
+    notifyUndo({ event: actionStatusFeedbackEvent(status), message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
   });
   const completeAction = (action: GoalAction) => mutation.run(`start-status:${action.id}`, () => completeActionWithUndo({
     action,
@@ -88,42 +91,54 @@ export function StartPage() {
     hasResult: state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result"),
     onAddResult: () => setResultActionId(action.id),
   }));
-  const contextFor = (action: GoalAction) => resolveActionContext(action, state);
   const startBreadcrumbs = [{ label: "Start", to: "/" }];
   const startAddress = locationAddress(location);
-  const renderAction = (action: GoalAction) => { const relationCount = state.knowledgeLinks.filter((link) => link.actionId === action.id).length; const relationSummary = relationCount ? [`Wiedza · ${relationCount}`] : []; return <div key={action.id} data-action-id={action.id} tabIndex={-1}><StartActionRow action={action} context={contextFor(action)} relationSummary={relationSummary} openStatus={setStatusActionId} onComplete={(item) => void completeAction(item)} busy={mutation.isBusy(`start-status:${action.id}`)} error={mutation.error(`start-status:${action.id}`)} retry={mutation.retry(`start-status:${action.id}`)} breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} /></div>; };
-
-
+  const renderAction = (action: GoalAction) => {
+    const statusKey = `start-status:${action.id}`;
+    return <StartActionRow key={action.id} action={action} context={resolveActionContext(action, state)}
+      knowledgeCount={state.knowledgeLinks.filter((link) => link.actionId === action.id).length}
+      openStatus={() => setStatusActionId(action.id)} onComplete={() => void completeAction(action)}
+      busy={mutation.isBusy(statusKey)} error={mutation.error(statusKey)} retry={mutation.retry(statusKey)}
+      breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate}
+      routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)} />;
+  };
 
   const todayItems = showAll("today") ? summary.todayActions : summary.todayActions.slice(0, 5);
   const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
   const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
-  const recommendationCta = summary.recommendation.kind === "next_action" || summary.recommendation.kind === "today_action"
-    ? "Otwórz Działanie"
-    : summary.recommendation.kind === "goal_without_next_action" ? "Ustal następny krok" : "Przejdź do decyzji";
 
   return <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie na Starcie", quickAdd: { mode: "action", scheduledFor: currentDate, draftKey: "start" } }}>
-    <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(new Date())} />
+    <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(now)} />
 
     <div className="start-workspace">
-    <Link className="start-capture-link" to="/capture"><span className="start-capture-icon"><Plus /></span><span><strong>Zapisz myśl lub link</strong><small>Resztę uporządkujesz później.</small></span><ChevronRight /></Link>
+      <Link className="start-capture-link" to="/capture">
+        <span className="start-capture-icon"><Plus aria-hidden="true" /></span>
+        <strong>{summary.isPristineWorkspace ? "Zapisz do Skrzynki" : "Zapisz myśl lub link"}</strong>
+      </Link>
 
-    <div className="today-layout start-layout">
-      <div className="today-main start-main">
-        <Panel className="start-today-panel" aria-labelledby="start-today-title"><div className="start-section-heading"><div><h2 id="start-today-title">Na dziś</h2></div><span className="count-chip" aria-label={`${polishCount(summary.todayActions.length, "Działanie", "Działania", "Działań")} na dziś`}>{summary.todayActions.length}</span></div>{todayItems.length ? <div className="today-list">{todayItems.map(renderAction)}</div> : <p className="muted-copy">Nic nie jest zaplanowane ani przypięte na dziś.</p>}{summary.todayActions.length > 5 ? <Link className="section-link" to={showAll("today") ? "/" : "/?show=today"}>{showAll("today") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
-        {summary.isPristineWorkspace ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Zacznij od jednego kroku" detail="Wykonaj pierwsze Działanie albo zapisz myśl do późniejszego uporządkowania." action={<Link className="button button-secondary" to="/capture"><Archive />Zapisz do Skrzynki</Link>} /></Panel> : null}
-        {showNoPlan ? <Panel className="start-calm"><EmptyState icon={<CalendarClock />} title="Nic nie jest zaplanowane na dziś" detail="Przestrzeń pracy ma już historię. Wybierz jeden konkretny następny krok, żeby łatwo wrócić do działania." action={<Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "action", scheduledFor: currentDate, draftKey: "start" })}><Plus />Ustal następny krok</Button>} /></Panel> : null}
+      <section className="start-layout" aria-labelledby="start-today-title">
+        <header className="start-section-heading">
+          <h2 id="start-today-title">Na dziś</h2>
+          <span className="start-today-count" aria-label={`${polishCount(summary.todayActions.length, "Działanie", "Działania", "Działań")} na dziś`}>{summary.todayActions.length}</span>
+        </header>
+        {todayItems.length ? <ul className="workspace-list" role="list">{todayItems.map(renderAction)}</ul> : <div className="start-today-empty">
+          <p>{summary.isPristineWorkspace ? "Zacznij od jednego kroku" : "Nic nie jest zaplanowane ani przypięte na dziś."}</p>
+          {summary.isPristineWorkspace || showNoPlan ? <Button variant="secondary" onClick={() => requestAppQuickAdd({ mode: "action", scheduledFor: currentDate, draftKey: "start" })}><Plus aria-hidden="true" />{summary.isPristineWorkspace ? "Dodaj Działanie" : "Ustal następny krok"}</Button> : null}
+        </div>}
+        {summary.todayActions.length > 5 ? <Link className="section-link" to={showAll("today") ? "/" : "/?show=today"}>{showAll("today") ? "Zwiń listę" : "Zobacz wszystkie"}</Link> : null}
+      </section>
+
+      <div className="start-context">
+        <ReturnToWork />
+        {summary.recommendation.kind === "blocked" ? <Link className="start-context-link" to={summary.recommendation.to}><ShieldAlert aria-hidden="true" /><span>{summary.recommendation.title}</span></Link> : null}
+        {summary.overdueActions.length ? <Link className="start-context-link" to="/actions?view=overdue"><CalendarClock aria-hidden="true" /><span>Zaległe Działania <small>{summary.overdueActions.length}</small></span></Link> : null}
+        <CurrentWeekPlanNotice read={planRead} />
+        <KnowledgeRevisitSignal now={now} />
+        <details className="start-ai-help" open={searchParams.get("show") === "attention" || searchParams.get("show") === "upcoming" || undefined}>
+          <summary><Sparkles aria-hidden="true" /><span>Pomóż wybrać następny krok</span><ChevronDown aria-hidden="true" /></summary>
+          <AIStartGuidance homeSummary={summary} renderUpcomingAction={renderAction} />
+        </details>
       </div>
-    </div>
-
-    <div className="start-context">
-    <ReturnToWork />
-    {summary.recommendation.kind === "blocked" ? <p className="return-to-work"><Link to={summary.recommendation.to}>{summary.recommendation.title} — {recommendationCta}</Link></p> : null}
-    {summary.overdueActions.length ? <details className="start-overdue"><summary>Zaległe Działania · {summary.overdueActions.length}</summary><Link to="/actions?view=overdue">Przejrzyj zaległe Działania</Link></details> : null}
-    <CurrentWeekPlanNotice read={planRead} />
-    <KnowledgeRevisitSignal now={now} />
-    <details className="start-ai-help" open={searchParams.get("show") === "attention" || searchParams.get("show") === "upcoming" || undefined}><summary>Pomóż wybrać następny krok</summary><AIStartGuidance homeSummary={summary} /></details>
-    </div>
     </div>
     {(() => { const action = state.actions.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `start-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
     <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />

@@ -1,6 +1,7 @@
 import { actionGroupType, categoryConversionBlocker } from "./actionGroups";
 import { applyReadingChanges } from "./readingProgress";
 import { validateSavedActionView, type SavedActionView } from "./savedActionViews";
+import { isProjectPreset } from "./projectPresets";
 import { validateProjectParent } from "./projectHierarchy";
 import type { ActionGroupType, ActionResultInput, ActionStatus, AppState, CommitmentStatus, FocusEndReason, GoalKind, InboxStatus, KnowledgeKind, KnowledgeRelationMeaning, KnowledgeRelationTarget, LegacyProjectRecord, ProjectPreset, ReadingStatus, RecurringActionTemplate, Visibility, WeeklyReviewSnapshot, WorkItemStatus } from "./types";
 import { normalizeHttpUrl } from "./http-url";
@@ -371,7 +372,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!name || name.length > 100) throw new Error("Nazwa kategorii musi mieć od 1 do 100 znaków.");
     if (!/^#[0-9a-fA-F]{6}$/.test(command.color)) throw new Error("Wybierz poprawny kolor kategorii.");
     if ((state.projectCategories ?? []).some((category) => category.id !== command.id && category.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("Kategoria o tej nazwie już istnieje.");
-    if (command.defaultPreset !== undefined && !["standard", "reading"].includes(command.defaultPreset)) throw new Error("project_preset_invalid");
+    if (command.defaultPreset !== undefined && !isProjectPreset(command.defaultPreset)) throw new Error("project_preset_invalid");
     return { ...state, projectCategories: [...(state.projectCategories ?? []).filter((category) => category.id !== command.id), { id: command.id, name, color: command.color, defaultPreset: command.defaultPreset }] };
   }
   if (command.type === "delete_project_category") return { ...state, projectCategories: (state.projectCategories ?? []).filter((category) => category.id !== command.id), areas: state.areas.map((area) => ({ ...area, categoryIds: area.categoryIds?.filter((id) => id !== command.id) })) };
@@ -420,7 +421,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!area) throw new Error("area_not_found");
     if (command.parentProjectId !== undefined) validateProjectParent(state.areas, area.id, command.parentProjectId);
     if (command.name !== undefined && !command.name.trim()) throw new Error("area_name_required");
-    if (command.preset !== undefined && !["standard", "reading"].includes(command.preset)) throw new Error("project_preset_invalid");
+    if (command.preset !== undefined && !isProjectPreset(command.preset)) throw new Error("project_preset_invalid");
     return { ...state, areas: state.areas.map((item) => item.id === area.id ? { ...item, preset: command.preset ?? item.preset ?? "standard", categoryIds: command.categoryIds ?? item.categoryIds, parentProjectId: command.parentProjectId === undefined ? item.parentProjectId : command.parentProjectId || undefined, name: command.name?.trim() ?? item.name, description: command.description?.trim() ?? item.description, updatedAt: command.changedAt } : item) };
   }
 
@@ -612,7 +613,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
     if (!name) throw new Error("area_name_required");
     if (state.areas.some((area) => area.id === command.id)) return state;
     validateProjectParent(state.areas, command.id, command.parentProjectId);
-    if (command.preset !== undefined && !["standard", "reading"].includes(command.preset)) throw new Error("project_preset_invalid");
+    if (command.preset !== undefined && !isProjectPreset(command.preset)) throw new Error("project_preset_invalid");
     return { ...state, areas: [...state.areas, {
       id: command.id,
       name,

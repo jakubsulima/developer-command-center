@@ -1,0 +1,101 @@
+.action-filter-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-control);
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 13px;
+  cursor: pointer;
+}
+.action-filter-trigger:hover { background: var(--surface-hover); }
+.action-filter-trigger:is([data-filtered="true"], [aria-expanded="true"]) { border-color: var(--selection-border); background: var(--surface-selected); }
+.action-filter-trigger > svg { width: 18px; height: 18px; }
+.action-filter-indicator { display: grid; place-items: center; color: var(--ring); }
+.action-filter-indicator svg { width: 14px; height: 14px; }
+.modal.action-filter-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  max-height: calc(var(--modal-viewport-height, 100dvh) - 24px);
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.action-filter-dialog .modal-head { position: static; flex: none; margin: 0; padding: 8px 16px; background: transparent; }
+.action-filter-dialog .modal-head h2 { font-size: 18px; }
+.action-filter-groups { display: grid; gap: 16px; min-height: 0; padding: 8px 16px 16px; overflow: auto; overscroll-behavior: contain; }
+.action-filter-group + .action-filter-group { padding-top: 8px; border-top: 1px solid var(--border); }
+.action-filter-group h3 { margin: 0 0 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
+.action-filter-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.action-filter-options > :only-child { grid-column: 1 / -1; }
+.action-filter-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--foreground);
+  background: transparent;
+  font-size: 13px;
+  line-height: 16px;
+  text-align: start;
+  cursor: pointer;
+}
+.action-filter-option:hover { background: var(--surface-hover); }
+.action-filter-option[aria-pressed="true"] { border-color: var(--selection-border); background: var(--surface-selected); }
+.action-filter-option > span { min-width: 0; overflow-wrap: anywhere; }
+.action-filter-option-icon { display: grid; place-items: center; min-height: 16px; color: var(--muted-foreground); }
+.action-filter-option-icon svg:not(.action-status-glyph) { width: 15px; height: 15px; }
+.action-filter-option[aria-pressed="true"] .action-filter-option-icon { color: var(--ring); }
+.action-filter-option small { color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+.action-filter-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 16px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 767px) {
+  .action-filter-trigger {
+    position: fixed;
+    z-index: 19;
+    inset-inline-end: var(--page-inset-end);
+    bottom: calc(var(--space-4) + var(--mobile-nav-space, 72px) + env(safe-area-inset-bottom));
+    width: var(--floating-action-filter-size);
+    height: var(--floating-action-filter-size);
+    padding: 0;
+    border-radius: 50%;
+    box-shadow: 0 6px 20px #0007;
+  }
+  .action-filter-trigger > svg { width: 20px; height: 20px; }
+  .action-filter-trigger-label { display: none; }
+  .action-filter-indicator {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    width: 17px;
+    height: 17px;
+    border: 1px solid var(--background);
+    border-radius: 50%;
+    background: var(--ring);
+    color: var(--background);
+  }
+  .action-filter-indicator svg { width: 12px; height: 12px; }
+  .modal.action-filter-dialog { width: 100%; }
+  .action-filter-groups { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .action-filter-groups:has(+ .action-filter-footer) { padding-bottom: 16px; }
+  .action-filter-footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .action-filter-footer .button { flex: 1; }
+}
