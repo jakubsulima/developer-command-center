@@ -24,36 +24,53 @@ function seedNavigationState() {
 }
 
 describe("spójna nawigacja kontekstowa", () => {
-  it.each(["status", "dodawanie"])("zachowuje schowany pasek podczas blokady przewijania: %s", async (flow) => {
+  it.each(["status", "dodawanie"])("ukrywa górny pasek przy przewijaniu i utrzymuje dolną nawigację: %s", async (flow) => {
     seedNavigationState();
     const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ matches: query === "(max-width: 767px)", media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList));
     const height = vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(3000);
-    const position = vi.spyOn(window, "scrollY", "get").mockReturnValue(0);
+    let pageScroll = 0;
+    const position = vi.spyOn(window, "scrollY", "get").mockImplementation(() => document.body.style.position === "fixed" ? 0 : pageScroll);
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     const user = userEvent.setup();
     const { container, unmount } = renderApp("/actions?view=open");
     try {
-      const trigger = await screen.findByRole("button", { name: "Zmień status: Do zrobienia — Wykonać krok" }, { timeout: 5000 });
-      position.mockReturnValue(400);
+      const trigger = await screen.findByRole("button", { name: "Ukończ: Wykonać krok" }, { timeout: 5000 });
+      const shell = container.querySelector(".app-shell");
+      const bottomNav = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
+      expect(bottomNav).not.toHaveAttribute("data-compact");
+      pageScroll = 400;
       fireEvent.scroll(window);
-      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
+      expect(shell).toHaveClass("mobile-header-hidden");
+      expect(bottomNav).toHaveAttribute("data-compact", "true");
+      expect(within(bottomNav).getByRole("link", { name: "Działania" })).toBeVisible();
+      expect(within(bottomNav).getByRole("link", { name: "Przegląd AI" })).toBeVisible();
 
-      await user.click(flow === "status" ? trigger : screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
+      if (flow === "status") {
+        trigger.focus();
+        await user.keyboard("{Shift>}{Enter}{/Shift}");
+      } else {
+        await user.click(screen.getByRole("button", { name: "Dodaj nowe Działanie" }));
+      }
       const dialog = await screen.findByRole("dialog", { name: flow === "status" ? "Zmień status Działania" : "Nowe Działanie" });
-      // Fixing the body during scroll lock makes the browser report scrollY=0.
-      position.mockReturnValue(0);
+      expect(document.documentElement.style.overflow).toBe("hidden");
+      expect(window.scrollY).toBe(flow === "status" ? 400 : 0);
       fireEvent.scroll(window);
-      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
-      expect(container.querySelector(".app-shell")).toHaveClass("bottom-nav-hidden");
+      expect(shell).toHaveClass("mobile-header-hidden");
+      expect(bottomNav).toHaveAttribute("data-compact", "true");
 
-      await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
-      position.mockReturnValue(400);
+      if (flow === "status") {
+        fireEvent.keyDown(dialog, { key: "Escape" });
+        expect(within(dialog).getByRole("group", { name: "Nowy status Działania" })).toHaveAttribute("data-phase", "closing");
+      } else {
+        await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
+      }
       fireEvent.scroll(window);
-      expect(container.querySelector(".bottom-nav")).toHaveClass("is-hidden");
+      expect(shell).toHaveClass("mobile-header-hidden");
       await waitFor(() => expect(document.querySelector("[data-modal-backdrop]")).not.toBeInTheDocument());
-      position.mockReturnValue(370);
+      pageScroll = 370;
       fireEvent.scroll(window);
-      await waitFor(() => expect(container.querySelector(".bottom-nav")).not.toHaveClass("is-hidden"));
+      await waitFor(() => expect(shell).not.toHaveClass("mobile-header-hidden"));
+      expect(bottomNav).not.toHaveAttribute("data-compact");
     } finally {
       unmount();
       media.mockRestore();
@@ -61,6 +78,28 @@ describe("spójna nawigacja kontekstowa", () => {
       position.mockRestore();
       scrollTo.mockRestore();
     }
+  });
+
+  it("otwiera Przegląd AI z dolnego paska i aktywuje właściwy skrót po zmianie zakładki", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/review");
+    const summaryTab = await screen.findByRole("tab", { name: "Tydzień", selected: true });
+    const bottomNav = within(screen.getByRole("navigation", { name: "Nawigacja mobilna" }));
+    const aiLink = bottomNav.getByRole("link", { name: "Przegląd AI" });
+    const moreButton = bottomNav.getByRole("button", { name: "Otwórz menu Więcej" });
+    expect(moreButton).toHaveAttribute("aria-current", "page");
+
+    await user.click(aiLink);
+
+    expect(screen.getByRole("tab", { name: "AI", selected: true })).toBeVisible();
+    expect(aiLink).toHaveAttribute("aria-current", "page");
+    expect(moreButton).not.toHaveAttribute("aria-current");
+
+    await user.click(summaryTab);
+
+    expect(moreButton).toHaveAttribute("aria-current", "page");
+    expect(aiLink).not.toHaveAttribute("aria-current");
   });
 
   it("przenosi pełny kontekst przez Projekt → Grupa działań → Działanie → Wiedza i wraca do źródła", async () => {

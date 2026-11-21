@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -45,16 +45,24 @@ describe("goal-centric experience", () => {
     const editGoalDialog = screen.getByRole("dialog", { name: "Edytuj grupę działań" });
     expect(editGoalDialog).toBeVisible();
     await user.click(within(editGoalDialog).getByRole("button", { name: "Anuluj" }));
-    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj Działanie do grupy FinTrack API" }));
+    const addAction = within(screen.getByRole("main")).getByRole("button", { name: "Dodaj Działanie do grupy FinTrack API" });
+    await user.click(addAction);
     const quickAdd = await screen.findByRole("dialog", { name: "Nowe Działanie" });
     expect(within(quickAdd).getByLabelText("Co chcesz zrobić?")).toBeInTheDocument();
     await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(quickAdd).not.toBeInTheDocument();
+      expect(addAction).toHaveFocus();
+    });
     expect(screen.queryByText(/Focus Session|Rozpocznij fokus|timer/i)).not.toBeInTheDocument();
     expect(screen.queryByText("decision")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Zaprojektuj encje i relacje dla transakcji" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
+    screen.getByRole("button", { name: "Ukończ: Zaprojektuj encje i relacje dla transakcji" }).focus();
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    const statusDialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    await user.click(within(statusDialog).getByRole("button", { name: /Ukończone/ }));
+    await waitFor(() => expect(statusDialog).not.toBeInTheDocument());
     await user.click(screen.getByText("Historia Działań"));
-    expect(screen.getByRole("button", { name: "Zmień status: Ukończone — Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Przywróć: Zaprojektuj encje i relacje dla transakcji" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cofnij" })).toBeInTheDocument();
   });
 

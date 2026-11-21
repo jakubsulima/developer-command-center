@@ -8,6 +8,7 @@
   margin: 0;
   padding: var(--space-2) var(--space-2) var(--space-2) 0;
   border-bottom: 1px solid var(--border);
+  touch-action: manipulation;
 }
 .action-list-row:hover,
 .action-list-row:focus-within { background: var(--surface-hover); }
@@ -18,6 +19,8 @@
   height: var(--action-row-touch-height);
   margin: calc(-1 * var(--space-2)) 0 0;
   padding: 0;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .action-list-row-copy {
   display: flex;
@@ -31,6 +34,8 @@
   display: block;
   color: var(--foreground);
   text-decoration: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .action-list-row-title strong {
   display: block;
@@ -71,12 +76,6 @@
   grid-row: 1;
   margin-block-start: calc(-1 * var(--space-2));
 }
-.action-list-row-tools .action-check {
-  width: var(--action-row-touch-height);
-  height: var(--action-row-touch-height);
-  border-radius: var(--radius-control);
-}
-
 @media (min-width: 1200px) {
   .actions-list-row > .action-list-row-status > .action-status-icon {
     width: var(--action-row-touch-height);

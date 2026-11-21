@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, Clock3, ListTodo, Plus, RefreshCw, Sparkles, Target, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ChevronDown, Clock3, ListTodo, Plus, RefreshCw, Sparkles, Target, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
@@ -6,7 +6,7 @@ import { useStore } from "../app/useStore";
 import { aiGoalReviewErrorCopy as errorCopy, aiGoalReviewFreshnessCopy, aiGoalStatusLabels as statusLabel, aiReviewHorizonLabels as horizonLabel, aiSignalLabel as signalLabel } from "../domain/aiStartGuidance";
 import { humanizeEntityReferences } from "../domain/humanizeAIText";
 import { formatInclusiveDateRange } from "../domain/activity";
-import { Badge, Button, Panel } from "./ui";
+import { Badge, Button } from "./ui";
 import { useActionFeedback } from "./action-feedback-context";
 import { AIGoalReviewConsentModal, AIGoalReviewDraftModal, type AIGoalReviewDraft } from "./AIGoalReviewShared";
 import { nextWorkspaceWeek } from "../domain/weeklyPlan";
@@ -32,7 +32,8 @@ export function AIGoalReview() {
   const humanize = (text: string) => humanizeEntityReferences(text, entityLabels);
   const busy = aiGoalReviewStatus === "loading" || aiGoalReviewStatus === "refreshing";
   const planWeek = nextWorkspaceWeek(new Date(), state.workspaceTimezone);
-  const recommendationFresh = Boolean(aiGoalReview && !aiGoalReview.stale && aiGoalReviewFreshness === "current");
+  const reviewStale = aiGoalReview?.stale || aiGoalReviewFreshness !== "current";
+  const recommendationFresh = Boolean(aiGoalReview && !reviewStale);
 
   const begin = () => {
     if (aiGoalReview) void requestGoalReview(false);
@@ -75,24 +76,51 @@ export function AIGoalReview() {
   };
 
   return <>
-    <Panel className="ai-goal-review" aria-labelledby="ai-goal-review-title">
-      <div className="section-heading ai-review-heading">
-        <div><span className="section-kicker"><Bot />Przegląd AI {mode === "demo" ? <Badge tone="neutral">Symulacja</Badge> : null}</span><h2 id="ai-goal-review-title">Przegląd grup działań z AI</h2></div>
-        <div className="ai-review-actions"><Button variant={aiGoalReview ? "secondary" : "primary"} loading={busy} disabled={busy || !state.goals.some((goal) => goal.status === "active" && goal.visibility === "active")} onClick={begin}>{aiGoalReview ? <RefreshCw /> : <Sparkles />}{aiGoalReview ? "Aktualizuj analizę" : "Przeanalizuj moje grupy działań"}</Button>{aiGoalReview ? <details className="ai-review-more-options"><summary>Więcej opcji</summary><Button variant="ghost" disabled={busy} onClick={() => setForceConfirmationOpen(true)}>Wygeneruj ponownie</Button></details> : null}</div>
+    <div className="ai-goal-review">
+      <div className="ai-review-actions">
+        <Button variant={aiGoalReview ? "secondary" : "primary"} loading={busy} disabled={busy || !state.goals.some((goal) => goal.status === "active" && goal.visibility === "active")} onClick={begin}>
+          {aiGoalReview ? <RefreshCw /> : <Sparkles />}{aiGoalReview ? "Aktualizuj analizę" : "Przeanalizuj moje grupy działań"}
+        </Button>
+        {aiGoalReview ? (
+          <details className="ai-review-more-options">
+            <summary>Więcej opcji<ChevronDown aria-hidden="true" /></summary>
+            <Button variant="ghost" disabled={busy} onClick={() => setForceConfirmationOpen(true)}>Wygeneruj ponownie</Button>
+          </details>
+        ) : null}
+        {mode === "demo" ? <Badge tone="neutral">Symulacja</Badge> : null}
       </div>
       {!aiGoalReview && aiGoalReviewReadStatus === "checking" ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>Sprawdzam zapisaną analizę…</strong><small>Odczyt statusu nie uruchamia modelu.</small></div></div> : null}
-      {!aiGoalReview && !busy && aiGoalReviewReadStatus === "checked" && aiGoalReviewFreshness === "none" ? <div className="ai-review-empty"><p>Brak zapisanej analizy. Uruchomisz ją ręcznie; AI nie zmienia danych ani nie wykonuje Działań.</p></div> : null}
+      {!aiGoalReview && !busy && aiGoalReviewReadStatus === "checked" && aiGoalReviewFreshness === "none" ? <p className="ai-review-empty">Brak zapisanej analizy. Uruchomisz ją ręcznie; AI nie zmienia danych ani nie wykonuje Działań.</p> : null}
       {aiGoalReviewReadError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>Nie udało się sprawdzić aktualności.</strong><small>{aiGoalReviewReadError}</small></div><Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Ponów odczyt</Button></div> : null}
       {busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>{aiGoalReviewStatus === "refreshing" ? "Odświeżam analizę…" : "Analizuję aktywne grupy…"}</strong><small>Możesz nadal korzystać z pozostałej części aplikacji.</small></div></div> : null}
       {aiGoalReviewError ? <div className="ai-review-error" role="alert"><AlertTriangle /><div><strong>{errorCopy(aiGoalReviewError.code)}</strong><small>{aiGoalReviewError.message}</small></div>{aiGoalReviewError.code === "AI_GENERATION_IN_PROGRESS" ? <Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Sprawdź status</Button> : aiGoalReviewError.code !== "AI_NOT_CONFIGURED" && aiGoalReviewError.code !== "NO_ACTIVE_GOALS" ? <Button variant="ghost" disabled={busy} onClick={() => void requestGoalReview(false)}>Spróbuj ponownie</Button> : null}</div> : null}
-      {aiGoalReview ? <div className={aiGoalReview.stale || aiGoalReviewFreshness !== "current" ? "ai-review-result is-stale" : "ai-review-result"}>
-        <div className="ai-review-status-summary"><Clock3 /><span><strong>{aiGoalReview.stale || aiGoalReviewFreshness !== "current" ? "Analiza może być nieaktualna" : "Analiza aktualna"}</strong><small>Zakres AI: ostatnie {aiGoalReview.windowDays} dni · {aiGoalReview.analyzedGoalIds.length} grup działań{aiGoalReview.stale || aiGoalReviewFreshness !== "current" ? ` · ${aiGoalReviewFreshnessCopy(aiGoalReviewFreshness)}` : ""}</small></span>{aiGoalReview.stale || aiGoalReviewFreshness !== "current" ? <Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Sprawdź aktualność</Button> : null}<Link to="/settings">Ustawienia</Link></div>
-        <details className="ai-review-period"><summary>Okres: {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)}</summary><small>Wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · Sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""} · {aiGoalReview.model}{aiGoalReview.cached ? " · wynik z cache" : ""}</small></details>
-        <section className="ai-review-direction"><div className="ai-review-direction-status"><Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{statusLabel[aiGoalReview.review.overallStatus]}</Badge><span>{aiGoalReview.analyzedGoalIds.length} przeanalizowanych grup działań</span></div><h3>{humanize(aiGoalReview.review.headline)}</h3><p>{humanize(aiGoalReview.review.summary)}</p></section>
-        <section className="ai-review-recommendations-section"><div className="ai-review-section-title"><div><span>Plan działania</span><h3>Najważniejsze zalecenia</h3></div><small>{aiGoalReview.review.recommendations.length} {aiGoalReview.review.recommendations.length === 1 ? "zalecenie" : "zalecenia"}</small></div><div className="ai-recommendations">{aiGoalReview.review.recommendations.map((recommendation, index) => <article key={recommendation.id}>
-          <div className="ai-recommendation-topline"><span className="ai-recommendation-number">{index + 1}</span><Badge tone={recommendation.horizon === "now" ? "danger" : "neutral"}>{horizonLabel[recommendation.horizon]}</Badge></div>
+      {aiGoalReview ? <div className={reviewStale ? "ai-review-result is-stale" : "ai-review-result"}>
+        <div className="ai-review-status-summary">
+          <Clock3 aria-hidden="true" />
+          <div className="ai-review-status-copy">
+            <strong>{reviewStale ? "Analiza może być nieaktualna" : "Analiza aktualna"}</strong>
+            <small>Ostatnie {aiGoalReview.windowDays} dni · {aiGoalReview.analyzedGoalIds.length} grup działań{reviewStale ? ` · ${aiGoalReviewFreshnessCopy(aiGoalReviewFreshness)}` : ""}</small>
+          </div>
+          <div className="ai-review-status-actions">
+            {reviewStale ? <Button variant="ghost" onClick={() => void refreshLatestGoalReview()}>Sprawdź aktualność</Button> : null}
+            <Link to="/settings">Ustawienia</Link>
+          </div>
+          <details className="ai-review-period">
+            <summary>Okres: {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)}<ChevronDown aria-hidden="true" /></summary>
+            <small>Wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · Sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""} · {aiGoalReview.model}{aiGoalReview.cached ? " · wynik z cache" : ""}</small>
+          </details>
+        </div>
+        <section className="ai-review-direction">
+          <Badge tone={aiGoalReview.review.overallStatus === "on_track" ? "success" : aiGoalReview.review.overallStatus === "stuck" ? "danger" : "warning"}>{statusLabel[aiGoalReview.review.overallStatus]}</Badge>
+          <h2>{humanize(aiGoalReview.review.headline)}</h2>
+          <p>{humanize(aiGoalReview.review.summary)}</p>
+        </section>
+        <section className="ai-review-recommendations-section"><h2>Najważniejsze zalecenia</h2><div className="ai-recommendations">{aiGoalReview.review.recommendations.map((recommendation) => <article key={recommendation.id}>
+          <div className="ai-recommendation-topline">
+            <h3>{humanize(recommendation.title)}</h3>
+            <Badge tone={recommendation.horizon === "now" ? "danger" : "neutral"}>{horizonLabel[recommendation.horizon]}</Badge>
+          </div>
           <div className="ai-recommendation-copy">
-          <h4>{humanize(recommendation.title)}</h4>
           <div className="ai-next-step"><span><ArrowRight />Następny krok</span><strong>{humanize(recommendation.suggestedNextStep)}</strong></div>
           {recommendation.draftAction ? <div className="ai-recommendation-actions"><Button variant="ghost" disabled={!recommendationFresh} onClick={() => setDraft({ ...recommendation.draftAction!, sourceRecommendationId: recommendation.id, idempotencyKey: crypto.randomUUID() })}><Plus />Przejrzyj krok i zaplanuj</Button></div> : null}
           {recommendation.actionIds.map((actionId) => actionsById.get(actionId)).filter((action): action is NonNullable<typeof action> => action !== undefined && recommendation.goalIds.includes(action.goalId ?? "")).map((action) => {
@@ -100,7 +128,7 @@ export function AIGoalReview() {
             const eligible = !["completed", "skipped", "cancelled"].includes(action.status);
             return <div className="ai-recommendation-actions" key={`plan-${action.id}`}><Button variant="ghost" disabled={!recommendationFresh || !eligible || action.status === "blocked" || alreadyInPlan} onClick={() => setDraft({ goalId: action.goalId!, title: action.title, detail: action.detail, scheduledFor: action.scheduledFor && planWeek.dates.includes(action.scheduledFor) ? action.scheduledFor : undefined, actionId: action.id, actionVersion: action.version, sourceRecommendationId: recommendation.id })}><Plus />{alreadyInPlan ? "Działanie już jest w Planie" : action.status === "blocked" ? "Najpierw rozwiąż blokadę" : "Dodaj istniejące do Planu"}</Button></div>;
           })}
-          <details className="ai-recommendation-details"><summary>Uzasadnienie, źródła i ocena</summary><div className="ai-recommendation-details-content"><div className="ai-recommendation-targets" aria-label="Dotyczy"><span className="ai-targets-label"><Target />Dotyczy</span><div>{recommendation.goalIds.map((id) => {
+          <details className="ai-recommendation-details"><summary>Uzasadnienie, źródła i ocena<ChevronDown aria-hidden="true" /></summary><div className="ai-recommendation-details-content"><div className="ai-recommendation-targets" aria-label="Dotyczy"><span className="ai-targets-label"><Target />Dotyczy</span><div>{recommendation.goalIds.map((id) => {
             const goal = goalsById.get(id);
             return goal ? <Link className="ai-entity-link is-goal" key={id} to={`/goals/${id}`}><Target /><span><small>Grupa działań</small><strong>{goal.title}</strong></span></Link> : <span className="ai-entity-link is-missing" key={id}><Target /><span><small>Grupa działań</small><strong>Niedostępna grupa działań</strong></span></span>;
           })}{recommendation.actionIds.map((id) => {
@@ -110,11 +138,11 @@ export function AIGoalReview() {
           {recommendation.signalKeys.length ? <div className="ai-evidence" aria-label="Sygnały z danych"><span className="ai-evidence-label"><Activity />Sygnały</span>{recommendation.signalKeys.map((key) => <span key={key}>{signalLabel(key)}</span>)}</div> : null}
           <div className="ai-feedback" role="group" aria-label={`Oceń zalecenie: ${humanize(recommendation.title)}`}><span>Czy to pomocne?</span><button type="button" aria-pressed={ratings[recommendation.id] === "helpful"} aria-label="Przydatne" onClick={() => void rate(recommendation.id, "helpful")}><ThumbsUp /></button><button type="button" aria-pressed={ratings[recommendation.id] === "not_helpful"} aria-label="Nieprzydatne" onClick={() => void rate(recommendation.id, "not_helpful")}><ThumbsDown /></button></div></div></details>
           </div></article>)}</div>{feedbackError ? <p className="inline-mutation-error" role="alert">{feedbackError}</p> : null}</section>
-        {aiGoalReview.review.checks.length ? <section className="ai-review-checks"><h3>Co sprawdzić</h3>{aiGoalReview.review.checks.map((check) => <div key={check.id}><strong>{humanize(check.question)}</strong><p>{humanize(check.whyItMatters)}</p>{check.goalIds.map((id) => goalsById.has(id) ? <Link key={id} to={`/goals/${id}`}>Grupa: {goalsById.get(id)!.title}</Link> : null)}</div>)}</section> : null}
-        <section className="ai-review-assessments"><h3>Grupy działań wymagające uwagi</h3>{aiGoalReview.review.goalAssessments.filter((assessment) => assessment.status !== "on_track").length ? aiGoalReview.review.goalAssessments.filter((assessment) => assessment.status !== "on_track").map((assessment) => <Link key={assessment.goalId} to={`/goals/${assessment.goalId}`}><span><Badge tone={assessment.status === "stuck" ? "danger" : "warning"}>{statusLabel[assessment.status]}</Badge><strong>{goalsById.get(assessment.goalId)?.title ?? "Grupa działań"}</strong><small>{humanize(assessment.rationale)}</small></span></Link>) : <p className="muted-copy"><CheckCircle2 /> Żadna grupa działań nie wymaga pilnej uwagi.</p>}</section>
+        {aiGoalReview.review.checks.length ? <section className="ai-review-checks"><h2>Co sprawdzić</h2>{aiGoalReview.review.checks.map((check) => <div key={check.id}><strong>{humanize(check.question)}</strong><p>{humanize(check.whyItMatters)}</p>{check.goalIds.map((id) => goalsById.has(id) ? <Link key={id} to={`/goals/${id}`}>Grupa: {goalsById.get(id)!.title}</Link> : null)}</div>)}</section> : null}
+        <section className="ai-review-assessments"><h2>Grupy działań wymagające uwagi</h2>{aiGoalReview.review.goalAssessments.filter((assessment) => assessment.status !== "on_track").length ? aiGoalReview.review.goalAssessments.filter((assessment) => assessment.status !== "on_track").map((assessment) => <Link key={assessment.goalId} to={`/goals/${assessment.goalId}`}><span><Badge tone={assessment.status === "stuck" ? "danger" : "warning"}>{statusLabel[assessment.status]}</Badge><strong>{goalsById.get(assessment.goalId)?.title ?? "Grupa działań"}</strong><small>{humanize(assessment.rationale)}</small></span></Link>) : <p className="muted-copy"><CheckCircle2 /> Żadna grupa działań nie wymaga pilnej uwagi.</p>}</section>
         <footer className="ai-review-scope"><strong>Zakres analizy</strong><span>{aiGoalReview.analyzedGoalIds.length} grup działań · {aiGoalReview.periodStart}–{aiGoalReview.periodEnd}</span><span>{generatedFormatter.format(new Date(aiGoalReview.generatedAt))} · {aiGoalReview.model}{aiGoalReview.cached ? " · wynik z cache" : ""}</span>{aiGoalReview.omittedGoalIds.length ? <span className="ai-review-omitted">Pominięto jawnie {aiGoalReview.omittedGoalIds.length} grup działań poza zakresem tej analizy.</span> : null}</footer>
       </div> : null}
-    </Panel>
+    </div>
     <AIGoalReviewConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} windowDays={state.aiReviewSettings?.windowDays} />
     <Modal open={forceConfirmationOpen} title="Wygenerować nowy Przegląd AI?" onClose={() => setForceConfirmationOpen(false)}>
       <div className="ai-consent"><p>To działanie pomija zapisany wynik i zawsze próbuje uruchomić nową analizę. Może powstać nowy koszt; obowiązują limit i pięciominutowa przerwa między wymuszonymi próbami.</p><div className="modal-actions"><Button onClick={() => setForceConfirmationOpen(false)}>Anuluj</Button><Button variant="primary" disabled={busy} onClick={() => { setForceConfirmationOpen(false); void requestGoalReview(true); }}><Sparkles />Wygeneruj nowy wynik</Button></div></div>

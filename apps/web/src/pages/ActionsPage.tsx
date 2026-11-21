@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ActionStatusTarget, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionListRow } from "../components/ActionListRow";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionResultDialog } from "../components/ActionResultDialog";
@@ -139,7 +139,7 @@ export function ActionsPage() {
   const queryClient = useQueryClient();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
-  const [statusActionId, setStatusActionId] = useState<string>();
+  const [statusTarget, setStatusTarget] = useState<ActionStatusTarget>();
   const [resultActionId, setResultActionId] = useState<string>();
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
@@ -194,7 +194,7 @@ export function ActionsPage() {
 
   useEffect(() => {
     const pending = focusAfterMutation.current;
-    if (pending && !items.some((item) => item.id === pending.actionId)) {
+    if (pending && !statusTarget?.menu && !items.some((item) => item.id === pending.actionId)) {
       focusAfterMutation.current = undefined;
       const nextIndex = Math.min(pending.index, items.length - 1);
       if (items[nextIndex]) {
@@ -218,7 +218,7 @@ export function ActionsPage() {
         requestAnimationFrame(() => empty.focus());
       }
     }
-  }, [focusEmpty, focusRequestId, items]);
+  }, [focusEmpty, focusRequestId, items, statusTarget?.menu]);
 
   const applyFilters = (next: URLSearchParams) => {
     try {
@@ -300,7 +300,7 @@ export function ActionsPage() {
 
   return (
     <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", quickAdd: { mode: "action", pinnedToToday: false, draftKey: "actions-list" } }}>
-      <PageHeading title="Działania" className="actions-page-heading" />
+      <PageHeading title="Działania" className="actions-page-heading" mobileBrand />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-toolbar-topline">
           <div className="actions-view-tabs" role="group" aria-label="Szybkie widoki Działań">
@@ -369,7 +369,8 @@ export function ActionsPage() {
             className={`actions-list-row${highlightId === action.id ? " navigation-card-highlight" : ""}`}
             data-highlighted={highlightId === action.id || undefined} data-preview-selected={previewAction?.id === action.id || undefined}
             timeZone={state.workspaceTimezone} today={today} routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)}
-            busy={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusActionId(action.id)}
+            busy={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusTarget({ action, menu: true })}
+            onToggleComplete={() => void (action.status === "completed" ? changeActionStatus(action, "ready") : completeAction(action))}
             context={context.kind === "standalone" ? undefined : { label: compactContextLabel(context), to: context.to === "/" ? undefined : context.to }}
             onTitleClick={(event) => {
               if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -384,9 +385,9 @@ export function ActionsPage() {
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
       </div>
-      {previewAction ? <ActionPreview action={previewAction} today={today} returnTo={listAddress} busy={mutation.isBusy(`actions-status:${previewAction.id}`)} error={mutation.error(`actions-status:${previewAction.id}`)} onClose={closePreview} onOpenStatus={() => setStatusActionId(previewAction.id)} onComplete={() => void completeAction(previewAction)} onRetry={() => void mutation.retry(`actions-status:${previewAction.id}`)?.()} /> : null}
+      {previewAction ? <ActionPreview action={previewAction} today={today} returnTo={listAddress} busy={mutation.isBusy(`actions-status:${previewAction.id}`)} error={mutation.error(`actions-status:${previewAction.id}`)} onClose={closePreview} onOpenStatus={() => setStatusTarget({ action: previewAction })} onComplete={() => void completeAction(previewAction)} onRetry={() => void mutation.retry(`actions-status:${previewAction.id}`)?.()} /> : null}
       </div>
-      {(() => { const action = items.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
+      {(() => { const action = items.find((candidate) => candidate.id === statusTarget?.action.id) ?? (statusTarget?.menu ? statusTarget.action : undefined); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} menu={statusTarget?.menu} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusTarget(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
       <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
     </AppShell>
   );

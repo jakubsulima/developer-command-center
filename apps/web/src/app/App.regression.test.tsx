@@ -266,7 +266,7 @@ describe("regresje nowego modelu grup działań", () => {
   it("otwiera wyszukiwanie mobilne w osobnym panelu i zamyka je po nawigacji", async () => {
     const user = userEvent.setup();
     sessionStorage.removeItem("command-global-search");
-    renderApp();
+    renderApp("/routines");
     await user.click(await screen.findByRole("button", { name: "Otwórz wyszukiwanie" }));
     let dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
     let search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
@@ -288,6 +288,29 @@ describe("regresje nowego modelu grup działań", () => {
     await user.click(goalResult!);
     expect(await screen.findByRole("heading", { name: "Portfolio v2" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Wyszukiwanie globalne" })).not.toBeInTheDocument();
+  });
+
+  it("rozwija wyszukiwanie w nagłówku głównej zakładki i przywraca fokus po zamknięciu", async () => {
+    const user = userEvent.setup();
+    sessionStorage.removeItem("command-global-search");
+    renderApp("/projects");
+    const trigger = await screen.findByRole("button", { name: "Otwórz wyszukiwanie" });
+    await user.click(trigger);
+    const panel = screen.getByRole("search", { name: "Wyszukiwanie globalne" });
+    const input = within(panel).getByRole("combobox");
+    expect(input).toHaveFocus();
+    expect(trigger).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(panel).not.toBeInTheDocument();
+    const restoredTrigger = screen.getByRole("button", { name: "Otwórz wyszukiwanie" });
+    await waitFor(() => expect(restoredTrigger).toHaveFocus());
+
+    await user.click(restoredTrigger);
+    const expanded = screen.getByRole("search", { name: "Wyszukiwanie globalne" });
+    await user.type(within(expanded).getByRole("combobox"), "Portfolio");
+    await user.click(await within(expanded).findByRole("option", { name: /^Portfolio v2 — Grupy działań$/ }));
+    expect(await screen.findByRole("heading", { name: "Portfolio v2", level: 1 })).toBeInTheDocument();
+    expect(expanded).not.toBeInTheDocument();
   });
 
   it("wykonuje intencyjne triage Inboxu do Wiedzy i zachowuje źródło", async () => {

@@ -1,11 +1,12 @@
 import { CreationDialog } from "./CreationForm";
 import { AddMenu, type AddMenuItem } from "./AddMenu";
-import { lazy, Suspense, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles, TerminalSquare } from "lucide-react";
+import { Link, matchPath, NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { PageActionsContext } from "./page-actions-context";
+import { useMobileNavIndicator } from "./mobile-nav-position";
 import { QuickCapture } from "./QuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
@@ -68,9 +69,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileCenterOpen, setProfileCenterOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [bottomNavHidden, setBottomNavHidden] = useState(false);
-  const bottomNavRef = useRef<HTMLElement>(null);
-  const bottomNavScroll = useRef({ previousY: 0, travel: 0 });
+  const [mobileHeaderHidden, setMobileHeaderHidden] = useState(false);
   const [signOutError, setSignOutError] = useState("");
   const leaveAccount = () => void signOut().catch((error) => setSignOutError(error instanceof Error ? error.message : "Nie udało się wylogować."));
   const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
@@ -79,7 +78,10 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
-  const moreActive = ["/goals", "/knowledge", "/routines", "/review", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const onReviewPage = Boolean(matchPath("/review", location.pathname));
+  const aiReviewActive = onReviewPage && new URLSearchParams(location.search).get("tab") === "ai";
+  const moreActive = (onReviewPage && !aiReviewActive) || ["/goals", "/knowledge", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const mobileNavIndicator = useMobileNavIndicator(loading, location.pathname, aiReviewActive);
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     if (loadingView) return;
     quickAddReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -96,40 +98,33 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       if (quickAddReturnFocus.current?.isConnected) quickAddReturnFocus.current.focus({ preventScroll: true });
     });
   }, []);
-  useLayoutEffect(() => {
-    // Collapsing the navigation space can clamp scrollY near the page end.
-    // Treat that layout adjustment as the baseline, not an upward gesture.
-    bottomNavScroll.current = {
-      previousY: Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight)),
-      travel: 0
-    };
-  }, [bottomNavHidden]);
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 767px)");
     const scrollPosition = () => Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    let previousY = 0;
+    let travel = 0;
     const reset = () => {
-      bottomNavScroll.current = { previousY: scrollPosition(), travel: 0 };
-      setBottomNavHidden(false);
+      previousY = scrollPosition();
+      travel = 0;
+      setMobileHeaderHidden(false);
     };
     const handleScroll = () => {
       if (!mobile.matches) return;
       // A modal fixes the body and temporarily resets window.scrollY to zero.
       // Keep the gesture baseline until its saved page position is restored.
       if (document.body.style.position === "fixed" || document.querySelector("[data-modal-backdrop]")) return;
-      const scroll = bottomNavScroll.current;
       const currentY = scrollPosition();
-      const delta = currentY - scroll.previousY;
-      scroll.previousY = currentY;
+      const delta = currentY - previousY;
+      previousY = currentY;
       if (!delta) return;
       // Ignore tiny direction changes and clamp elastic overscroll at both edges.
-      scroll.travel = Math.sign(delta) === Math.sign(scroll.travel) ? scroll.travel + delta : delta;
+      travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
       if (currentY <= 24) {
-        setBottomNavHidden(false);
-        scroll.travel = 0;
-      } else if (Math.abs(scroll.travel) >= 12) {
-        if (scroll.travel < 0) setBottomNavHidden(false);
-        else if (document.documentElement.scrollHeight - window.innerHeight > (bottomNavRef.current?.offsetHeight ?? 0) + 24) setBottomNavHidden(true);
-        scroll.travel = 0;
+        setMobileHeaderHidden(false);
+        travel = 0;
+      } else if (Math.abs(travel) >= 12) {
+        setMobileHeaderHidden(travel > 0);
+        travel = 0;
       }
     };
     reset();
@@ -198,8 +193,13 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (document.querySelector('[data-modal-backdrop]:not(.modal-backdrop-closing) [aria-modal="true"]')) return;
-        if (window.matchMedia("(max-width: 767px)").matches) setMobileSearchOpen(true);
-        else document.getElementById("global-search")?.focus();
+        if (window.matchMedia("(max-width: 767px)").matches) {
+          const input = document.getElementById("page-inline-search");
+          const trigger = document.getElementById("page-inline-search-trigger");
+          if (input) input.focus();
+          else if (trigger) trigger.click();
+          else setMobileSearchOpen(true);
+        } else document.getElementById("global-search")?.focus();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
@@ -232,9 +232,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       add: addAction?.menu ? <AddMenu label={addAction.label} ariaLabel={addAction.ariaLabel} items={addAction.menu} disabled={loadingView} onSelect={openQuickAdd} /> : addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
       search: <button className="icon-button page-search-button" disabled={loadingView} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
     }}>
-    <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${bottomNavHidden ? " bottom-nav-hidden" : ""}`}>
+    <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${mobileHeaderHidden ? " mobile-header-hidden" : ""}`}>
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark"><TerminalSquare /></span><span>Command</span></div>
+        <div className="brand"><CommandBrand /></div>
         <nav className="side-nav" aria-label="Główna nawigacja">
           {navigation.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => isActive ? "active" : ""}>
@@ -267,12 +267,23 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <main className="main-content">{error || freshnessError ? <div className="shell-sync-alert" role="status"><CloudOff /><span>{error ? "Nie udało się zsynchronizować zmian." : "Nie udało się odświeżyć danych."}</span><Button variant="ghost" onClick={() => void reload().catch(() => undefined)}>Spróbuj ponownie</Button></div> : null}{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
       {aside && <aside className="context-rail">{aside}</aside>}
 
-      <nav ref={bottomNavRef} className={`bottom-nav${bottomNavHidden ? " is-hidden" : ""}`} aria-label="Nawigacja mobilna" onFocusCapture={() => setBottomNavHidden(false)}>
-        <NavLink to="/" end><CalendarDays /><span>Start</span></NavLink>
-        <NavLink to="/projects"><FolderKanban /><span>Projekty</span></NavLink>
-        <button className={`capture-fab${captureOpen ? " active" : ""}`} disabled={loadingView} aria-expanded={captureOpen} aria-haspopup="dialog" onClick={() => setCaptureOpen(true)} aria-label="Szybki zapis"><span className="capture-fab-icon"><Plus /></span><span>Zapisz</span></button>
-        <NavLink to="/actions"><CheckSquare /><span>Działania</span></NavLink>
-      <button className={`mobile-more-trigger ${moreActive ? "active" : ""}`} disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="mobile-nav-icon"><Menu /></span><span>Więcej</span></button>
+      <nav className="bottom-nav" aria-label="Nawigacja mobilna" data-compact={mobileHeaderHidden || undefined}>
+        <NavLink to="/" end aria-label="Start">
+          <CalendarDays aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Start</span>
+        </NavLink>
+        <NavLink to="/projects" aria-label="Projekty">
+          <FolderKanban aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Projekty</span>
+        </NavLink>
+        <Link to="/review?tab=ai" aria-label="Przegląd AI" aria-current={aiReviewActive ? "page" : undefined}>
+          <Sparkles aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">AI</span>
+        </Link>
+        <NavLink to="/actions" aria-label="Działania">
+          <CheckSquare aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Działania</span>
+        </NavLink>
+        <button type="button" className="mobile-more-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej">
+          <Menu aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Więcej</span>
+        </button>
+        <span ref={mobileNavIndicator} className="bottom-nav-indicator" aria-hidden="true" />
       </nav>
       <CreationDialog open={captureOpen} closeDisabled={captureSaving} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}><QuickCapture onSavingChange={setCaptureSaving} closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /></CreationDialog>
       {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={closeQuickAdd}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={closeQuickAdd} /></Suspense> : null}
@@ -304,17 +315,64 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   );
 }
 
-export function PageActions({ search = true }: { search?: boolean }) {
-  const actions = useContext(PageActionsContext);
-  return <div className="page-actions">{search ? actions.search : null}{actions.add}</div>;
+function CommandBrand({ compact = false }: { compact?: boolean }) {
+  return <><span className="brand-mark"><TerminalSquare aria-hidden="true" /></span>{compact ? null : <span>Command</span>}</>;
 }
 
-export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
+export function PageActions({ search = true, children }: { search?: boolean; children?: ReactNode }) {
+  const actions = useContext(PageActionsContext);
+  return <div className="page-actions">{search ? actions.search : null}{children}{actions.add}</div>;
+}
+
+export function PageHeading({ title, eyebrow, action, className = "", mobileBrand = false }: { title: string; eyebrow?: string; action?: ReactNode; className?: string; mobileBrand?: boolean }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const mobile = window.matchMedia("(max-width: 767px)");
+    const closeOnResize = (event: MediaQueryListEvent) => {
+      if (!event.matches) setSearchOpen(false);
+    };
+    const closeOutside = (event: PointerEvent) => {
+      if (!searchPanelRef.current?.contains(event.target as Node)) setSearchOpen(false);
+    };
+    mobile.addEventListener("change", closeOnResize);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => {
+      mobile.removeEventListener("change", closeOnResize);
+      document.removeEventListener("pointerdown", closeOutside);
+    };
+  }, [searchOpen]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    window.requestAnimationFrame(() => searchTriggerRef.current?.focus());
+  };
+
   return (
-    <div className={`page-heading ${className}`.trim()}>
-      <div className="page-heading-copy"><h1>{title}</h1>{eyebrow && <span className="eyebrow">{eyebrow}</span>}</div>
-      <PageActions />
-      {action ? <div className="page-heading-secondary">{action}</div> : null}
+    <div className={`page-heading ${className}${searchOpen ? " is-search-open" : ""}`.trim()} data-mobile-brand={mobileBrand || undefined}>
+      <div className="page-heading-copy">
+        <h1>{title}</h1>
+        {mobileBrand ? <div className="mobile-brand"><CommandBrand compact={searchOpen} /></div> : null}
+        {eyebrow && !searchOpen && <span className="eyebrow">{eyebrow}</span>}
+      </div>
+      {searchOpen ? <div ref={searchPanelRef} id="page-inline-search-panel" className="page-inline-search" role="search" aria-label="Wyszukiwanie globalne" onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
+      }} onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        closeSearch();
+      }}>
+        <GlobalSearch id="page-inline-search" autoFocus onNavigate={() => setSearchOpen(false)} />
+        <button className="page-inline-search-close" type="button" onClick={closeSearch}>Zamknij</button>
+      </div> : <>
+        <PageActions search={!mobileBrand}>
+          {mobileBrand ? <button ref={searchTriggerRef} id="page-inline-search-trigger" type="button" className="icon-button page-search-button" aria-label="Otwórz wyszukiwanie" onClick={() => setSearchOpen(true)}><Search aria-hidden="true" /></button> : null}
+        </PageActions>
+        {action ? <div className="page-heading-secondary">{action}</div> : null}
+      </>}
     </div>
   );
 }
