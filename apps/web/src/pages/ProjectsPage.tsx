@@ -1,22 +1,17 @@
 import { ProjectCategoryManager } from "../components/ProjectCategoryManager";
 import "../components/ProjectCategories.css";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Archive, Beaker, CalendarDays, ChevronDown, CircleAlert, CircleCheck, Clock3, FolderKanban, ListChecks, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { NavigationLink } from "../components/ContextNavigation";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { Badge, Button, Panel } from "../components/ui";
-import { entityCardVariants } from "../components/ui-variants";
+import { Badge, Button } from "../components/ui";
 import { locationAddress } from "../domain/navigation";
 import { useLocation } from "react-router-dom";
 import { projectProjections, projectSignal, type ProjectSignal } from "../domain/projectModule";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
-
-const colors = ["violet", "orange", "amber"] as const;
-
-function initials(name: string) {
-  return name.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-}
+import "../components/workspace-list.css";
+import "./projects-workspace.css";
 
 function projectSignalText(signal: ProjectSignal) {
   if (signal.kind === "blocked") return `${signal.counts.blockedActions} zablokowane`;
@@ -58,7 +53,7 @@ export function ProjectsPage() {
   }])), [state]);
 
   return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", quickAdd: { mode: "project", pinnedToToday: false, draftKey: "projects-list", projectCategoryIds: categoryFilter && categoryFilter !== "uncategorized" ? [categoryFilter] : [] } }}>
-    <PageHeading className="project-page-heading" title="Projekty" eyebrow={viewSummary} action={<div className="project-heading-actions">
+    <PageHeading className="project-page-heading" title="Projekty" mobileBrand eyebrow={viewSummary} action={<div className="project-heading-actions">
       <span className={`project-view-status project-view-status-${view}`} aria-label={`Widok: ${viewLabel}`}><span aria-hidden="true" />{viewLabel}</span>
       {!desktop ? <details className="project-category-menu">
         <summary aria-label="Więcej opcji widoku" title="Więcej opcji widoku"><MoreHorizontal /><span className="sr-only">Więcej opcji widoku</span></summary>
@@ -86,38 +81,43 @@ export function ProjectsPage() {
       <label className="projects-index-category"><span>Kategoria</span><select aria-label="Filtruj po kategorii" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">Wszystkie kategorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}<option value="uncategorized">Bez kategorii</option></select></label>
       <div className="projects-index-options"><Button variant="ghost" aria-pressed={grouped} onClick={() => setGrouped(!grouped)}>Grupuj kategoriami</Button><Button variant="ghost" onClick={() => setManageCategories(true)}>Zarządzaj kategoriami</Button></div>
     </div> : null}
-    {groups.length ? groups.map((group) => <section className="project-category-section" key={group.id}>
-      {grouped ? <h2 className="project-category-heading"><span className="category-dot" style={{ backgroundColor: group.color }} />{group.name}<small>{group.projects.length}</small></h2> : null}
+    {groups.length ? groups.map((group) => <section className="project-category-section" key={group.id}
+      style={grouped && group.id !== "uncategorized" ? { "--project-category-color": group.color } as CSSProperties : undefined}>
+      {grouped ? <h2 className="project-category-heading">
+        <span>{group.name}</span>
+        <small>{group.projects.length}</small>
+      </h2> : null}
+      <div className="project-category-items">
       {group.projects.length ? <div className="project-list-columns" aria-hidden="true"><span>Projekt</span><span>{view === "active" ? "Najbliższy ruch" : "Opis"}</span><span>Powiązania</span>{view !== "active" ? <span /> : null}</div> : null}
-      {group.projects.length ? <div className="project-card-grid">{group.projects.map((project, index) => {
+      {group.projects.length ? <ul className="workspace-list project-list" role="list">{group.projects.map((project) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
       const signal = view === "active" ? projectSignal(state, project.id) : undefined;
       const cardId = grouped ? `project-${project.id}-${group.id}` : `project-${project.id}`;
       const Title = grouped ? "h3" : "h2";
-      return <Panel className={`${entityCardVariants()} project-card project-context-card project-index-row entity-card`} key={project.id} data-navigation-card-id={cardId} tabIndex={-1}>
-        <div className="project-card-head">
-          <span className={`project-avatar ${colors[index % colors.length]}`} aria-hidden="true">{initials(project.name)}</span>
-          <div className="project-card-identity">
-            <Title className="line-clamp-2" aria-label={project.name}>
-              {view === "active" ? <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink> : project.name}
-            </Title>
-          </div>
-          {view !== "active" ? <Badge tone="neutral">{view === "archived" ? "Archiwum" : "W koszu"}</Badge> : null}
+      return <li className="project-card project-index-row" key={project.id} data-navigation-card-id={cardId} tabIndex={-1}>
+        <div className="project-row-identity">
+          <Title aria-label={project.name}>
+            {view === "active" ? <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink> : project.name}
+          </Title>
+          {!grouped ? <div className="project-row-categories">{categories.filter((category) => project.categoryIds?.includes(category.id)).map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
         </div>
-        {!grouped ? <div className="project-card-categories">{categories.filter((category) => project.categoryIds?.includes(category.id)).map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
-        {signal ? <div className={`project-card-signal project-card-signal-${signal.kind}`} aria-label={`Najbliższy ruch: ${projectSignalText(signal)}${signal.actionId ? ` — ${signal.title}` : ""}`}>
+        {signal ? <div className="project-row-signal" data-signal={signal.kind} aria-label={`Najbliższy ruch: ${projectSignalText(signal)}${signal.actionId ? ` — ${signal.title}` : ""}`}>
           <ProjectSignalIcon signal={signal} />
-          <span>{signal.actionId ? <><strong className="line-clamp-2">{signal.title}</strong><small>{projectSignalText(signal)}</small></> : <strong>{projectSignalText(signal)}</strong>}</span>
+          <span>{signal.actionId ? <><strong>{signal.title}</strong><small>{projectSignalText(signal)}</small></> : projectSignalText(signal)}</span>
         </div> : null}
-        {view !== "active" && project.description?.trim() ? <p className="line-clamp-1 project-card-description">{project.description.trim()}</p> : null}
-        <div className="project-context-metrics">
+        {view !== "active" && project.description?.trim() ? <p className="project-row-description">{project.description.trim()}</p> : null}
+        <div className="project-row-metrics">
           <span><small>Grupy działań</small><strong>{counts.goals}</strong></span>
           <span><small>Działania</small><strong>{counts.actions}</strong></span>
           <span><small>Wiedza</small><strong>{counts.knowledge}</strong></span>
         </div>
-        {view !== "active" ? <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button> : null}
-      </Panel>;
-    })}</div> : <div className="category-empty"><FolderKanban /><p>Brak projektów pasujących do tego widoku.</p></div>}
+        {view !== "active" ? <div className="project-row-history">
+          <Badge tone="neutral">{view === "archived" ? "Archiwum" : "W koszu"}</Badge>
+          <Button onClick={() => void setAreaVisibility(project.id, "active")}><RotateCcw />Przywróć Projekt</Button>
+        </div> : null}
+      </li>;
+    })}</ul> : <div className="category-empty"><FolderKanban /><p>Brak projektów pasujących do tego widoku.</p></div>}
+      </div>
     </section>) : <div className="category-empty"><FolderKanban /><p>Brak projektów pasujących do tego widoku.</p></div>}
     {manageCategories ? <ProjectCategoryManager onClose={() => { setManageCategories(false); if (categoryFilter !== "uncategorized" && !categories.some((category) => category.id === categoryFilter)) setCategoryFilter(""); }} /> : null}
     </div>

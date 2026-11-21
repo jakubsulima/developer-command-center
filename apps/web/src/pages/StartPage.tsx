@@ -108,7 +108,7 @@ export function StartPage() {
   const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
 
   return <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie na Starcie", quickAdd: { mode: "action", scheduledFor: currentDate, draftKey: "start" } }}>
-    <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(now)} />
+    <PageHeading className="start-page-heading" title="Start" mobileBrand eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(now)} />
 
     <div className="start-workspace">
       <Link className="start-capture-link" to="/capture">

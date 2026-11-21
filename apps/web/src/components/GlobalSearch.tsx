@@ -15,7 +15,7 @@ type SearchState = { query: string; search: ReturnType<typeof useStore>["search"
   | { status: "success"; results: SearchResult[] }
 );
 
-export function GlobalSearch({ id = "global-search", onNavigate, visible = true, disabled = false }: { id?: string; onNavigate?: () => void; visible?: boolean; disabled?: boolean }) {
+export function GlobalSearch({ id = "global-search", onNavigate, visible = true, disabled = false, autoFocus = false }: { id?: string; onNavigate?: () => void; visible?: boolean; disabled?: boolean; autoFocus?: boolean }) {
   const { search } = useStore();
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -69,7 +69,7 @@ export function GlobalSearch({ id = "global-search", onNavigate, visible = true,
 
   let resultIndex = 0;
   return <div ref={rootRef} className="global-search">
-    <div className="search-wrap"><Search /><Input id={id} disabled={disabled} aria-disabled={disabled || undefined} role="combobox" aria-label="Szukaj w Projektach, grupach, Działaniach i Wiedzy" aria-expanded={expanded} aria-controls={results.length ? resultsId : undefined} aria-describedby={expanded && !results.length ? `${id}-status` : undefined} aria-activedescendant={expanded && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" disabled={disabled} onClick={() => setQuery("")}><X /></button> : null}</div>
+    <div className="search-wrap"><Search /><Input id={id} autoFocus={autoFocus} disabled={disabled} aria-disabled={disabled || undefined} role="combobox" aria-label="Szukaj w Projektach, grupach, Działaniach i Wiedzy" aria-expanded={expanded} aria-controls={results.length ? resultsId : undefined} aria-describedby={expanded && !results.length ? `${id}-status` : undefined} aria-activedescendant={expanded && results[active] ? `${id}-${results[active].id}` : undefined} autoComplete="off" placeholder="Szukaj…" value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setActive((value) => results.length ? Math.min(results.length - 1, value + 1) : 0); } if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(0, value - 1)); } if (event.key === "Enter" && results[active]) { event.preventDefault(); choose(results[active]); } if (event.key === "Escape") { setOpen(false); setQuery(""); event.currentTarget.blur(); } }} />{query ? <button type="button" aria-label="Wyczyść wyszukiwanie" disabled={disabled} onClick={() => setQuery("")}><X /></button> : null}</div>
     {expanded && <div className="search-results">
       {results.length ? <>
         <div className="search-results-summary" role="status"><span>Wyniki</span><strong>{results.length}</strong></div>

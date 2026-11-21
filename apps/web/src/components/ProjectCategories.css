@@ -12,9 +12,6 @@
 .project-category-menu > div { position: absolute; top: calc(100% + 8px); right: 0; z-index: 8; width: 210px; padding: 8px; border: 1px solid var(--input); border-radius: var(--radius-panel); background: var(--popover); box-shadow: 0 15px 38px rgba(0, 0, 0, .42); }
 .project-category-menu > div .button { width: 100%; min-height: 38px; justify-content: flex-start; font-size: 13px; }
 .project-category-menu > div .button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.project-category-section { margin-bottom: var(--space-5); }
-.project-category-heading { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-4); font-size: 17px; }
-.project-category-heading small { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
 .category-dot, .project-category-chip > span { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
 .project-card-categories { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 8px 0; }
 .project-card-categories:empty { display: none; }
