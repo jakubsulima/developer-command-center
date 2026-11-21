@@ -31,9 +31,7 @@ describe("ekran ładowania widoku", () => {
     render(<MemoryRouter initialEntries={["/actions"]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 
     expect(await screen.findByRole("status", { name: "Ładowanie widoku" })).toBeInTheDocument();
-    const captureButtons = screen.getAllByRole("button", { name: /Szybki zapis/ });
-    expect(captureButtons).toHaveLength(2);
-    for (const button of captureButtons) expect(button).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Szybki zapis/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu Więcej" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu profilu" })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" })).toBeDisabled();

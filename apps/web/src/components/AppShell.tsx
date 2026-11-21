@@ -1,11 +1,12 @@
 import { CreationDialog } from "./CreationForm";
 import { AddMenu, type AddMenuItem } from "./AddMenu";
 import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles, TerminalSquare } from "lucide-react";
+import { Link, matchPath, NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { PageActionsContext } from "./page-actions-context";
+import { useMobileNavIndicator } from "./mobile-nav-position";
 import { QuickCapture } from "./QuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
 import { Modal } from "./Modal";
@@ -77,7 +78,10 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
-  const moreActive = ["/goals", "/knowledge", "/routines", "/review", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const onReviewPage = Boolean(matchPath("/review", location.pathname));
+  const aiReviewActive = onReviewPage && new URLSearchParams(location.search).get("tab") === "ai";
+  const moreActive = (onReviewPage && !aiReviewActive) || ["/goals", "/knowledge", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const mobileNavIndicator = useMobileNavIndicator(loading, location.pathname, aiReviewActive);
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     if (loadingView) return;
     quickAddReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -264,11 +268,22 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       {aside && <aside className="context-rail">{aside}</aside>}
 
       <nav className="bottom-nav" aria-label="Nawigacja mobilna" data-compact={mobileHeaderHidden || undefined}>
-        <NavLink to="/" end><span className="bottom-nav-icon"><CalendarDays aria-hidden="true" /></span><span className="bottom-nav-label">Start</span></NavLink>
-        <NavLink to="/projects"><span className="bottom-nav-icon"><FolderKanban aria-hidden="true" /></span><span className="bottom-nav-label">Projekty</span></NavLink>
-        <button type="button" className="capture-fab" disabled={loadingView} aria-expanded={captureOpen} aria-haspopup="dialog" onClick={() => setCaptureOpen(true)} aria-label="Szybki zapis"><span className="capture-fab-icon"><Plus aria-hidden="true" /></span><span className="bottom-nav-label">Zapisz</span></button>
-        <NavLink to="/actions"><span className="bottom-nav-icon"><CheckSquare aria-hidden="true" /></span><span className="bottom-nav-label">Działania</span></NavLink>
-        <button type="button" className="mobile-more-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej"><span className="bottom-nav-icon"><Menu aria-hidden="true" /></span><span className="bottom-nav-label">Więcej</span></button>
+        <NavLink to="/" end aria-label="Start">
+          <CalendarDays aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Start</span>
+        </NavLink>
+        <NavLink to="/projects" aria-label="Projekty">
+          <FolderKanban aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Projekty</span>
+        </NavLink>
+        <Link to="/review?tab=ai" aria-label="Przegląd AI" aria-current={aiReviewActive ? "page" : undefined}>
+          <Sparkles aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">AI</span>
+        </Link>
+        <NavLink to="/actions" aria-label="Działania">
+          <CheckSquare aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Działania</span>
+        </NavLink>
+        <button type="button" className="mobile-more-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej">
+          <Menu aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Więcej</span>
+        </button>
+        <span ref={mobileNavIndicator} className="bottom-nav-indicator" aria-hidden="true" />
       </nav>
       <CreationDialog open={captureOpen} closeDisabled={captureSaving} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}><QuickCapture onSavingChange={setCaptureSaving} closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /></CreationDialog>
       {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={closeQuickAdd}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={closeQuickAdd} /></Suspense> : null}

@@ -2,6 +2,7 @@ import { RecentWorkTracker } from "../components/ReturnToWork";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AppRouteLoading } from "../components/AppRouteLoading";
+import { MobileNavPositionContext, type MobileNavPosition } from "../components/mobile-nav-position";
 import { StartPage } from "../pages/StartPage";
 import { ActionFeedbackProvider } from "../components/ActionFeedback";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -58,6 +59,7 @@ export function App() {
   const location = useLocation();
   const { loading } = useStore();
   const appStartRecorded = useRef(false);
+  const mobileNavPosition = useRef<MobileNavPosition>({});
   useEffect(() => {
     if (loading || appStartRecorded.current) return;
     appStartRecorded.current = true;
@@ -68,6 +70,7 @@ export function App() {
     <ActionFeedbackProvider>
       <ScrollToTop />
       <RecentWorkTracker />
+      <MobileNavPositionContext.Provider value={mobileNavPosition}>
       <Suspense fallback={location.pathname === "/capture" ? <main className="capture-page" role="status">Otwieranie szybkiego zapisu…</main> : <AppRouteLoading />}><Routes>
         <Route path="/" element={<StartPage />} />
         <Route path="/capture" element={<CapturePage />} />
@@ -89,6 +92,7 @@ export function App() {
         <Route path="/history/focus/:sessionId" element={<LegacyFocusHistoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>
+      </MobileNavPositionContext.Provider>
     </ActionFeedbackProvider>
   );
 }

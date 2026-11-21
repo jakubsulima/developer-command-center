@@ -47,6 +47,7 @@ export function ReviewPage() {
   const nextWeek = nextWorkspaceWeek(now, state.workspaceTimezone);
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const activeTab: ReviewTab = isReviewTab(requestedTab) ? requestedTab : "summary";
+  const aiTabActive = activeTab === "ai";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activityKind, setActivityKind] = useState<WeeklyActivityKind | null>(null);
@@ -222,14 +223,20 @@ export function ReviewPage() {
   };
 
   return (
-    <AppShell>
-      <CurrentWeekPlanNotice read={planRead} />
-      <PageHeading
-        className="weekly-review-page-heading"
-        title="Podsumowanie tygodnia"
-        eyebrow={`${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
-        action={completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}
-      />
+    <AppShell addAction={aiTabActive ? { label: "Dodaj", ariaLabel: "Dodaj" } : undefined}>
+      {aiTabActive ? (
+        <PageHeading title="Przegląd grup działań z AI" mobileBrand />
+      ) : (
+        <>
+          <CurrentWeekPlanNotice read={planRead} />
+          <PageHeading
+            className="weekly-review-page-heading"
+            title="Podsumowanie tygodnia"
+            eyebrow={`${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
+            action={completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}
+          />
+        </>
+      )}
       <div className="weekly-review-workspace">
         <div className="weekly-review-tablist" role="tablist" aria-label="Widoki podsumowania tygodnia">
           {reviewTabs.map((tab, index) => {
@@ -332,7 +339,7 @@ export function ReviewPage() {
             <Link className="weekly-plan-close-link" to={tabHref("summary")}>Przejdź do zamknięcia tygodnia</Link>
           </div>
 
-          <div id="weekly-review-panel-ai" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-ai" hidden={activeTab !== "ai"} tabIndex={0}>
+          <div id="weekly-review-panel-ai" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-ai" hidden={!aiTabActive} tabIndex={0}>
             <AIGoalReview />
           </div>
 

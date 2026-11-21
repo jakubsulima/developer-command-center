@@ -43,7 +43,7 @@ describe("spójna nawigacja kontekstowa", () => {
       expect(shell).toHaveClass("mobile-header-hidden");
       expect(bottomNav).toHaveAttribute("data-compact", "true");
       expect(within(bottomNav).getByRole("link", { name: "Działania" })).toBeVisible();
-      expect(within(bottomNav).getByRole("button", { name: "Szybki zapis" })).toBeVisible();
+      expect(within(bottomNav).getByRole("link", { name: "Przegląd AI" })).toBeVisible();
 
       if (flow === "status") {
         trigger.focus();
@@ -78,6 +78,28 @@ describe("spójna nawigacja kontekstowa", () => {
       position.mockRestore();
       scrollTo.mockRestore();
     }
+  });
+
+  it("otwiera Przegląd AI z dolnego paska i aktywuje właściwy skrót po zmianie zakładki", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/review");
+    const summaryTab = await screen.findByRole("tab", { name: "Tydzień", selected: true });
+    const bottomNav = within(screen.getByRole("navigation", { name: "Nawigacja mobilna" }));
+    const aiLink = bottomNav.getByRole("link", { name: "Przegląd AI" });
+    const moreButton = bottomNav.getByRole("button", { name: "Otwórz menu Więcej" });
+    expect(moreButton).toHaveAttribute("aria-current", "page");
+
+    await user.click(aiLink);
+
+    expect(screen.getByRole("tab", { name: "AI", selected: true })).toBeVisible();
+    expect(aiLink).toHaveAttribute("aria-current", "page");
+    expect(moreButton).not.toHaveAttribute("aria-current");
+
+    await user.click(summaryTab);
+
+    expect(moreButton).toHaveAttribute("aria-current", "page");
+    expect(aiLink).not.toHaveAttribute("aria-current");
   });
 
   it("przenosi pełny kontekst przez Projekt → Grupa działań → Działanie → Wiedza i wraca do źródła", async () => {
