@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { savedActionFilters, savedActionParams, type SavedActionView } from "../domain/savedActionViews";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
 import { useActionFeedback } from "./action-feedback-context";
-export function SavedActionViews() {
+export function SavedActionViews({ params, onApply }: { params: URLSearchParams; onApply: (params: URLSearchParams) => void }) {
   const { state, saveActionView, deleteActionView, reload } = useStore();
-  const [params, setParams] = useSearchParams();
   const { notifyUndo } = useActionFeedback();
   const [editing, setEditing] = useState<SavedActionView | "new">();
   const [name, setName] = useState("");
@@ -20,10 +18,10 @@ export function SavedActionViews() {
   };
   const open = (view: SavedActionView | "new") => { setEditing(view); setName(view === "new" ? "" : view.name); setError(""); };
   return <div className="saved-action-views">
-    <details className="saved-views-picker"><summary>Moje widoki <span>{views.length}</span></summary><div className="saved-views-popover"><p className="saved-views-hint">Szybki powrót do Twoich filtrów · {views.length}/5</p>
+    <details className="saved-views-picker"><summary>Moje widoki {views.length ? <span>{views.length}</span> : null}</summary><div className="saved-views-popover"><p className="saved-views-hint">Szybki powrót do Twoich filtrów · {views.length}/5</p>
       {views.map((view) => {
         const missing = Boolean(view.filters.projectId && !state.areas.some((area) => area.id === view.filters.projectId && area.visibility === "active") || view.filters.goalId && !state.goals.some((goal) => goal.id === view.filters.goalId && goal.visibility === "active"));
-        return <div className="saved-action-view" key={view.id}><Button variant="ghost" onClick={(event) => { setParams(savedActionParams(view.filters)); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{view.name}</Button>{missing ? <small>Nieaktualny filtr — wybierz dostępny Projekt lub Grupa działań i zapisz nowy widok.</small> : null}<Button variant="ghost" disabled={busy} aria-label={`Zmień nazwę widoku ${view.name}`} onClick={() => open(view)}>Zmień nazwę</Button><Button variant="ghost" disabled={busy} aria-label={`Usuń widok ${view.name}`} onClick={() => void run(async () => { await deleteActionView(view.id, view.version); notifyUndo({ message: "Usunięto widok.", undo: () => saveActionView(view, 0) }); })}>Usuń</Button></div>;
+        return <div className="saved-action-view" key={view.id}><Button variant="ghost" onClick={(event) => { onApply(savedActionParams(view.filters)); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{view.name}</Button>{missing ? <small>Nieaktualny filtr — wybierz dostępny Projekt lub Grupa działań i zapisz nowy widok.</small> : null}<Button variant="ghost" disabled={busy} aria-label={`Zmień nazwę widoku ${view.name}`} onClick={() => open(view)}>Zmień nazwę</Button><Button variant="ghost" disabled={busy} aria-label={`Usuń widok ${view.name}`} onClick={() => void run(async () => { await deleteActionView(view.id, view.version); notifyUndo({ message: "Usunięto widok.", undo: () => saveActionView(view, 0) }); })}>Usuń</Button></div>;
       })}
       <Button disabled={busy || views.length >= 5} onClick={() => open("new")}>Zapisz obecny widok</Button>
     </div></details>

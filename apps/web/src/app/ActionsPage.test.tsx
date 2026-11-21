@@ -79,12 +79,17 @@ describe("lista wszystkich Działań", () => {
     await user.click(screen.getByRole("button", { name: "Filtry Działań" }));
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "area-finanse");
     await user.selectOptions(screen.getByLabelText("Filtr grupy"), "");
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
     expect(await screen.findByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Samodzielny krok" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filtry Działań, aktywne: 1" }));
     await user.selectOptions(screen.getByLabelText("Filtr grupy"), "goal-budget");
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
     expect(await screen.findByText("Projekt i grupa muszą pasować jednocześnie.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filtry Działań, aktywne: 2" }));
     await user.selectOptions(screen.getByLabelText("Filtr Projektu"), "");
-    expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
+    expect(await screen.findByRole("link", { name: "Spisać stałe koszty" })).toBeInTheDocument();
   });
 
   it("oddziela status od filtra terminu", async () => {
@@ -110,17 +115,22 @@ describe("lista wszystkich Działań", () => {
       expect(within(screen.getByLabelText("Status Działań")).getByRole("option", { name: label })).toBeInTheDocument();
     }
     await user.click(screen.getByRole("button", { name: "Bez terminu" }));
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
     expect(screen.getByTestId("location-address")).toHaveTextContent("schedule=unscheduled");
     expect(await screen.findByRole("link", { name: "Krok bez terminu" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Krok na dziś" })).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Filtry Działań, aktywne: 1" }));
+    expect(screen.getByRole("group", { name: "Termin Działań" })).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Status Działań"), "blocked");
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=blocked");
     expect(await screen.findByRole("link", { name: "Krok zablokowany" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Termin Działań" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("schedule=unscheduled");
 
+    await user.click(screen.getByRole("button", { name: "Filtry Działań, aktywne: 2" }));
     await user.selectOptions(screen.getByLabelText("Status Działań"), "cancelled");
+    await user.click(screen.getByRole("button", { name: "Gotowe" }));
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=cancelled");
     expect(await screen.findByRole("link", { name: "Krok anulowany" })).toBeInTheDocument();
   });
@@ -133,6 +143,7 @@ describe("lista wszystkich Działań", () => {
     expect(screen.getByLabelText("Aktywne filtry")).toHaveTextContent("Finanse");
     expect(screen.getByLabelText("Aktywne filtry")).toHaveTextContent("Zbudować spokojny budżet domowy");
     await user.click(filterToggle);
+    await user.click(within(screen.getByRole("dialog", { name: "Filtry Działań" })).getByRole("button", { name: "Gotowe" }));
     expect(screen.getByLabelText("Aktywne filtry")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Wyczyść filtry" }));
@@ -148,7 +159,9 @@ describe("lista wszystkich Działań", () => {
     expect(await screen.findByRole("button", { name: "Filtry Działań, aktywne: 1" })).toBeInTheDocument();
     expect(screen.getByLabelText("Aktywne filtry")).toHaveTextContent("Ukończone");
 
+    await user.click(screen.getByRole("button", { name: "Filtry Działań, aktywne: 1" }));
     await user.selectOptions(screen.getByLabelText("Status Działań"), "blocked");
+    await user.click(within(screen.getByRole("dialog", { name: "Filtry Działań" })).getByRole("button", { name: "Gotowe" }));
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=blocked&highlight=action-budget-overdue");
     expect(screen.getByLabelText("Aktywne filtry")).toHaveTextContent("Zablokowane");
     await user.click(screen.getByRole("button", { name: "Back test" }));
@@ -157,6 +170,37 @@ describe("lista wszystkich Działań", () => {
     await user.click(screen.getByRole("button", { name: "Forward test" }));
     await screen.findByText("Zablokowane", { selector: ".actions-active-filters .badge" });
     expect(screen.getByTestId("location-address")).toHaveTextContent("view=blocked&highlight=action-budget-overdue");
+  });
+
+  it("zapamiętuje połączenie filtrów i daje pierwszeństwo filtrom z adresu", async () => {
+    const user = userEvent.setup();
+    const initial = renderApp("/actions");
+    await user.click(await screen.findByRole("button", { name: "Filtry Działań" }));
+    const panel = within(screen.getByRole("dialog", { name: "Filtry Działań" }));
+    await user.selectOptions(panel.getByLabelText("Status Działań"), "testing");
+    await user.click(panel.getByRole("button", { name: "Bez terminu" }));
+    await user.selectOptions(panel.getByLabelText("Filtr Projektu"), "area-finanse");
+    await user.click(panel.getByRole("button", { name: "Gotowe" }));
+    initial.unmount();
+
+    const directLink = renderApp("/actions?view=today");
+    expect(await screen.findByRole("button", { name: "Filtry Działań, aktywne: 1" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Aktywne filtry")).toHaveTextContent("Na dziś");
+    directLink.unmount();
+
+    const restored = renderApp("/actions");
+    await user.click(await screen.findByRole("button", { name: "Filtry Działań, aktywne: 3" }));
+    const restoredPanel = within(screen.getByRole("dialog", { name: "Filtry Działań" }));
+    expect(restoredPanel.getByLabelText("Status Działań")).toHaveValue("testing");
+    expect(restoredPanel.getByRole("button", { name: "Bez terminu", pressed: true })).toBeInTheDocument();
+    expect(restoredPanel.getByLabelText("Filtr Projektu")).toHaveValue("area-finanse");
+    await user.click(restoredPanel.getByRole("button", { name: "Wyczyść filtry" }));
+    await user.click(restoredPanel.getByRole("button", { name: "Gotowe" }));
+    restored.unmount();
+
+    renderApp("/actions");
+    expect(await screen.findByRole("button", { name: "Filtry Działań" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Aktywne filtry")).not.toBeInTheDocument();
   });
 
   it("ukończenie korzysta z istniejącej komendy i usuwa wiersz z Otwarte", async () => {
@@ -169,14 +213,16 @@ describe("lista wszystkich Działań", () => {
     expect(screen.queryByRole("link", { name: "Spisać stałe koszty" })).not.toBeInTheDocument();
   });
 
-  it("zamyka proste Działanie jednym dotknięciem i cofa je z listy", async () => {
+  it("kończy Działanie przez ikonę statusu i pozwala je przywrócić", async () => {
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
     const link = await screen.findByRole("link", { name: "Pobrać historię transakcji" });
     const row = link.closest("section") as HTMLElement;
 
-    await user.click(within(row).getByRole("button", { name: "Ukończ: Pobrać historię transakcji" }));
-    expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
+    expect(within(row).queryByText("Do zrobienia")).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Pobrać historię transakcji" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
+    expect(await screen.findByText("Status zmieniono na „Ukończone”.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pobrać historię transakcji" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cofnij" }));

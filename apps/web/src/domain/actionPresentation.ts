@@ -39,3 +39,8 @@ export function resolveRoutineTitle(action: Pick<GoalAction, "recurringTemplateI
   const title = templates.find((template) => template.id === action.recurringTemplateId)?.title.trim();
   return title ? `Rutyna: ${title}` : "Z Rutyny";
 }
+
+export function resolveCompactRoutineTitle(action: Pick<GoalAction, "recurringTemplateId" | "title">, templates: Parameters<typeof resolveRoutineTitle>[1]) {
+  const label = resolveRoutineTitle(action, templates);
+  return label === `Rutyna: ${action.title.trim()}` ? "Z Rutyny" : label;
+}

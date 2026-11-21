@@ -80,6 +80,7 @@ describe("migracje Supabase", () => {
     const preservedTables = ["goals", "actions", "goal_criteria", "recurring_action_templates", "knowledge_links", "progress_entries", "knowledge_items"];
     const snapshots = await Promise.all(preservedTables.map((table) => scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by to_jsonb(item)::text) from public.${table} item`)));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20261114114912_action_groups.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20261120133947_study_project_preset.sql", import.meta.url), "utf8"));
     for (const [index, table] of preservedTables.entries()) {
       expect(await scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by (to_jsonb(item)-'group_type')::text) from public.${table} item`)).toEqual(snapshots[index]);
     }
@@ -559,6 +560,22 @@ describe("migracje Supabase", () => {
     await database.query("update public.entities set trashed_at = now() where id = $1", [book]);
     await expect(database.query("insert into public.knowledge_links(id, workspace_id, knowledge_entity_id, target_knowledge_entity_id, meaning) values ('ca990000-0000-0000-0000-000000000045',$1,$2,$3,'source')", [workspace, otherNote, book])).rejects.toThrow(/knowledge_target_trashed/);
     expect(await scalar<number>("select count(*)::int from public.knowledge_links where target_knowledge_entity_id = $1", [book])).toBe(1);
+  });
+
+  it("pozwala przełączyć istniejący Projekt na Naukę i zachowuje jego powiązania", async () => {
+    const project = "ca990000-0000-0000-0000-000000000010";
+    const snapshot = () => scalar(`select jsonb_agg(jsonb_build_array(g.id, a.id, k.knowledge_entity_id) order by g.id, a.id, k.id)
+      from public.goals g left join public.actions a on a.goal_id = g.id
+      left join public.knowledge_links k on k.goal_id = g.id where g.area_id = $1`, [project]);
+    const original = await snapshot();
+    expect(original).not.toBeNull();
+
+    await database.query("update public.areas set preset = 'study' where id = $1", [project]);
+    expect(await scalar<string>("select preset from public.areas where id = $1", [project])).toBe("study");
+    expect(await snapshot()).toEqual(original);
+
+    await database.query("update public.areas set preset = 'standard' where id = $1", [project]);
+    expect(await snapshot()).toEqual(original);
   });
 
   it("rezerwuje koszt AI atomowo i rozlicza próby bez ujawnienia RPC użytkownikowi", async () => {

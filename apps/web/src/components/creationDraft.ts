@@ -1,5 +1,6 @@
 import { quickAddModes, splitQuickAddContent, type QuickAddMode } from "../domain/quickAdd";
 import type { ActionGroupType, GoalKind, ProjectPreset, ReadingStatus } from "../domain/types";
+import { isProjectPreset } from "../domain/projectPresets";
 import type { CreatableKnowledgeKind } from "../domain/knowledge-kinds";
 export type QuickAddRequest = {
   mode?: QuickAddMode;
@@ -34,7 +35,7 @@ export const isQuickAddDraft = (value: unknown): value is QuickAddDraft => {
     && ["note", "resource", "decision"].includes(draft.libraryKind)
     && ["day", "week", "month"].includes(draft.routineUnit)
     && (draft.projectCategoryIds === undefined || (Array.isArray(draft.projectCategoryIds) && draft.projectCategoryIds.every((id) => typeof id === "string")))
-    && (draft.projectPreset === undefined || ["standard", "reading"].includes(draft.projectPreset))
+    && (draft.projectPreset === undefined || isProjectPreset(draft.projectPreset))
     && (draft.projectPresetManuallyChosen === undefined || typeof draft.projectPresetManuallyChosen === "boolean")
     && Array.isArray(draft.goalIds) && draft.goalIds.every((id) => typeof id === "string")
     && Array.isArray(draft.routineWeekdays) && draft.routineWeekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)

@@ -24,6 +24,7 @@ export async function completeActionWithUndo({
   let undoInFlight: Promise<void> | undefined;
   notifyUndo({
     message: "Działanie ukończone.",
+    event: "completed",
     undo: async () => {
       if (undoCommitted) return;
       if (undoInFlight) return undoInFlight;

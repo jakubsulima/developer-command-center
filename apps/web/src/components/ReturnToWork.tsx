@@ -1,6 +1,6 @@
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, History } from "lucide-react";
+import { History } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { useStore } from "../app/useStore";
@@ -44,5 +44,5 @@ export function ReturnToWork() {
     void check().then((available) => { if (active && available) setRecent(value); }).catch(() => undefined);
     return () => { active = false; };
   }, [mode, state.actions, state.areas, state.knowledge, state.workspaceId, user?.id]);
-  return recent ? <Link className="return-to-work" to={recent.path}><History /><span><small>Wróć do pracy</small><strong>{recent.title}</strong></span><ArrowUpRight /></Link> : null;
+  return recent ? <Link className="return-to-work" to={recent.path}><History aria-hidden="true" /><span><small>Wróć do pracy</small><strong>{recent.title}</strong></span></Link> : null;
 }

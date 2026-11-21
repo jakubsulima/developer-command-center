@@ -25,7 +25,7 @@ describe("codzienna pętla Działania na Starcie", () => {
     const user = userEvent.setup();
     const app = renderApp("/");
     const link = await screen.findByRole("link", { name: "Spisać stałe koszty" });
-    const row = link.closest(".today-action") as HTMLElement;
+    const row = link.closest("[data-action-id]") as HTMLElement;
 
     await user.click(within(row).getByRole("button", { name: "Ukończ: Spisać stałe koszty" }));
     expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("codzienna pętla Działania na Starcie", () => {
     const user = userEvent.setup();
     renderApp("/");
     const link = await screen.findByRole("link", { name: "Spisać stałe koszty" });
-    await user.click(within(link.closest(".today-action") as HTMLElement).getByRole("button", { name: "Ukończ: Spisać stałe koszty" }));
+    await user.click(within(link.closest("[data-action-id]") as HTMLElement).getByRole("button", { name: "Ukończ: Spisać stałe koszty" }));
     expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
 
     const originalSetItem = Storage.prototype.setItem;

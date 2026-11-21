@@ -7,7 +7,9 @@ const statusOrder: ActionStatus[] = ["ready", "in_progress", "testing", "blocked
 
 export function GroupedProjectActions({ actions, className, listAs: List = "div", renderAction }: {
   actions: GoalAction[];
-  className: string; listAs?: "div" | "ul"; renderAction: (action: GoalAction) => ReactNode;
+  className: string;
+  listAs?: "div" | "ul";
+  renderAction: (action: GoalAction) => ReactNode;
 }) {
   const groups = new Map<ActionStatus, GoalAction[]>();
   for (const action of actions) {
@@ -17,9 +19,10 @@ export function GroupedProjectActions({ actions, className, listAs: List = "div"
   }
   return <div className="project-grouped-actions">{statusOrder.map((status) => {
     const grouped = groups.get(status);
-    return grouped ? <section key={status} aria-label={actionStatusLabels[status]}>
-      <h3 className="project-action-group-heading">{actionStatusLabels[status]}<span>{grouped.length}</span></h3>
-      <List className={className}>{grouped.map(renderAction)}</List>
-    </section> : null;
+    if (!grouped) return null;
+    return <section key={status} aria-label={actionStatusLabels[status]}>
+      <h3 className={`project-action-group-heading ${status}`}>{actionStatusLabels[status]}<span>{grouped.length}</span></h3>
+      <List className={className} role={List === "ul" ? "list" : undefined}>{grouped.map(renderAction)}</List>
+    </section>;
   })}</div>;
 }

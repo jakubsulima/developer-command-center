@@ -15,10 +15,10 @@ import { AppShell, PageActions } from "../components/AppShell";
 import { ActionOverflowButton, ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
-import { ActionSignals } from "../components/ActionSignals";
+import { ActionListRow } from "../components/ActionListRow";
 import { ActionEditDialog, type ActionEditValue } from "../components/ActionEditDialog";
 import { AlertDialog } from "../components/AlertDialog";
-import { useActionFeedback } from "../components/action-feedback-context";
+import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
 import { Button, EmptyState, Panel } from "../components/ui";
 import { Modal } from "../components/Modal";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
@@ -36,7 +36,7 @@ import { DraftStatus } from "../components/DraftStatus";
 import { DraftConflictNotice } from "../components/DraftConflictNotice";
 import { isDraftVersionConflict } from "../components/draftConflict";
 import { localDateForTimeZone } from "../domain/activity";
-import { resolveRoutineTitle } from "../domain/actionPresentation";
+import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
 
 function ActionChecklist({ action, busy, onToggle }: { action: GoalAction; busy: boolean; onToggle: (entryId: string) => void }) {
   const completed = action.checklist.filter((entry) => entry.completed).length;
@@ -124,7 +124,7 @@ export function GoalDetailPage() {
   const changeActionStatus = (action: typeof actions[number], status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => actionMutation.run(`goal-action-status:${action.id}`, async () => {
     const previous = { status: action.status, blocker: action.blocker, reviewOn: action.reviewOn };
     await setActionStatus(action.id, status, blocker, action.version, reviewOn);
-    notifyUndo({ message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
+    notifyUndo({ event: actionStatusFeedbackEvent(status), message: `Status zmieniono na „${actionStatusLabels[status]}”.`, undo: () => setActionStatus(action.id, previous.status, previous.blocker, action.version + 1, previous.reviewOn ?? null), action: status === "completed" && !state.knowledgeLinks.some((link) => link.actionId === action.id && link.meaning === "result") ? { label: "Dodaj rezultat", onClick: () => setResultActionId(action.id) } : undefined });
   });
   const completeGoalAction = (action: GoalAction) => actionMutation.run(`goal-action-status:${action.id}`, () => completeActionWithUndo({
     action,
@@ -155,7 +155,7 @@ export function GoalDetailPage() {
     setVisibilitySaving(true); setVisibilityError("");
     try {
       await setGoalVisibility(goal.id, visibility);
-      notifyUndo({ message: visibility === "archived" ? "Grupa zarchiwizowana." : "Grupa przeniesiona do Kosza.", undo: () => setGoalVisibility(goal.id, "active") });
+      notifyUndo({ event: visibility === "archived" ? "archived" : "changed", message: visibility === "archived" ? "Grupa zarchiwizowana." : "Grupa przeniesiona do Kosza.", undo: () => setGoalVisibility(goal.id, "active") });
       setTrashOpen(false);
       navigate(`/goals?status=${visibility}`);
     } catch (caught) {
@@ -171,6 +171,7 @@ export function GoalDetailPage() {
       const previous = goal.status;
       await setGoalStatus(goal.id, status, reason);
       notifyUndo({
+        event: status === "achieved" ? "completed" : "changed",
         message: status === "achieved" ? "Zadanie oznaczone jako ukończone." : status === "abandoned" ? "Zadanie porzucone." : status === "paused" ? "Grupa wstrzymana." : "Grupa wznowiona.",
         undo: () => setGoalStatus(goal.id, previous, previous === "abandoned" ? "Cofnięto późniejszą zmianę stanu." : undefined)
       });
@@ -183,27 +184,41 @@ export function GoalDetailPage() {
     }
   };
 
-  const renderAction = (action: typeof actions[number], featured = false) => featured ? <><div className={`goal-featured-action ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-    <div className="action-copy"><NavigationLink to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Grupa: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="compact" disabled={actionMutation.isBusy(`goal-action-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} /></div>
-    <div className="action-row-controls">{!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={actionMutation.isBusy(`goal-action-status:${action.id}`)} onToggleComplete={() => void completeGoalAction(action)} /> : null}<ActionOverflowButton action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => setActionMenuId(action.id)} /></div>
-    <NavigationLink className="featured-action-open" to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Grupa: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}>Otwórz Działanie<ChevronDown /></NavigationLink>
-
-  </div></> : <div className={`goal-action ${action.status}`} key={action.id} data-action-id={action.id} data-navigation-card-id={navigationCardId("action", action.id)} tabIndex={-1}>
-    <div className="action-copy"><div className="action-title-row"><NavigationLink to={`/actions/${encodeURIComponent(action.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Grupa: ${goal.title}`} sourceCardId={navigationCardId("action", action.id)}><strong>{action.title}</strong></NavigationLink>{action.isNext ? <span className="action-next-badge">Następne</span> : null}</div><ActionSignals action={action} timeZone={state.workspaceTimezone} today={today} routineTitle={resolveRoutineTitle(action, state.recurringActionTemplates)} density="compact" disabled={actionMutation.isBusy(`goal-action-status:${action.id}`)} onOpenStatus={() => setStatusActionId(action.id)} />{action.detail ? <small>{action.detail}</small> : null}{action.checklist.length ? <ActionChecklist action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onToggle={(entryId) => void actionMutation.run(`goal-action:${action.id}`, () => updateAction(action.id, { checklist: action.checklist.map((candidate) => candidate.id === entryId ? { ...candidate, completed: !candidate.completed } : candidate) }))} /> : null}{actionMutation.error(`goal-action:${action.id}`) || actionMutation.error(`goal-action-status:${action.id}`) ? <p className="inline-mutation-error" role="alert">{actionMutation.error(`goal-action:${action.id}`) ?? actionMutation.error(`goal-action-status:${action.id}`)} <button type="button" onClick={() => void (actionMutation.retry(`goal-action:${action.id}`) ?? actionMutation.retry(`goal-action-status:${action.id}`))?.()}>Spróbuj ponownie</button></p> : null}</div>
-    {!['completed', 'cancelled', 'skipped', 'blocked'].includes(action.status) ? <ActionPrimaryControls action={action} busy={actionMutation.isBusy(`goal-action-status:${action.id}`)} onToggleComplete={() => void completeGoalAction(action)} /> : null}
-    <div className="action-row-controls"><ActionOverflowButton action={action} busy={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => setActionMenuId(action.id)} /></div>
-    <div className="action-menu">
-      <Button variant="ghost" aria-label={`Edytuj: ${action.title}`} onClick={() => openActionEditor(action)}><Pencil /></Button>
-      <Button variant="ghost" aria-label={`Przesuń wyżej: ${action.title}`} disabled={action.id === actions[0]?.id} onClick={() => void move(action.id, -1)}><ArrowUp /></Button>
-      <Button variant="ghost" aria-label={`Przesuń niżej: ${action.title}`} disabled={action.id === actions.at(-1)?.id} onClick={() => void move(action.id, 1)}><ArrowDown /></Button>
-      <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.pinnedToToday; void actionMutation.run(`goal-action:${action.id}`, async () => { await updateAction(action.id, { pinnedToToday: !previous }); notifyUndo({ message: previous ? "Odpięto od Startu." : "Przypięto do Startu.", undo: () => updateAction(action.id, { pinnedToToday: previous }) }); }); }}>{action.pinnedToToday ? "Odepnij" : "Przypnij"}</Button>
-      {['ready', 'in_progress'].includes(action.status) && !action.isNext && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setNextAction(goal.id, action.id))}>Ustaw jako następne</Button>}
-      {['ready', 'in_progress', 'testing'].includes(action.status) && <Button variant="ghost" aria-label={`Zablokuj: ${action.title}`} onClick={() => { setDialogError(""); setBlockActionId(action.id); }}><LockKeyhole /></Button>}
-      {action.status === "blocked" && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setActionStatus(action.id, "ready"))}><RotateCcw />Odblokuj</Button>}
-      {action.recurringTemplateId && !["completed", "skipped", "cancelled"].includes(action.status) && <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><SkipForward />Pomiń</Button>}
-      {!['completed', 'cancelled'].includes(action.status) && <Button variant="danger" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "cancelled"); notifyUndo({ message: "Działanie anulowane.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><Ban />Anuluj Działanie</Button>}
-  </div><KnowledgeSuggestions projectId={goal.areaId} target={{ goalId: goal.id }} /><ActionKnowledgeRelations action={action} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: `Grupa: ${goal.title}` }} />
-  </div>;
+  const actionNavigation = { breadcrumbs, returnTo: locationAddress(location), returnLabel: `Grupa: ${goal.title}` };
+  const renderAction = (action: GoalAction, featured = false) => {
+    const actionKey = `goal-action:${action.id}`;
+    const statusKey = `goal-action-status:${action.id}`;
+    const error = actionMutation.error(actionKey) ?? actionMutation.error(statusKey);
+    const canComplete = !["completed", "cancelled", "skipped", "blocked"].includes(action.status);
+    return <ActionListRow key={action.id} as="div" role="listitem" className={featured ? "goal-featured-action" : "goal-action"}
+      action={action} navigation={actionNavigation}
+      timeZone={state.workspaceTimezone} today={today} routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)}
+      busy={actionMutation.isBusy(statusKey)} onOpenStatus={() => setStatusActionId(action.id)}
+      indicator={featured || action.isNext ? <span className="action-next-badge">Następne</span> : null}
+      description={action.detail || undefined}
+      tools={<>
+        {canComplete ? <ActionPrimaryControls action={action} busy={actionMutation.isBusy(statusKey)} appearance="check" onToggleComplete={() => void completeGoalAction(action)} /> : null}
+        <ActionOverflowButton action={action} busy={actionMutation.isBusy(actionKey)} onClick={() => setActionMenuId(action.id)} />
+      </>}>
+      {!featured && action.checklist.length ? <ActionChecklist action={action} busy={actionMutation.isBusy(actionKey)} onToggle={(entryId) => void actionMutation.run(actionKey, () => updateAction(action.id, { checklist: action.checklist.map((candidate) => candidate.id === entryId ? { ...candidate, completed: !candidate.completed } : candidate) }))} /> : null}
+      {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void (actionMutation.retry(actionKey) ?? actionMutation.retry(statusKey))?.()}>Spróbuj ponownie</button></p> : null}
+      {!featured ? <>
+        <div className="action-menu">
+          <Button variant="ghost" aria-label={`Edytuj: ${action.title}`} onClick={() => openActionEditor(action)}><Pencil /></Button>
+          <Button variant="ghost" aria-label={`Przesuń wyżej: ${action.title}`} disabled={action.id === actions[0]?.id} onClick={() => void move(action.id, -1)}><ArrowUp /></Button>
+          <Button variant="ghost" aria-label={`Przesuń niżej: ${action.title}`} disabled={action.id === actions.at(-1)?.id} onClick={() => void move(action.id, 1)}><ArrowDown /></Button>
+          <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.pinnedToToday; void actionMutation.run(`goal-action:${action.id}`, async () => { await updateAction(action.id, { pinnedToToday: !previous }); notifyUndo({ message: previous ? "Odpięto od Startu." : "Przypięto do Startu.", undo: () => updateAction(action.id, { pinnedToToday: previous }) }); }); }}>{action.pinnedToToday ? "Odepnij" : "Przypnij"}</Button>
+          {['ready', 'in_progress'].includes(action.status) && !action.isNext && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setNextAction(goal.id, action.id))}>Ustaw jako następne</Button>}
+          {['ready', 'in_progress', 'testing'].includes(action.status) && <Button variant="ghost" aria-label={`Zablokuj: ${action.title}`} onClick={() => { setDialogError(""); setBlockActionId(action.id); }}><LockKeyhole /></Button>}
+          {action.status === "blocked" && <Button variant="ghost" disabled={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => void actionMutation.run(`goal-action:${action.id}`, () => setActionStatus(action.id, "ready"))}><RotateCcw />Odblokuj</Button>}
+          {action.recurringTemplateId && !["completed", "skipped", "cancelled"].includes(action.status) && <Button variant="ghost" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "skipped"); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><SkipForward />Pomiń</Button>}
+          {!['completed', 'cancelled'].includes(action.status) && <Button variant="danger" loading={actionMutation.isBusy(`goal-action:${action.id}`)} onClick={() => { const previous = action.status; void actionMutation.run(`goal-action:${action.id}`, async () => { await setActionStatus(action.id, "cancelled"); notifyUndo({ message: "Działanie anulowane.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><Ban />Anuluj Działanie</Button>}
+        </div>
+        <KnowledgeSuggestions projectId={goal.areaId} target={{ goalId: goal.id }} />
+        <ActionKnowledgeRelations action={action} navigation={actionNavigation} />
+      </> : null}
+    </ActionListRow>;
+  };
 
   const historicalActions = actions.filter((action) => ["completed", "cancelled", "skipped"].includes(action.status));
   const saveProgress = (event: FormEvent) => {
@@ -232,16 +247,22 @@ export function GoalDetailPage() {
       <Button variant="danger" disabled={visibilitySaving} onClick={(event) => { closeGoalMenu(event.currentTarget); setVisibilityError(""); setTrashOpen(true); }}><Trash2 />Przenieś do kosza</Button>
     </div></details></div>
     <section className="goal-overview">
-      <div className="goal-overview-main"><h1>{goal.title}</h1>{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Grupa: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}<span className="badge">{actionGroupTypeLabels[actionGroupType(goal)]}</span>{goal.outcome ? <p><span className="goal-outcome-label">{isCategory ? "Opis" : "Opis i rezultat"}</span>{goal.outcome}</p> : null}</div>
+      <div className="goal-overview-main"><h1>{goal.title}</h1>{project ? <NavigationLink className="goal-project-link" to={`/projects/${encodeURIComponent(project.id)}`} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={`Grupa: ${goal.title}`}><FolderKanban />{project.name}<ChevronDown /></NavigationLink> : null}
+        <div className="goal-overview-metadata">
+          <span className="badge">{actionGroupTypeLabels[actionGroupType(goal)]}</span>
+          {!isCategory && goal.visibility === "active" ? <Button variant="ghost" aria-label={`Zmień ważność: ${priorityLabel}`} onClick={openGoalEditor}><Pencil aria-hidden="true" />{priorityLabel}</Button> : null}
+        </div>
+        {goal.outcome ? <p><span className="goal-outcome-label">{isCategory ? "Opis" : "Opis i rezultat"}</span>{goal.outcome}</p> : null}
+      </div>
     </section>
     {goalStatusError && !pendingGoalStatus ? <p className="inline-mutation-error" role="alert">{goalStatusError}</p> : null}
     {visibilityError && !trashOpen ? <p className="inline-mutation-error" role="alert">{visibilityError} <button type="button" onClick={() => void changeGoalVisibility("archived")}>Spróbuj ponownie</button></p> : null}
     <div className="goal-detail-body">
     <Panel className="goal-next-step group-actions-surface" aria-labelledby="group-actions-title">
       <div className="section-heading"><div><h2 id="group-actions-title">Działania</h2><span>{actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length} otwartych · {actions.filter((action) => action.status === "completed").length} ukończonych</span></div></div>
-      <div ref={actionsSectionRef} className="action-list">{actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).map((action) => renderAction(action, action.id === nextAction?.id))}</div>
+      <div ref={actionsSectionRef} className="action-list" role="list">{actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).map((action) => renderAction(action, action.id === nextAction?.id))}</div>
       <InlineGoalAction goal={goal} inputRef={newActionInputRef} />
-      {historicalActions.length ? <details className="goal-action-history"><summary><History />Historia Działań <span>{historicalActions.length}</span></summary><div className="action-list">{historicalActions.map((action) => renderAction(action))}</div></details> : null}
+      {historicalActions.length ? <details className="goal-action-history"><summary><History />Historia Działań <span>{historicalActions.length}</span></summary><div className="action-list" role="list">{historicalActions.map((action) => renderAction(action))}</div></details> : null}
       {!isCategory && goal.status === "active" && actions.length > 0 && !actions.some((action) => !["completed", "cancelled", "skipped"].includes(action.status)) ? <div className="group-completion-notice"><p>Nie ma już otwartych Działań. Jeśli cała praca jest gotowa, zamknij zadanie nadrzędne.</p><Button onClick={() => { setGoalStatusError(""); setPendingGoalStatus("achieved"); }}>Zamknij zadanie</Button></div> : null}
     </Panel>
     {!isCategory ? <section className="goal-criteria-surface" aria-labelledby="goal-criteria-title"><div className="goal-section-heading"><div><h2 id="goal-criteria-title">Kryteria sukcesu</h2></div><strong>{criteria.length ? `${completedCriteria} z ${criteria.length}` : ""}</strong></div>{criteria.length ? <><ul className="plain-list">{visibleCriteria.map((item) => { const key = `criterion:${item.id}`; return <li key={item.id}><label className="criterion-check"><input type="checkbox" checked={item.completed} disabled={actionMutation.isBusy(key)} onChange={() => void actionMutation.run(key, () => updateGoal(goal.id, { criteria: criteria.map((criterion) => criterion.id === item.id ? { ...criterion, completed: !criterion.completed } : criterion) }))} />{item.completed ? <Check /> : <Circle />}<span>{item.title}</span></label>{actionMutation.error(key) ? <p className="inline-mutation-error" role="alert">{actionMutation.error(key)} <button type="button" onClick={() => void actionMutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}</li>; })}</ul>{criteria.length > 3 ? <button type="button" className="show-more-link" onClick={() => setCriteriaExpanded((current) => !current)}>{criteriaExpanded ? "Pokaż mniej" : `Pokaż wszystkie (${criteria.length})`}</button> : null}</> : <div className="criteria-empty"><p className="muted-copy">Nie określono jeszcze kryteriów sukcesu.</p><Button variant="ghost" onClick={openGoalEditor}><Plus />Dodaj kryteria</Button></div>}</section> : null}

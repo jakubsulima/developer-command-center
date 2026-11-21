@@ -30,7 +30,7 @@ describe("regresje nowego modelu grup działań", () => {
     const user = userEvent.setup();
     renderApp("/projects/fintrack-api");
     await screen.findByRole("heading", { name: "FinTrack API", level: 1 });
-    await user.click(within(screen.getByRole("menu", { name: "Zarządzaj Projektem: FinTrack API" })).getByRole("menuitem", { name: "Edytuj informacje" }));
+    await user.click(within(screen.getByRole("menu", { name: "Zarządzaj Projektem: FinTrack API" })).getByRole("menuitem", { name: "Edytuj Projekt" }));
     const edit = await screen.findByRole("dialog", { name: "Edytuj Projekt" });
     await user.click(within(edit).getByLabelText("Praca"));
     await user.click(within(edit).getByLabelText("AI"));
@@ -641,11 +641,11 @@ describe("regresje nowego modelu grup działań", () => {
     expect(within(statusDialog).getByLabelText("Co blokuje to Działanie?")).toBeInTheDocument();
     await user.click(within(statusDialog).getByRole("button", { name: "Zamknij okno" }));
     const actionKnowledge = await screen.findByRole("region", { name: "Wiedza Działania" });
-    expect(within(actionKnowledge).getByText("Materiały")).toBeVisible();
     await user.click(within(actionKnowledge).getByText("Połącz wiedzę", { selector: "summary" }));
     await user.selectOptions(within(actionKnowledge).getByLabelText("Podepnij Wiedzę do Działania: Zaprojektuj model transakcji"), "know-3");
     await user.click(within(actionKnowledge).getByRole("button", { name: "Połącz" }));
     expect(await within(actionKnowledge).findByText("PostgreSQL: constraints and normalization")).toBeInTheDocument();
+    expect(within(actionKnowledge).getByText("Materiały")).toBeVisible();
     const unlink = within(actionKnowledge).getByRole("button", { name: "Odłącz PostgreSQL: constraints and normalization od Działania" });
     unlink.focus();
     await user.keyboard("{Enter}");

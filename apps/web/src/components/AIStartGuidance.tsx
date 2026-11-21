@@ -1,16 +1,14 @@
 import { WeeklyMetricsNotice } from "./WeeklyMetricsNotice";
-import { Activity, AlertTriangle, ArrowRight, Bot, CalendarClock, ChevronDown, ChevronRight, CircleAlert, Plus, RefreshCw, Repeat2, Sparkles, ThumbsDown, ThumbsUp, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Activity, AlertTriangle, ArrowRight, Bot, CalendarClock, ChevronDown, CircleAlert, Plus, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { formatInclusiveDateRange, formatWorkspaceDateRange } from "../domain/activity";
 import { aiGoalReviewErrorCopy, aiGoalReviewFreshnessCopy, aiGoalStatusLabels, aiReviewHorizonLabels, selectAIStartGuidance, shortenAIStartSummary } from "../domain/aiStartGuidance";
 import type { HomeSummary } from "../domain/homeSummary";
 import { humanizeEntityReferences } from "../domain/humanizeAIText";
 import { polishCount, polishPluralForm } from "../domain/labels";
-import { locationAddress, navigationCardId } from "../domain/navigation";
-import { routeForEntity } from "../domain/routes";
-import { NavigationLink } from "./ContextNavigation";
+import type { GoalAction } from "../domain/types";
 import { AIGoalReviewConsentModal, AIGoalReviewDraftModal, type AIGoalReviewDraft } from "./AIGoalReviewShared";
 import { useActionFeedback } from "./action-feedback-context";
 import { Badge, Button, Panel } from "./ui";
@@ -18,13 +16,10 @@ import { Badge, Button, Panel } from "./ui";
 const generatedFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
 const terminalErrors = new Set(["AI_NOT_CONFIGURED", "NO_ACTIVE_GOALS"]);
 
-const formatDate = (date: string, timeZone: string) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(`${date}T12:00:00Z`));
-
-export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
+export function AIStartGuidance({ homeSummary, renderUpcomingAction }: { homeSummary: HomeSummary; renderUpcomingAction: (action: GoalAction) => ReactNode }) {
   const { state, mode, aiGoalReview, aiGoalReviewStatus, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewCheckedAt, aiGoalReviewReadStatus, aiGoalReviewReadError, refreshLatestGoalReview, requestGoalReview, submitGoalReviewFeedback, createAction } = useStore();
   const { notifySuccess } = useActionFeedback();
   const [searchParams] = useSearchParams();
-  const location = useLocation();
   const [signalsOpen, setSignalsOpen] = useState(["upcoming", "attention"].includes(searchParams.get("show") ?? ""));
   const [consentOpen, setConsentOpen] = useState(false);
   const [draft, setDraft] = useState<AIGoalReviewDraft>();
@@ -46,8 +41,6 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
   const summary = aiGoalReview ? shortenAIStartSummary(humanize(aiGoalReview.review.summary)) : undefined;
   const upcomingItems = showAll("upcoming") ? homeSummary.upcomingActions : homeSummary.upcomingActions.slice(0, 5);
   const attentionItems = showAll("attention") ? homeSummary.attentionSignals : homeSummary.attentionSignals.slice(0, 2);
-  const startBreadcrumbs = [{ label: "Start", to: "/" }];
-  const startAddress = locationAddress(location);
 
   useEffect(() => { if (requestedSignals) setSignalsOpen(true); }, [requestedSignals]);
 
@@ -89,9 +82,9 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
   const primaryCTA = selectedDraft
     ? <Button className="ai-start-primary-cta" variant="primary" onClick={() => { setDraftError(""); setDraft({ ...selectedDraft }); }}><Plus />Dodaj proponowane Działanie</Button>
     : selection?.cta.kind === "action"
-      ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Otwórz Działanie<ArrowRight /></Link>
+      ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Otwórz Działanie</Link>
       : selection?.cta.kind === "goal"
-        ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Przejdź do grupy<ArrowRight /></Link>
+        ? <Link className="button button-primary ai-start-primary-cta" to={selection.cta.to}>Przejdź do grupy</Link>
         : null;
 
   return <>
@@ -101,7 +94,7 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
         {aiGoalReview ? <Button variant="ghost" loading={busy} disabled={busy} onClick={begin}><RefreshCw />Odśwież</Button> : null}
       </div>
 
-      {!aiGoalReview && !busy ? <div className="ai-start-empty"><p>AI może podsumować aktywne grupy i wskazać następny krok.</p>{activeGoals.length ? <Button variant="primary" onClick={begin}><Sparkles />Przeanalizuj moje grupy działań</Button> : <><Button variant="primary" disabled><Sparkles />Przeanalizuj moje grupy działań</Button><Link className="section-link" to="/goals?create=true">Utwórz aktywną grupę<ChevronRight /></Link></>}</div> : null}
+      {!aiGoalReview && !busy ? <div className="ai-start-empty"><p>AI może podsumować aktywne grupy i wskazać następny krok.</p>{activeGoals.length ? <Button variant="primary" onClick={begin}><Sparkles />Przeanalizuj moje grupy działań</Button> : <><Button variant="primary" disabled><Sparkles />Przeanalizuj moje grupy działań</Button><Link className="section-link" to="/goals?create=true">Utwórz aktywną grupę</Link></>}</div> : null}
       {!aiGoalReview && aiGoalReviewReadStatus === "checking" ? <p className="muted-copy" role="status">Sprawdzam zapisaną analizę. Ten odczyt nie uruchamia modelu.</p> : null}
       {!aiGoalReview && busy ? <div className="ai-review-loading" role="status"><span className="ai-review-pulse"><Bot /></span><div><strong>Analizuję aktywne grupy…</strong><small>Możesz nadal korzystać ze Startu.</small></div></div> : null}
       {aiGoalReview && busy ? <div className="ai-start-refreshing" role="status"><RefreshCw className="spin" />Odświeżam analizę…</div> : null}
@@ -117,10 +110,10 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
           <h3>{humanize(selection.recommendation.title)}</h3>
           <div className="ai-start-next-step"><span><ArrowRight />Następny krok</span><strong>{humanize(selection.recommendation.suggestedNextStep)}</strong></div>
           {selection.signalLabels.length ? <div className="ai-start-evidence" aria-label="Sygnały z danych"><Activity />{selection.signalLabels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div> : null}
-          <div className="ai-start-actions">{primaryCTA}<Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę<ChevronRight /></Link></div>
+          <div className="ai-start-actions">{primaryCTA}<Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę</Link></div>
           <div className="ai-feedback" role="group" aria-label={`Oceń zalecenie: ${humanize(selection.recommendation.title)}`}><span>Czy to pomocne?</span><button type="button" aria-pressed={ratings[selection.recommendation.id] === "helpful"} aria-label="Pomocne" onClick={() => void rate(selection.recommendation!.id, "helpful")}><ThumbsUp /></button><button type="button" aria-pressed={ratings[selection.recommendation.id] === "not_helpful"} aria-label="Niepomocne" onClick={() => void rate(selection.recommendation!.id, "not_helpful")}><ThumbsDown /></button></div>
           {feedbackError ? <p className="inline-mutation-error" role="alert">{feedbackError}</p> : null}
-        </article> : <div className="ai-start-actions"><Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę<ChevronRight /></Link></div>}
+        </article> : <div className="ai-start-actions"><Link className="ai-start-full-link" to="/review?tab=ai">Zobacz pełną analizę</Link></div>}
         <footer className="muted-copy">Przegląd grup działań · ostatnie {aiGoalReview.windowDays} dni · {formatInclusiveDateRange(aiGoalReview.periodStart, aiGoalReview.periodEnd)} · wygenerowano {generatedFormatter.format(new Date(aiGoalReview.generatedAt))}{aiGoalReviewCheckedAt ? ` · sprawdzono ${generatedFormatter.format(new Date(aiGoalReviewCheckedAt))}` : ""}{aiGoalReview.cached ? " · wynik z cache" : ""} · <Link to="/settings">Ustawienia</Link></footer>
       </div> : null}
 
@@ -130,9 +123,9 @@ export function AIStartGuidance({ homeSummary }: { homeSummary: HomeSummary }) {
           <ChevronDown aria-hidden="true" />
         </button>
         <div className="start-overview-content" id="ai-start-signals-content" hidden={!signalsOpen}>
-          <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h3 id="start-upcoming-title">Nadchodzące</h3></div><span className="count-chip" aria-label={polishCount(homeSummary.upcomingActions.length, "nadchodzące Działanie", "nadchodzące Działania", "nadchodzących Działań")}>{homeSummary.upcomingActions.length}</span></div>{upcomingItems.length ? upcomingItems.map((action) => <div className="upcoming-row" key={action.id}><time dateTime={action.scheduledFor}>{formatDate(action.scheduledFor!, state.workspaceTimezone)}</time><NavigationLink data-navigation-card-id={navigationCardId("action", action.id)} to={routeForEntity({ type: "action", id: action.id })} breadcrumbs={startBreadcrumbs} returnTo={startAddress} returnLabel="Start" sourceCardId={navigationCardId("action", action.id)}>{action.title}{action.recurringTemplateId ? <small><Repeat2 />cykliczne</small> : null}</NavigationLink></div>) : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{homeSummary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
+          <Panel aria-labelledby="start-upcoming-title"><div className="start-section-heading"><div><span className="eyebrow"><CalendarClock />Horyzont</span><h3 id="start-upcoming-title">Nadchodzące</h3></div><span className="count-chip" aria-label={polishCount(homeSummary.upcomingActions.length, "nadchodzące Działanie", "nadchodzące Działania", "nadchodzących Działań")}>{homeSummary.upcomingActions.length}</span></div>{upcomingItems.length ? <ul className="workspace-list" role="list">{upcomingItems.map(renderUpcomingAction)}</ul> : <p className="muted-copy">Brak zaplanowanych Działań w najbliższych 7 dniach.</p>}{homeSummary.upcomingActions.length > 5 ? <Link className="section-link" to="/?show=upcoming">{showAll("upcoming") ? "Zwiń listę" : "Zobacz wszystkie"}</Link> : null}</Panel>
           <Panel aria-labelledby="start-activity-title"><div className="start-section-heading"><div><span className="eyebrow"><TrendingUp />Rytm pracy</span><h3 id="start-activity-title">Bieżący tydzień</h3></div></div><p className="activity-period">{formatWorkspaceDateRange(homeSummary.activity.periodStart, homeSummary.activity.periodEnd)}</p><WeeklyMetricsNotice available={homeSummary.metricsAvailable} /><div className="activity-grid"><div><strong>{homeSummary.metricsAvailable ? homeSummary.activity.completedActions : "—"}</strong><span>{polishPluralForm(homeSummary.activity.completedActions, "ukończone Działanie", "ukończone Działania", "ukończonych Działań")}</span></div><div><strong>{homeSummary.metricsAvailable ? homeSummary.activity.progressUpdates : "—"}</strong><span>{polishPluralForm(homeSummary.activity.progressUpdates, "aktualizacja postępu", "aktualizacje postępu", "aktualizacji postępu")}</span></div><div><strong>{homeSummary.metricsAvailable ? homeSummary.activity.knowledgeAdded : "—"}</strong><span>{polishPluralForm(homeSummary.activity.knowledgeAdded, "dodany element Wiedzy", "dodane elementy Wiedzy", "dodanych elementów Wiedzy")}</span></div></div></Panel>
-          <Panel className="start-attention" aria-labelledby="start-attention-title"><div className="start-section-heading"><div><span className="eyebrow"><CircleAlert />Do sprawdzenia</span><h3 id="start-attention-title">Wymaga uwagi</h3></div><span className="count-chip" aria-label={polishCount(homeSummary.attentionCount, "sprawa wymaga uwagi", "sprawy wymagają uwagi", "spraw wymaga uwagi")}>{homeSummary.attentionCount}</span></div>{attentionItems.length ? <div className="attention-list" id="start-attention-list">{attentionItems.map((signal) => <Link key={signal.id} to={signal.to}><span className={`attention-marker attention-${signal.kind}`} aria-hidden="true" /><span><strong>{signal.title}</strong><small>{signal.detail}</small></span><ChevronRight /></Link>)}</div> : <p className="muted-copy">Brak blokad, zaległości i decyzji czekających na Ciebie.</p>}{homeSummary.attentionCount > 2 ? <Link className="section-link" to={showAll("attention") ? "/" : "/?show=attention"} aria-expanded={showAll("attention")} aria-controls="start-attention-list">{showAll("attention") ? "Zwiń listę" : "Zobacz wszystkie"}<ChevronRight /></Link> : null}</Panel>
+          <Panel className="start-attention" aria-labelledby="start-attention-title"><div className="start-section-heading"><div><span className="eyebrow"><CircleAlert />Do sprawdzenia</span><h3 id="start-attention-title">Wymaga uwagi</h3></div><span className="count-chip" aria-label={polishCount(homeSummary.attentionCount, "sprawa wymaga uwagi", "sprawy wymagają uwagi", "spraw wymaga uwagi")}>{homeSummary.attentionCount}</span></div>{attentionItems.length ? <div className="attention-list" id="start-attention-list">{attentionItems.map((signal) => <Link key={signal.id} to={signal.to}><span className={`attention-marker attention-${signal.kind}`} aria-hidden="true" /><span><strong>{signal.title}</strong><small>{signal.detail}</small></span></Link>)}</div> : <p className="muted-copy">Brak blokad, zaległości i decyzji czekających na Ciebie.</p>}{homeSummary.attentionCount > 2 ? <Link className="section-link" to={showAll("attention") ? "/" : "/?show=attention"} aria-expanded={showAll("attention")} aria-controls="start-attention-list">{showAll("attention") ? "Zwiń listę" : "Zobacz wszystkie"}</Link> : null}</Panel>
         </div>
       </section>
     </Panel>

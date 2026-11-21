@@ -1,7 +1,7 @@
 import { CreationDialog } from "./CreationForm";
 import { AddMenu, type AddMenuItem } from "./AddMenu";
 import { lazy, Suspense, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
+import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, TerminalSquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
@@ -285,11 +285,11 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         </div></section>
         <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
           <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Grupy działań</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
-          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span><ChevronRight /></NavLink>
+          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span></NavLink>
           <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
           <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Ostatnie zapisy</small></span></NavLink>
-          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span><ChevronRight /></NavLink>
-          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Zapis, przypomnienia i AI</small></span><ChevronRight /></NavLink>
+          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span></NavLink>
+          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Zapis, przypomnienia i AI</small></span></NavLink>
         </nav></section>
         <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
           {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}

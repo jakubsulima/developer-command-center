@@ -2,7 +2,7 @@
   position: fixed;
   right: max(24px, env(safe-area-inset-right));
   bottom: calc(24px + env(safe-area-inset-bottom));
-  z-index: 80;
+  z-index: 40;
   width: min(440px, calc(100vw - 48px));
   display: flex;
   flex-direction: column;
@@ -23,13 +23,13 @@
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 32px;
   align-items: start;
-  gap: 0 12px;
-  margin: 5px 0;
+  gap: 0 var(--space-2);
+  margin: var(--space-2) 0;
   padding: 16px;
   overflow: hidden;
   isolation: isolate;
   border: 1px solid #426357;
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   background: linear-gradient(115deg, #172e30, #141f30 65%);
   box-shadow: inset 0 1px 0 #ffffff08;
   color: var(--foreground);
@@ -41,6 +41,18 @@
   --notice-tint: #fda4af1a;
   border-color: #724350;
   background: linear-gradient(115deg, #35232e, #1d2030 65%);
+}
+.undo-notice-info {
+  --notice-accent: #93c5fd;
+  --notice-tint: #93c5fd1a;
+  border-color: #405e80;
+  background: linear-gradient(115deg, #1a2e48, #141f30 65%);
+}
+.undo-notice-warning {
+  --notice-accent: #fcd34d;
+  --notice-tint: #fcd34d1a;
+  border-color: #746039;
+  background: linear-gradient(115deg, #392d20, #1d2330 65%);
 }
 .undo-notice-icon {
   display: grid;
@@ -58,17 +70,17 @@
   stroke-dasharray: 30;
   animation: notice-check 380ms 140ms ease-out both;
 }
-.undo-notice-copy { min-width: 0; padding-top: 1px; overflow-wrap: anywhere; }
-.undo-notice-label { display: block; margin-bottom: 4px; color: var(--notice-accent); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.undo-notice-copy { min-width: 0; padding-top: 0; overflow-wrap: anywhere; }
+.undo-notice-label { display: block; margin-bottom: var(--space-2); color: var(--notice-accent); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .undo-notice strong { display: block; font-size: 13px; font-weight: 500; line-height: 1.55; }
-.undo-notice small { display: block; margin-top: 6px; color: #fecdd3; font-size: 12px; line-height: 1.5; }
-.undo-notice-actions { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.undo-notice small { display: block; margin-top: var(--space-2); color: #fecdd3; font-size: 12px; line-height: 1.5; }
+.undo-notice-actions { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
 .undo-notice-actions .button {
   min-height: 34px;
   height: auto;
-  padding: 6px 10px;
+  padding: var(--space-2);
   border: 1px solid color-mix(in srgb, var(--notice-accent) 22%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--notice-accent);
   background: var(--notice-tint);
   font-size: 12px;
@@ -83,9 +95,9 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  margin: -4px -4px 0 0;
+  margin: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--muted-foreground);
   transition: background 150ms ease, color 150ms ease;
@@ -110,10 +122,17 @@
 @keyframes notice-exit { to { opacity: 0; transform: translate3d(18px, 0, 0) scale(.97); } }
 @keyframes notice-collapse { to { grid-template-rows: 0fr; opacity: 0; } }
 
-@media (max-width: 640px) {
-  .undo-stack { right: max(12px, env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
-  .undo-notice { padding: 14px; gap: 0 10px; }
-  .undo-notice-actions .button { min-height: 44px; padding-inline: 12px; }
+@media (max-width: 767px) {
+  .undo-stack {
+    --notice-inset-start: max(var(--space-4), env(safe-area-inset-left));
+    --notice-inset-end: max(var(--space-4), env(safe-area-inset-right));
+    inset-inline-end: var(--notice-inset-end);
+    bottom: calc(var(--mobile-nav-space) + var(--space-4) + env(safe-area-inset-bottom));
+    width: min(440px, calc(100% - var(--notice-inset-start) - var(--notice-inset-end)));
+  }
+  :root:has(.action-filter-trigger) .undo-stack { margin-block-end: var(--floating-action-filter-size); }
+  .undo-notice { padding: var(--space-4); gap: 0 var(--space-2); }
+  .undo-notice-actions .button { min-height: 44px; max-width: 100%; padding-inline: var(--space-2); white-space: normal; overflow-wrap: anywhere; }
   .undo-notice .undo-notice-close { width: 44px; height: 44px; margin: -8px -8px 0; }
 }
 

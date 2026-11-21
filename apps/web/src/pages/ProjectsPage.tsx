@@ -1,7 +1,7 @@
 import { ProjectCategoryManager } from "../components/ProjectCategoryManager";
 import "../components/ProjectCategories.css";
 import { useMemo, useState } from "react";
-import { Archive, ArrowRight, Beaker, CalendarDays, ChevronDown, CircleAlert, CircleCheck, Clock3, FolderKanban, ListChecks, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Beaker, CalendarDays, ChevronDown, CircleAlert, CircleCheck, Clock3, FolderKanban, ListChecks, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { NavigationLink } from "../components/ContextNavigation";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
@@ -76,7 +76,7 @@ export function ProjectsPage() {
         </div>
       </details> : null}
     </div>} />
-    <div className="projects-index">
+    <div className="projects-index" data-view={view}>
     {desktop ? <div className="projects-index-toolbar">
       <div className="projects-index-views" role="group" aria-label="Widok Projektów">
         <Button variant={view === "active" ? "primary" : "ghost"} aria-pressed={view === "active"} onClick={() => setView("active")}>Aktywne</Button>
@@ -88,7 +88,7 @@ export function ProjectsPage() {
     </div> : null}
     {groups.length ? groups.map((group) => <section className="project-category-section" key={group.id}>
       {grouped ? <h2 className="project-category-heading"><span className="category-dot" style={{ backgroundColor: group.color }} />{group.name}<small>{group.projects.length}</small></h2> : null}
-      {group.projects.length ? <div className="project-list-columns" aria-hidden="true"><span>Projekt</span><span>{view === "active" ? "Najbliższy ruch" : "Opis"}</span><span>Powiązania</span><span /></div> : null}
+      {group.projects.length ? <div className="project-list-columns" aria-hidden="true"><span>Projekt</span><span>{view === "active" ? "Najbliższy ruch" : "Opis"}</span><span>Powiązania</span>{view !== "active" ? <span /> : null}</div> : null}
       {group.projects.length ? <div className="project-card-grid">{group.projects.map((project, index) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
       const signal = view === "active" ? projectSignal(state, project.id) : undefined;
@@ -97,8 +97,12 @@ export function ProjectsPage() {
       return <Panel className={`${entityCardVariants()} project-card project-context-card project-index-row entity-card`} key={project.id} data-navigation-card-id={cardId} tabIndex={-1}>
         <div className="project-card-head">
           <span className={`project-avatar ${colors[index % colors.length]}`} aria-hidden="true">{initials(project.name)}</span>
-          <div className="project-card-identity"><Title className="line-clamp-2">{project.name}</Title></div>
-          {view === "active" ? <NavigationLink className="project-card-cta entity-card-open" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}><span>Otwórz</span><ArrowRight aria-hidden="true" /></NavigationLink> : <Badge tone="neutral">{view === "archived" ? "Archiwum" : "W koszu"}</Badge>}
+          <div className="project-card-identity">
+            <Title className="line-clamp-2" aria-label={project.name}>
+              {view === "active" ? <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink> : project.name}
+            </Title>
+          </div>
+          {view !== "active" ? <Badge tone="neutral">{view === "archived" ? "Archiwum" : "W koszu"}</Badge> : null}
         </div>
         {!grouped ? <div className="project-card-categories">{categories.filter((category) => project.categoryIds?.includes(category.id)).map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
         {signal ? <div className={`project-card-signal project-card-signal-${signal.kind}`} aria-label={`Najbliższy ruch: ${projectSignalText(signal)}${signal.actionId ? ` — ${signal.title}` : ""}`}>

@@ -34,11 +34,27 @@ export const projectPresets: Record<ProjectPreset, ProjectPresetDefinition> = {
       title: "Czytelnia jest gotowa",
       description: "Zachowaj tu Materiały, po które chcesz sięgnąć."
     }
+  },
+  study: {
+    id: "study",
+    label: "Nauka",
+    description: "Zacznij od materiałów i notatek. Grupy działań porządkują tematy do opanowania.",
+    defaultView: "knowledge",
+    sectionOrder: ["knowledge", "goals", "actions", "overview"],
+    mainActionLabel: "Dodaj w Projekcie",
+    emptyState: {
+      title: "Dodaj pierwszy materiał do nauki",
+      description: "Zapisz kurs, artykuł lub notatkę w Wiedzy Projektu."
+    }
   }
 };
 
+export function isProjectPreset(value: unknown): value is ProjectPreset {
+  return typeof value === "string" && Object.hasOwn(projectPresets, value);
+}
+
 export function normalizeProjectPreset(value: unknown): ProjectPreset {
-  return value === "reading" ? "reading" : "standard";
+  return isProjectPreset(value) ? value : "standard";
 }
 
 export function categoryPresetSuggestion(categories: ProjectCategory[], categoryIds: string[]) {
