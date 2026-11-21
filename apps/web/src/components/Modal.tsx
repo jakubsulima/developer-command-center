@@ -32,7 +32,7 @@ function isFocusable(element: HTMLElement) {
   return true;
 }
 
-export function Modal({ open, title, ariaLabel, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, initialFocus = "first", exitDurationMs = 0, headingAction, onEscape }: { open: boolean; title: string; ariaLabel?: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; initialFocus?: InitialFocus; exitDurationMs?: number; headingAction?: ReactNode; onEscape?: () => boolean }) {
+export function Modal({ open, title, ariaLabel, onClose, children, role = "dialog", closeOnBackdrop = true, closeDisabled = false, className, backdropClassName, scrollLock = "body", initialFocus = "first", exitDurationMs = 0, showHeader = true, headingAction, onEscape }: { open: boolean; title: string; ariaLabel?: string; onClose: () => void; children: ReactNode; role?: "dialog" | "alertdialog"; closeOnBackdrop?: boolean; closeDisabled?: boolean; className?: string; backdropClassName?: string; scrollLock?: "body" | "viewport"; initialFocus?: InitialFocus; exitDurationMs?: number; showHeader?: boolean; headingAction?: ReactNode; onEscape?: () => boolean }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -91,16 +91,17 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     const previousRootOverscroll = root.style.overscrollBehavior;
     root.style.overflow = "hidden";
     root.style.overscrollBehavior = "none";
-    const previousOverflow = document.body.style.overflow;
-    const previousOverscroll = document.body.style.overscrollBehavior;
-    const previousPosition = document.body.style.position;
-    const previousTop = document.body.style.top;
-    const previousWidth = document.body.style.width;
-    document.body.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
+    const bodyStyle = document.body.style;
+    const previousBody = {
+      overflow: bodyStyle.overflow,
+      overscrollBehavior: bodyStyle.overscrollBehavior,
+      position: bodyStyle.position,
+      top: bodyStyle.top,
+      width: bodyStyle.width
+    };
+    if (scrollLock === "body") {
+      Object.assign(bodyStyle, { overflow: "hidden", overscrollBehavior: "none", position: "fixed", top: `-${scrollY}px`, width: "100%" });
+    }
     const inerted: Array<{ element: HTMLElement; value: boolean }> = [];
     const backdrop = dialogRef.current?.closest<HTMLElement>("[data-modal-backdrop]");
     const parent = backdrop?.parentElement;
@@ -119,18 +120,14 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
     return () => {
       root.style.overflow = previousRootOverflow;
       root.style.overscrollBehavior = previousRootOverscroll;
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscroll;
-      document.body.style.position = previousPosition;
-      document.body.style.top = previousTop;
-      document.body.style.width = previousWidth;
+      if (scrollLock === "body") Object.assign(bodyStyle, previousBody);
       inerted.forEach(({ element, value }) => { element.inert = value; });
       if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
       window.removeEventListener("resize", updateViewport);
       viewport?.removeEventListener("resize", updateViewport);
       viewport?.removeEventListener("scroll", updateViewport);
     };
-  }, [open]);
+  }, [open, scrollLock]);
   useEffect(() => {
     if (open) {
       setPresent(true);
@@ -204,17 +201,22 @@ export function Modal({ open, title, ariaLabel, onClose, children, role = "dialo
   }, [closeOnBackdrop, initialFocus, open]);
 
   if (!open && (exitDurationMs <= 0 || !present)) return null;
+  const dialogLabel = ariaLabel || (showHeader ? undefined : title);
+  const backdropStyle = {
+    "--modal-viewport-height": `${viewportMetrics.height}px`,
+    "--modal-viewport-offset-top": `${viewportMetrics.offsetTop}px`
+  } as CSSProperties;
   // Keep fixed overlays outside scrolling/clipping page containers.
   return createPortal(
-    <div data-modal-backdrop className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} style={{ "--modal-viewport-height": `${viewportMetrics.height}px`, "--modal-viewport-offset-top": `${viewportMetrics.offsetTop}px` } as CSSProperties} onFocusCapture={(event) => {
+    <div data-modal-backdrop className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}${closing ? " modal-backdrop-closing" : ""}`} role="presentation" aria-hidden={closing || undefined} style={backdropStyle} onFocusCapture={(event) => {
       if (!previousFocusRef.current && event.relatedTarget instanceof HTMLElement && !event.currentTarget.contains(event.relatedTarget)) previousFocusRef.current = event.relatedTarget;
     }} onMouseDown={(event) => event.target === event.currentTarget && closeOnBackdrop && !closeDisabled && onClose()}>
-      <DialogContent ref={dialogRef} tabIndex={-1} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" {...(ariaLabel ? { "aria-label": ariaLabel } : { "aria-labelledby": titleId })} showClose={false}>
-        <div className="modal-head">
+      <DialogContent ref={dialogRef} tabIndex={-1} className={`modal${className ? ` ${className}` : ""}`} role={role} aria-modal="true" {...(dialogLabel ? { "aria-label": dialogLabel } : { "aria-labelledby": titleId })} showClose={false}>
+        {showHeader ? <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           {headingAction}
           <button className="icon-button" disabled={closeDisabled} onClick={onClose} aria-label="Zamknij okno"><X /></button>
-        </div>
+        </div> : null}
         {children}
       </DialogContent>
     </div>,

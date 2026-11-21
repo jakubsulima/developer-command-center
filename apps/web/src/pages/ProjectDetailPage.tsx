@@ -2,6 +2,7 @@ import { GroupedProjectActions } from "../components/GroupedProjectActions";
 import { ProjectActionFilterPicker } from "../components/ProjectActionFilterPicker";
 import { WorkspaceListRow } from "../components/WorkspaceListRow";
 import { ActionListRow } from "../components/ActionListRow";
+import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { useAuth } from "../auth/useAuth";
 import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { CurrentWeekPlanNotice } from "../components/CurrentWeekPlanNotice";
@@ -27,7 +28,7 @@ import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationB
 import { projectProjection, projectSignal } from "../domain/projectModule";
 import { normalizeProjectPreset, projectPresets } from "../domain/projectPresets";
 import type { KnowledgeItem, ProjectPreset, ReadingStatus } from "../domain/types";
-import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ActionStatusTarget, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { isActionInTodayProjection, localDateForTimeZone } from "../domain/activity";
 import { isActionVisibleInList } from "../domain/actionsList";
 import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
@@ -80,7 +81,7 @@ export function ProjectDetailPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { state, mode, linkKnowledge, updateArea, setAreaVisibility, setActionStatus } = useStore();
+  const { state, mode, linkKnowledge, updateArea, setAreaVisibility, setActionStatus, undoActionCompletion } = useStore();
   const mutation = useKeyedMutation();
   const { notifyUndo, notifySuccess } = useActionFeedback();
   const project = projectProjection(state, projectId ?? "");
@@ -94,7 +95,7 @@ export function ProjectDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [projectForm, setProjectForm] = useState({ name: project?.name ?? "", description: project?.description ?? "", categoryIds: project?.categoryIds ?? [], preset: normalizeProjectPreset(project?.preset) as ProjectPreset });
-  const [statusActionId, setStatusActionId] = useState<string>();
+  const [statusTarget, setStatusTarget] = useState<ActionStatusTarget>();
   const preset = normalizeProjectPreset(project?.preset);
   const defaultView = projectPresets[preset].defaultView;
   const requestedView = searchParams.get("view");
@@ -176,7 +177,7 @@ export function ProjectDetailPage() {
   };
 
   const linkExistingBook = (item: KnowledgeItem) => void run(() => linkKnowledge(item.id, { areaId: project.id }, "material"), () => undefined);
-  const closeStatusEditor = () => setStatusActionId(undefined);
+  const closeStatusEditor = () => setStatusTarget(undefined);
   const renderAction = (action: typeof actions[number], { desktopOverview = false, featuredLabel, description }: {
     desktopOverview?: boolean;
     featuredLabel?: string;
@@ -190,7 +191,14 @@ export function ProjectDetailPage() {
     return <ActionListRow key={action.id} action={action} cardId={cardId} navigation={projectNavigation}
       linkLabel={desktopOverview ? undefined : `Otwórz Działanie: ${action.title}`}
       timeZone={state.workspaceTimezone} today={today} routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)} showUnscheduled={false}
-      busy={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusActionId(action.id)}
+      busy={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusTarget({ action, menu: true })}
+      onToggleComplete={() => {
+        if (action.status === "completed") {
+          void changeActionStatus(action, "ready");
+        } else {
+          void mutation.run(statusKey, () => completeActionWithUndo({ action, setActionStatus, undoActionCompletion, notifyUndo }));
+        }
+      }}
       context={group && !description ? { label: `Grupa: ${group.title}`, to: `/goals/${encodeURIComponent(group.id)}` } : undefined}
       indicator={indicator ? <span className="action-next-badge">{indicator}</span> : null}
       description={action.status === "blocked" && action.blocker ? undefined : description}>
@@ -326,7 +334,7 @@ export function ProjectDetailPage() {
     </div>
     </div>
     <Modal open={dialog === "existing-book"} title="Połącz książkę z Biblioteki" onClose={() => setDialog(undefined)}><p className="modal-intro">Książka pozostaje tym samym elementem Wiedzy; Projekt dostaje wspólne powiązanie.</p>{existingBooksQuery.isError ? <p className="auth-message error" role="alert">Nie udało się wczytać książek. <button type="button" onClick={() => void existingBooksQuery.refetch()}>Spróbuj ponownie</button></p> : null}{availableBooks.length ? <div className="project-entity-list">{availableBooks.map((item) => <Panel className="entity-card" key={item.id}><BookMarked /><span><strong>{item.title}</strong><small>{[item.resourceAuthor, readingPositionLabel(item), item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ")}</small></span><Button loading={saving} onClick={() => linkExistingBook(item)}>Połącz</Button></Panel>)}</div> : existingBooksQuery.isError ? null : <EmptyState icon={<BookOpen />} title="Brak dostępnych książek" detail="Dodaj książkę do Biblioteki albo zmień istniejący Materiał na książkę." />}{existingBooksQuery.hasNextPage ? <div className="list-pagination"><Button loading={existingBooksQuery.isFetchingNextPage} onClick={() => void existingBooksQuery.fetchNextPage()}>Załaduj starsze</Button></div> : null}{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button onClick={() => setDialog(undefined)}>Zamknij</Button></div></Modal>
-        {(() => { const action = actions.find((candidate) => candidate.id === statusActionId); const key = action ? `project-action-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} busy={Boolean(key && mutation.isBusy(key))} error={key ? mutation.error(key) : undefined} compact onClose={closeStatusEditor} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
+        {(() => { const action = actions.find((candidate) => candidate.id === statusTarget?.action.id); const key = action ? `project-action-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} menu={statusTarget?.menu} busy={Boolean(key && mutation.isBusy(key))} error={key ? mutation.error(key) : undefined} compact onClose={closeStatusEditor} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
 
       <Modal open={dialog === "edit"} closeDisabled={saving} title="Edytuj Projekt" onClose={() => setDialog(undefined)}><form onSubmit={(event) => { event.preventDefault(); saveProject(); }}><label className="field-label" htmlFor="edit-project-name">Nazwa</label><input id="edit-project-name" value={projectForm.name} onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))} required /><label className="field-label" htmlFor="edit-project-description">Kontekst</label><textarea id="edit-project-description" rows={3} value={projectForm.description} onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))} /><ProjectPresetPicker value={projectForm.preset} categories={state.projectCategories ?? []} categoryIds={projectForm.categoryIds} onChange={(preset) => setProjectForm((current) => ({ ...current, preset }))} disabled={saving} /><ProjectCategoryPicker value={projectForm.categoryIds} onChange={(categoryIds) => setProjectForm((current) => ({ ...current, categoryIds }))} />{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button type="button" onClick={() => setDialog(undefined)}>Anuluj</Button><Button type="submit" variant="primary" loading={saving} disabled={!projectForm.name.trim()}>Zapisz Projekt</Button></div></form></Modal>
     <Modal open={dialog === "archive"} title="Archiwizować Projekt?" onClose={() => setDialog(undefined)}><p>Projekt <strong>{project.name}</strong> zniknie z bieżących Projektów. Jego zawartość pozostanie zachowana.</p>{error ? <p className="auth-message error" role="alert">{error}</p> : null}<div className="modal-actions"><Button disabled={saving} onClick={() => setDialog(undefined)}>Anuluj</Button><Button loading={saving} onClick={() => void run(() => setAreaVisibility(project.id, "archived"), () => {

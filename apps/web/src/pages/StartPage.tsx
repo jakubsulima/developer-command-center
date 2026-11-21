@@ -9,7 +9,7 @@ import { CalendarClock, ChevronDown, Plus, ShieldAlert, Sparkles } from "lucide-
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
-import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
+import { ActionStatusDialog, type ActionStatusTarget, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionListRow } from "../components/ActionListRow";
 import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
 import { Button } from "../components/ui";
@@ -18,7 +18,6 @@ import type { GoalAction } from "../domain/types";
 import { resolveActionContext, type ActionContext } from "../domain/actionContext";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { ActionResultDialog } from "../components/ActionResultDialog";
-import { ActionPrimaryControls } from "../components/ActionPrimaryControls";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
 import { locationAddress } from "../domain/navigation";
@@ -27,12 +26,12 @@ import { AIStartGuidance } from "../components/AIStartGuidance";
 import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
 import "./start-workspace.css";
 
-function StartActionRow({ action, context, knowledgeCount, openStatus, onComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
+function StartActionRow({ action, context, knowledgeCount, openStatus, onToggleComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
   action: GoalAction;
   context: ActionContext;
   knowledgeCount: number;
   openStatus: () => void;
-  onComplete: () => void;
+  onToggleComplete: () => void;
   busy: boolean;
   error?: string;
   retry?: () => Promise<boolean>;
@@ -45,11 +44,10 @@ function StartActionRow({ action, context, knowledgeCount, openStatus, onComplet
   const navigation = { breadcrumbs, returnTo, returnLabel: "Start" };
   return <ActionListRow action={action} navigation={navigation}
     timeZone={timeZone} today={today} routineTitle={routineTitle} showUnscheduled={false}
-    busy={busy} onOpenStatus={openStatus}
+    busy={busy} onOpenStatus={openStatus} onToggleComplete={onToggleComplete}
     context={context.kind === "standalone" ? undefined : { label: context.name ?? context.label, to: context.to === "/" ? undefined : context.to }}
     description={knowledgeCount ? `Wiedza: ${knowledgeCount}` : undefined}
-    indicator={action.isNext ? <span className="action-next-badge">Następne</span> : null}
-    tools={<ActionPrimaryControls action={action} busy={busy} appearance="check" onToggleComplete={onComplete} />}>
+    indicator={action.isNext ? <span className="action-next-badge">Następne</span> : null}>
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void retry?.()}>Spróbuj ponownie</button></p> : null}
   </ActionListRow>;
 }
@@ -61,7 +59,7 @@ export function StartPage() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const materializeOnMount = useRef(materializeRecurring);
-  const [statusActionId, setStatusActionId] = useState<string>();
+  const [statusTarget, setStatusTarget] = useState<ActionStatusTarget>();
   const [resultActionId, setResultActionId] = useState<string>();
   const now = useWorkspaceClock();
   const planRead = useCurrentWeekPlan(now);
@@ -97,7 +95,8 @@ export function StartPage() {
     const statusKey = `start-status:${action.id}`;
     return <StartActionRow key={action.id} action={action} context={resolveActionContext(action, state)}
       knowledgeCount={state.knowledgeLinks.filter((link) => link.actionId === action.id).length}
-      openStatus={() => setStatusActionId(action.id)} onComplete={() => void completeAction(action)}
+      openStatus={() => setStatusTarget({ action, menu: true })}
+      onToggleComplete={() => void (action.status === "completed" ? changeActionStatus(action, "ready") : completeAction(action))}
       busy={mutation.isBusy(statusKey)} error={mutation.error(statusKey)} retry={mutation.retry(statusKey)}
       breadcrumbs={startBreadcrumbs} returnTo={startAddress} timeZone={state.workspaceTimezone} today={currentDate}
       routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)} />;
@@ -140,7 +139,7 @@ export function StartPage() {
         </details>
       </div>
     </div>
-    {(() => { const action = state.actions.find((candidate) => candidate.id === statusActionId); const statusKey = action ? `start-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusActionId(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
+    {(() => { const action = state.actions.find((candidate) => candidate.id === statusTarget?.action.id); const statusKey = action ? `start-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} menu={statusTarget?.menu} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusTarget(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
     <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
   </AppShell>;
 }

@@ -78,11 +78,14 @@ it("zmienia status z Przeglądu przez istniejącą komendę i pozwala cofnąć z
   const user = userEvent.setup();
   renderWorkspace("/projects/one");
   const actions = await screen.findByRole("region", { name: /Działania Projektu/ });
-  await user.click(within(actions).getByRole("button", { name: "Zmień status: Do zrobienia — Bieżący krok" }));
-  await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
-  expect(await within(actions).findByRole("button", { name: "Zmień status: W toku — Bieżący krok" })).toBeInTheDocument();
+  within(actions).getByRole("button", { name: "Ukończ: Bieżący krok" }).focus();
+  await user.keyboard("{Shift>}{Enter}{/Shift}");
+  const dialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+  await user.click(within(dialog).getByRole("button", { name: /W toku/ }));
+  await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /^Status: W toku\./ })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cofnij" }));
-  expect(await within(actions).findByRole("button", { name: "Zmień status: Do zrobienia — Bieżący krok" })).toBeInTheDocument();
+  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /^Status: Do zrobienia\./ })).toBeInTheDocument();
 });
 
 it("filtruje pełną listę Działań w Przeglądzie i zachowuje filtr po przejściu do sekcji", async () => {

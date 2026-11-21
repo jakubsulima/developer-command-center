@@ -14,8 +14,8 @@ export async function completeActionWithUndo({
   setActionStatus: AppStore["setActionStatus"];
   undoActionCompletion: AppStore["undoActionCompletion"];
   notifyUndo: ActionFeedbackValue["notifyUndo"];
-  hasResult: boolean;
-  onAddResult: () => void;
+  hasResult?: boolean;
+  onAddResult?: () => void;
 }) {
   const previous = { goalId: action.goalId, status: action.status, blocker: action.blocker, reviewOn: action.reviewOn, isNext: action.isNext };
   const undoCommandId = crypto.randomUUID();
@@ -46,6 +46,6 @@ export async function completeActionWithUndo({
         throw error;
       }
     },
-    ...(!hasResult ? { action: { label: "Dodaj rezultat", onClick: onAddResult } } : {}),
+    ...(onAddResult && !hasResult ? { action: { label: "Dodaj rezultat", onClick: onAddResult } } : {}),
   });
 }

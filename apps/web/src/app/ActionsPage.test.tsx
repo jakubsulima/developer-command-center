@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { configure, render, screen, within } from "@testing-library/react";
+import { configure, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,9 +58,14 @@ describe("lista wszystkich Działań", () => {
       if (event.query.queryKey[0] === "workspace-page" && event.query.queryKey[1] === "actions") states.push(event.query.state.status);
     });
     try {
-      await user.click(screen.getByRole("button", { name: "Zmień status: Do zrobienia — Spisać stałe koszty" }));
-      await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W toku/ }));
-      expect(await screen.findByRole("button", { name: "Zmień status: W toku — Spisać stałe koszty" })).toBeInTheDocument();
+      const trigger = screen.getByRole("button", { name: "Ukończ: Spisać stałe koszty" });
+      trigger.focus();
+      await user.keyboard("{Shift>}{Enter}{/Shift}");
+      const dialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+      expect(dialog.parentElement).toHaveClass("action-status-menu-backdrop");
+      await user.click(within(dialog).getByRole("button", { name: /W toku/ }));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      expect(await screen.findByRole("button", { name: "Ukończ: Spisać stałe koszty", description: /^Status: W toku\./ })).toBeInTheDocument();
       expect(title.isConnected).toBe(true);
       expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBe(title);
       expect(states.length).toBeGreaterThan(0);
@@ -207,9 +212,9 @@ describe("lista wszystkich Działań", () => {
     const user = userEvent.setup();
     renderApp();
     const row = (await screen.findByRole("link", { name: "Spisać stałe koszty" })).closest("section") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Spisać stałe koszty" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
-    expect((await screen.findAllByRole("status")).some((status) => status.textContent?.includes("Status zmieniono na „Ukończone”."))).toBe(true);
+    await user.click(within(row).getByRole("button", { name: "Ukończ: Spisać stałe koszty" }));
+    expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Zmień status Działania" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Spisać stałe koszty" })).not.toBeInTheDocument();
   });
 
@@ -220,26 +225,48 @@ describe("lista wszystkich Działań", () => {
     const row = link.closest("section") as HTMLElement;
 
     expect(within(row).queryByText("Do zrobienia")).not.toBeInTheDocument();
-    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Pobrać historię transakcji" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Ukończone/ }));
-    expect(await screen.findByText("Status zmieniono na „Ukończone”.")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Ukończ: Pobrać historię transakcji" }));
+    expect(await screen.findByText("Działanie ukończone.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pobrać historię transakcji" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cofnij" }));
     expect(await screen.findByRole("link", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
   });
 
-  it("zmienia status bezpośrednio z wiersza bez dodatkowego menu", async () => {
+  it("otwiera menu po przytrzymaniu wiersza i zwija je po wyborze statusu", async () => {
     const state = structuredClone(demoState);
     state.actions = [{ ...state.actions[1]!, id: "late-pinned", title: "Zaległy przypięty krok", pinnedToToday: true, scheduledFor: "2026-08-01" }];
     localStorage.setItem("command-center-state-v1", JSON.stringify(state));
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
-    const row = (await screen.findByRole("link", { name: "Zaległy przypięty krok" })).closest("section") as HTMLElement;
+    const title = await screen.findByRole("link", { name: "Zaległy przypięty krok" });
+    const row = title.closest("section") as HTMLElement;
     expect(within(row).queryByRole("button", { name: "Więcej opcji: Zaległy przypięty krok" })).not.toBeInTheDocument();
-    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Zaległy przypięty krok" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /W trakcie testowania/ }));
-    expect(await screen.findByRole("button", { name: "Zmień status: W trakcie testowania — Zaległy przypięty krok" })).toBeInTheDocument();
+    await user.pointer({ keys: "[MouseLeft>]", target: title });
+    const dialog = await screen.findByRole("dialog", { name: "Zmień status Działania" });
+    expect(dialog.parentElement).toHaveClass("action-status-menu-backdrop");
+    const options = within(dialog).getByRole("group", { name: "Nowy status Działania" });
+    expect(within(dialog).getAllByRole("button")).toEqual(within(options).getAllByRole("button"));
+    expect(within(dialog).queryByRole("heading")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Zaległy przypięty krok")).not.toBeInTheDocument();
+    await user.pointer("[/MouseLeft]");
+    expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue");
+    expect(screen.queryByText("Działanie ukończone.")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /W trakcie testowania/ }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(await screen.findByRole("button", { name: "Ukończ: Zaległy przypięty krok", description: /^Status: W trakcie testowania\./ })).toBeInTheDocument();
+  });
+
+  it("przywraca ukończone Działanie po kliknięciu ikony", async () => {
+    const state = structuredClone(demoState);
+    state.actions = [{ ...state.actions[1]!, status: "completed", completedAt: "2026-08-01T08:00:00.000Z" }];
+    const title = state.actions[0]!.title;
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp("/actions?view=completed");
+    await user.click(await screen.findByRole("button", { name: `Przywróć: ${title}` }));
+    expect(await screen.findByText("Status zmieniono na „Do zrobienia”.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: title })).not.toBeInTheDocument();
   });
 
   it("anuluje pojedyncze Działanie, zachowuje rekord i pozwala je cofnąć", async () => {
@@ -249,10 +276,13 @@ describe("lista wszystkich Działań", () => {
     const user = userEvent.setup();
     renderApp("/actions?view=overdue");
     const row = (await screen.findByRole("link", { name: "Anulowany krok" })).closest("section") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Zmień status: Do zrobienia — Anulowany krok" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Zmień status Działania" })).getByRole("button", { name: /Anulowane/ }));
+    within(row).getByRole("button", { name: "Ukończ: Anulowany krok" }).focus();
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    const dialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
+    await user.click(within(dialog).getByRole("button", { name: /Anulowane/ }));
     expect(await screen.findByText("Status zmieniono na „Anulowane”.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Anulowany krok" })).not.toBeInTheDocument();
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Cofnij" }));
     expect(await screen.findByRole("link", { name: "Anulowany krok" })).toBeInTheDocument();
   });
