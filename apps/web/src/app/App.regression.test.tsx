@@ -263,12 +263,16 @@ describe("regresje nowego modelu grup działań", () => {
     expect(await screen.findByRole("heading", { name: "Portfolio v2" })).toBeInTheDocument();
   });
 
-  it("otwiera wyszukiwanie mobilne w osobnym panelu i zamyka je po nawigacji", async () => {
+  it("otwiera wyszukiwanie mobilne z menu Więcej i zamyka je po nawigacji", async () => {
     const user = userEvent.setup();
     sessionStorage.removeItem("command-global-search");
     renderApp("/routines");
-    await user.click(await screen.findByRole("button", { name: "Otwórz wyszukiwanie" }));
-    let dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    const openSearch = async () => {
+      await user.click(await screen.findByRole("button", { name: "Otwórz menu Więcej" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("button", { name: /^Wyszukaj/ }));
+      return screen.findByRole("dialog", { name: "Wyszukiwanie globalne" });
+    };
+    let dialog = await openSearch();
     let search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
     await waitFor(() => expect(search).toHaveFocus());
     expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
@@ -277,8 +281,7 @@ describe("regresje nowego modelu grup działań", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Wyszukiwanie globalne" })).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "Otwórz wyszukiwanie" }));
-    dialog = screen.getByRole("dialog", { name: "Wyszukiwanie globalne" });
+    dialog = await openSearch();
     search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
     await waitFor(() => expect(search).toHaveFocus());
     await user.type(search, "Portfolio");

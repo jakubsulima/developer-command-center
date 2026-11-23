@@ -104,7 +104,9 @@
   .actions-collection .actions-list-row:last-child { border-radius: 0 0 var(--actions-row-radius) var(--actions-row-radius); }
   .actions-collection .actions-list-row:only-child { border-radius: var(--actions-row-radius); }
   .actions-collection .actions-list-row + .actions-list-row { border-top: 1px solid var(--border); }
-  .actions-collection .actions-list-row:hover { background: var(--card); }
+  @media (hover: hover) {
+    .actions-collection .actions-list-row:hover { background: var(--card); }
+  }
   .actions-collection .actions-list-row > .action-list-row-copy,
   .actions-collection .actions-list-row .action-list-row-copy > .action-signals { display: contents; }
   .actions-collection .action-list-row-status { grid-column: 1; grid-row: 1; }
@@ -243,7 +245,6 @@
   /* Keep the library's controls with its list when a preview is open. */
   .knowledge-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--space-5); }
   .knowledge-collection { display: block; min-width: 0; }
-  .knowledge-page-heading .page-heading { margin-bottom: var(--space-5); }
   .knowledge-section-bar { margin: 0 0 var(--space-5); }
   .knowledge-controls { display: grid; gap: var(--space-4); margin: 0; }
   .knowledge-filter-topbar { gap: var(--space-2); }

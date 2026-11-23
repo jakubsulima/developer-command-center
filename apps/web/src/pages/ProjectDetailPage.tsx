@@ -242,7 +242,7 @@ export function ProjectDetailPage() {
     <div className="project-detail-toolbar">
       <ContextNavigation current={{ label: project.name, to: projectUrl }} fallbackBreadcrumbs={[{ label: "Projekty", to: "/projects" }]} fallbackReturnTo="/projects" fallbackReturnLabel="Wszystkie Projekty" showBack />
       <div className="project-heading-tools">
-        <PageActions search={false} />
+        <PageActions />
         <details className="project-more-menu project-management-menu">
           <summary aria-label={`Opcje Projektu: ${project.name}`} aria-haspopup="menu" title="Opcje Projektu"><MoreHorizontal aria-hidden="true" /></summary>
           <div role="menu" aria-label={`Zarządzaj Projektem: ${project.name}`}>

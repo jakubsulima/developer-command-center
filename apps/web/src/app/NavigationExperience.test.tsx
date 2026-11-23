@@ -102,6 +102,24 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(aiLink).not.toHaveAttribute("aria-current");
   });
 
+  it("zachowuje ten sam górny pasek podczas zmiany widoków podsumowania", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/review?tab=ai");
+    const search = await screen.findByRole("button", { name: "Otwórz wyszukiwanie" });
+    const add = screen.getByRole("button", { name: "Dodaj" });
+
+    for (const name of ["Tydzień", "Plan", "Historia", "AI"]) {
+      await user.click(screen.getByRole("tab", { name }));
+      expect(screen.getByRole("tab", { name, selected: true })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Otwórz wyszukiwanie" })).toBe(search);
+      expect(screen.getByRole("button", { name: "Dodaj" })).toBe(add);
+    }
+
+    await user.click(search);
+    expect(within(screen.getByRole("search", { name: "Wyszukiwanie globalne" })).getByRole("combobox")).toHaveFocus();
+  });
+
   it("przenosi pełny kontekst przez Projekt → Grupa działań → Działanie → Wiedza i wraca do źródła", async () => {
     seedNavigationState();
     const user = userEvent.setup();

@@ -21,7 +21,6 @@
   background: var(--secondary);
   color: var(--foreground);
 }
-.start-workspace > .start-capture-link:hover { background: var(--surface-hover); }
 .start-capture-link strong { font-size: 14px; font-weight: 600; line-height: 20px; }
 .start-workspace .start-capture-icon {
   display: grid;
@@ -64,7 +63,12 @@
   border-radius: 0;
   background: transparent;
 }
-.start-context-link:hover, .start-context > .return-to-work:hover, .start-ai-help > summary:hover { background: var(--surface-hover); }
+@media (hover: hover) {
+  .start-workspace > .start-capture-link:hover,
+  .start-context-link:hover,
+  .start-context > .return-to-work:hover,
+  .start-ai-help > summary:hover { background: var(--surface-hover); }
+}
 .start-context > .return-to-work small { display: block; color: var(--muted-foreground); font-size: 12px; }
 .start-context > .return-to-work strong { display: block; font-weight: 600; line-height: 20px; }
 .start-context :is(.start-context-link, .return-to-work, summary) > svg {

@@ -142,7 +142,7 @@ export function KnowledgePage() {
   return (
     <AppShell addAction={{ label: section === "library" ? "Nowa Wiedza" : "Do Skrzynki", shortLabel: section === "library" ? "Wiedza" : "Skrzynka", ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : "Dodaj do Skrzynki", quickAdd: creationRequest }}>
 
-      <div className="knowledge-page-heading"><PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" /></div>
+      <PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" />
       <div className="knowledge-section-bar">
         <div className="knowledge-section-tabs" role="tablist" aria-label="Widoki Wiedzy">
           <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{knowledgePage.data?.totalCount ?? "…"}</small></button>
