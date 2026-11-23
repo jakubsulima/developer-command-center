@@ -2699,7 +2699,6 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 }
 
 @media (max-width: 767px) {
-  .knowledge-page-heading { display:none; }
   .modal.knowledge-create-modal { height:min(720px, calc(100dvh - 20px)); }
   .knowledge-section-bar { @apply [align-items:stretch]; @apply [gap:8px]; @apply [margin:-8px_0_var(--space-4)]; }
   .knowledge-section-tabs { @apply [min-width:0]; @apply [flex:1]; @apply [gap:16px]; @apply [overflow:hidden]; }
@@ -4159,7 +4158,7 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 
 /* Weekly review: switch between one focused card at a time. */
 .weekly-review-workspace { display:grid; gap:var(--space-4); width:min(1200px,100%); }
-.weekly-review-page-heading { margin-bottom:var(--space-5); }
+.weekly-review-status { display:flex; justify-content:flex-end; margin-bottom:var(--space-2); }
 .weekly-review-tablist { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-bottom:1px solid var(--border); }
 .weekly-review-tab { min-width:0; min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px; padding:var(--space-2); border:0; border-bottom:2px solid transparent; color:var(--muted-foreground); background:transparent; font-size:13px; font-weight:500; white-space:nowrap; cursor:pointer; transition:color var(--motion-control) ease, border-color var(--motion-control) ease; }
 .weekly-review-tab:hover { color:var(--foreground); }
@@ -4200,12 +4199,6 @@ kbd, .timer, .budget-value, .context-chips, .checkpoint-next { @apply [font-fami
 .weekly-plan-close-link svg { width:15px; height:15px; }
 
 @media (max-width: 767px) {
-  .main-content:has(.weekly-review-page-heading) { padding-top:var(--space-4); }
-  .main-content:has(.weekly-review-workspace) .weekly-review-page-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:var(--space-2); margin-bottom:var(--space-4); }
-  .weekly-review-page-heading > div { min-width:0; }
-  .weekly-review-page-heading h1 { font-size:20px; line-height:1.2; letter-spacing:-.02em; }
-  .weekly-review-page-heading > .badge { grid-column:2; grid-row:1 / span 2; align-self:start; margin-top:0; }
-  .weekly-review-page-heading .eyebrow { font-size:11px; line-height:1.35; }
   .weekly-review-workspace { gap:var(--space-2); }
   .weekly-review-tab { padding-inline:0; font-size:12px; }
   .weekly-review-tab svg { display:none; }

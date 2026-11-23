@@ -40,7 +40,7 @@ export function SettingsPage() {
     }
   };
 
-  return <AppShell>
+  return <AppShell addAction={{ label: "Dodaj", ariaLabel: "Dodaj" }}>
     <PageHeading title="Ustawienia" eyebrow="Preferencje przestrzeni pracy" />
     <div className="settings-sections">
     <details className="settings-section" open={hash === "#quick-capture"}><summary><Smartphone /><span><strong>Szybki zapis</strong><small>Skrót na iPhonie i dostęp do zapisu jednym dotknięciem</small></span><ChevronDown /></summary><div className="settings-section-content"><IPhoneCaptureSetup /></div></details>

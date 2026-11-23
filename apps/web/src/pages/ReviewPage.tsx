@@ -30,7 +30,6 @@ const reviewTabs = [
   { id: "history", label: "Historia", icon: RefreshCw, title: "Historia i stan przestrzeni" }
 ] as const;
 type ReviewTab = typeof reviewTabs[number]["id"];
-const isReviewTab = (value: string | null): value is ReviewTab => reviewTabs.some((tab) => tab.id === value);
 
 interface WeeklyReviewNoteDraft { note: string; pendingRevisionId?: string }
 
@@ -46,7 +45,8 @@ export function ReviewPage() {
   const draft = usePersistentDraft<WeeklyReviewNoteDraft>("weekly-review-note", { note: "" }, 450, { targetId: weekly.startDate, migrateFrom: { kind: "weekly-review-note" } });
   const nextWeek = nextWorkspaceWeek(now, state.workspaceTimezone);
   const requestedTab = new URLSearchParams(location.search).get("tab");
-  const activeTab: ReviewTab = isReviewTab(requestedTab) ? requestedTab : "summary";
+  const activeView = reviewTabs.find((tab) => tab.id === requestedTab) ?? reviewTabs[0];
+  const activeTab = activeView.id;
   const aiTabActive = activeTab === "ai";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -223,20 +223,11 @@ export function ReviewPage() {
   };
 
   return (
-    <AppShell addAction={aiTabActive ? { label: "Dodaj", ariaLabel: "Dodaj" } : undefined}>
-      {aiTabActive ? (
-        <PageHeading title="Przegląd grup działań z AI" mobileBrand />
-      ) : (
-        <>
-          <CurrentWeekPlanNotice read={planRead} />
-          <PageHeading
-            className="weekly-review-page-heading"
-            title="Podsumowanie tygodnia"
-            eyebrow={`${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
-            action={completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}
-          />
-        </>
-      )}
+    <AppShell addAction={{ label: "Dodaj", ariaLabel: "Dodaj" }}>
+      <PageHeading
+        title={aiTabActive ? activeView.title : reviewTabs[0].title}
+        eyebrow={aiTabActive ? undefined : `${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
+      />
       <div className="weekly-review-workspace">
         <div className="weekly-review-tablist" role="tablist" aria-label="Widoki podsumowania tygodnia">
           {reviewTabs.map((tab, index) => {
@@ -257,6 +248,10 @@ export function ReviewPage() {
         </div>
 
         <div className="weekly-review-tabpanels">
+          {!aiTabActive ? <>
+            <CurrentWeekPlanNotice read={planRead} />
+            <div className="weekly-review-status">{completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}</div>
+          </> : null}
           <div id="weekly-review-panel-summary" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-summary" hidden={activeTab !== "summary"} tabIndex={0}>
             <Panel className="review-main weekly-summary-card">
               <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.metricsAvailable ? weekly.generatedSummary : "Czekam na aktualne dane tygodnia."}</p></span></div>

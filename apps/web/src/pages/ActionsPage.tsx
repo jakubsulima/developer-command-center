@@ -300,7 +300,7 @@ export function ActionsPage() {
 
   return (
     <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie", quickAdd: { mode: "action", pinnedToToday: false, draftKey: "actions-list" } }}>
-      <PageHeading title="Działania" className="actions-page-heading" mobileBrand />
+      <PageHeading title="Działania" className="actions-page-heading" />
       <section className="actions-toolbar" aria-label="Filtry Działań">
         <div className="actions-toolbar-topline">
           <div className="actions-view-tabs" role="group" aria-label="Szybkie widoki Działań">

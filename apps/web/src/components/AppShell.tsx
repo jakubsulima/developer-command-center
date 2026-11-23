@@ -228,10 +228,9 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   if (loading) return <AppLoading label="Ładowanie przestrzeni pracy…" />;
 
   return (
-    <PageActionsContext.Provider value={{
-      add: addAction?.menu ? <AddMenu label={addAction.label} ariaLabel={addAction.ariaLabel} items={addAction.menu} disabled={loadingView} onSelect={openQuickAdd} /> : addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null,
-      search: <button className="icon-button page-search-button" disabled={loadingView} aria-label="Otwórz wyszukiwanie" onClick={() => setMobileSearchOpen(true)}><Search /></button>
-    }}>
+    <PageActionsContext.Provider value={
+      addAction?.menu ? <AddMenu label={addAction.label} ariaLabel={addAction.ariaLabel} items={addAction.menu} disabled={loadingView} onSelect={openQuickAdd} /> : addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null
+    }>
     <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${mobileHeaderHidden ? " mobile-header-hidden" : ""}`}>
       <aside className="sidebar">
         <div className="brand"><CommandBrand /></div>
@@ -319,12 +318,12 @@ function CommandBrand({ compact = false }: { compact?: boolean }) {
   return <><span className="brand-mark"><TerminalSquare aria-hidden="true" /></span>{compact ? null : <span>Command</span>}</>;
 }
 
-export function PageActions({ search = true, children }: { search?: boolean; children?: ReactNode }) {
-  const actions = useContext(PageActionsContext);
-  return <div className="page-actions">{search ? actions.search : null}{children}{actions.add}</div>;
+export function PageActions({ children }: { children?: ReactNode }) {
+  const add = useContext(PageActionsContext);
+  return <div className="page-actions">{children}{add}</div>;
 }
 
-export function PageHeading({ title, eyebrow, action, className = "", mobileBrand = false }: { title: string; eyebrow?: string; action?: ReactNode; className?: string; mobileBrand?: boolean }) {
+export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
@@ -352,10 +351,10 @@ export function PageHeading({ title, eyebrow, action, className = "", mobileBran
   };
 
   return (
-    <div className={`page-heading ${className}${searchOpen ? " is-search-open" : ""}`.trim()} data-mobile-brand={mobileBrand || undefined}>
+    <div className={`page-heading ${className}${searchOpen ? " is-search-open" : ""}`.trim()}>
       <div className="page-heading-copy">
         <h1>{title}</h1>
-        {mobileBrand ? <div className="mobile-brand"><CommandBrand compact={searchOpen} /></div> : null}
+        <div className="mobile-brand" aria-hidden="true"><CommandBrand compact={searchOpen} /></div>
         {eyebrow && !searchOpen && <span className="eyebrow">{eyebrow}</span>}
       </div>
       {searchOpen ? <div ref={searchPanelRef} id="page-inline-search-panel" className="page-inline-search" role="search" aria-label="Wyszukiwanie globalne" onBlur={(event) => {
@@ -368,8 +367,8 @@ export function PageHeading({ title, eyebrow, action, className = "", mobileBran
         <GlobalSearch id="page-inline-search" autoFocus onNavigate={() => setSearchOpen(false)} />
         <button className="page-inline-search-close" type="button" onClick={closeSearch}>Zamknij</button>
       </div> : <>
-        <PageActions search={!mobileBrand}>
-          {mobileBrand ? <button ref={searchTriggerRef} id="page-inline-search-trigger" type="button" className="icon-button page-search-button" aria-label="Otwórz wyszukiwanie" onClick={() => setSearchOpen(true)}><Search aria-hidden="true" /></button> : null}
+        <PageActions>
+          <button ref={searchTriggerRef} id="page-inline-search-trigger" type="button" className="icon-button page-search-button" aria-label="Otwórz wyszukiwanie" onClick={() => setSearchOpen(true)}><Search aria-hidden="true" /></button>
         </PageActions>
         {action ? <div className="page-heading-secondary">{action}</div> : null}
       </>}

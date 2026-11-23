@@ -53,7 +53,7 @@ export function ProjectsPage() {
   }])), [state]);
 
   return <AppShell addAction={{ label: "Nowy Projekt", shortLabel: "Projekt", ariaLabel: "Dodaj nowy Projekt", quickAdd: { mode: "project", pinnedToToday: false, draftKey: "projects-list", projectCategoryIds: categoryFilter && categoryFilter !== "uncategorized" ? [categoryFilter] : [] } }}>
-    <PageHeading className="project-page-heading" title="Projekty" mobileBrand eyebrow={viewSummary} action={<div className="project-heading-actions">
+    <PageHeading className="project-page-heading" title="Projekty" eyebrow={viewSummary} action={<div className="project-heading-actions">
       <span className={`project-view-status project-view-status-${view}`} aria-label={`Widok: ${viewLabel}`}><span aria-hidden="true" />{viewLabel}</span>
       {!desktop ? <details className="project-category-menu">
         <summary aria-label="Więcej opcji widoku" title="Więcej opcji widoku"><MoreHorizontal /><span className="sr-only">Więcej opcji widoku</span></summary>
