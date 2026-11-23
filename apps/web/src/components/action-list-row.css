@@ -10,8 +10,11 @@
   border-bottom: 1px solid var(--border);
   touch-action: manipulation;
 }
-.action-list-row:hover,
-.action-list-row:focus-within { background: var(--surface-hover); }
+.action-list-row:is(:focus-visible, :has(:focus-visible)) { background: var(--surface-hover); }
+@media (hover: hover) {
+  .action-list-row:hover { background: var(--surface-hover); }
+  .action-list-row-context a:hover { color: var(--ring); }
+}
 .action-list-row-status > .action-status-icon {
   display: grid;
   place-items: center;
@@ -53,7 +56,6 @@
   font-size: 12px;
   line-height: 16px;
 }
-.action-list-row-context a:hover { color: var(--ring); }
 .action-list-row-description { white-space: pre-line; }
 .action-list-row .action-list-row-copy > .action-signals {
   display: flex;

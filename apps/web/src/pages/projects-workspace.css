@@ -48,7 +48,10 @@
   overflow-wrap: anywhere;
 }
 .project-list > .project-index-row + .project-index-row { border-top: 1px solid var(--border); }
-.project-list > .project-index-row:has(.project-card-link):is(:hover, :focus-within) { background: var(--surface-hover); }
+.project-list > .project-index-row:has(.project-card-link):is(:focus-visible, :has(:focus-visible)) { background: var(--surface-hover); }
+@media (hover: hover) {
+  .project-list > .project-index-row:has(.project-card-link):hover { background: var(--surface-hover); }
+}
 .project-row-identity,
 .project-row-signal,
 .project-row-description,

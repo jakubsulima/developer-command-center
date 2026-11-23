@@ -104,7 +104,9 @@
   .actions-collection .actions-list-row:last-child { border-radius: 0 0 var(--actions-row-radius) var(--actions-row-radius); }
   .actions-collection .actions-list-row:only-child { border-radius: var(--actions-row-radius); }
   .actions-collection .actions-list-row + .actions-list-row { border-top: 1px solid var(--border); }
-  .actions-collection .actions-list-row:hover { background: var(--card); }
+  @media (hover: hover) {
+    .actions-collection .actions-list-row:hover { background: var(--card); }
+  }
   .actions-collection .actions-list-row > .action-list-row-copy,
   .actions-collection .actions-list-row .action-list-row-copy > .action-signals { display: contents; }
   .actions-collection .action-list-row-status { grid-column: 1; grid-row: 1; }

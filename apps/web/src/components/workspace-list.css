@@ -13,7 +13,7 @@
   grid-template-columns: var(--workspace-row-leading-width) minmax(0, 1fr);
   align-items: start;
 }
-.workspace-list-row:hover, .workspace-list-row:focus-within { background: var(--surface-hover); }
+.workspace-list-row:is(:focus-visible, :has(:focus-visible)) { background: var(--surface-hover); }
 .workspace-row-leading { display: grid; place-items: center; color: var(--muted-foreground); }
 li.workspace-list-row > .workspace-row-leading > svg { margin-block-start: var(--space-2); }
 li.workspace-list-row > .workspace-row-leading > button { width: 100%; height: 44px; }
@@ -42,4 +42,8 @@ li.workspace-list-row > .workspace-row-leading > button { width: 100%; height: 4
   font-size: 12px;
   line-height: 17px;
 }
-.workspace-row-link:hover strong, .workspace-row-link:focus-visible strong { color: var(--ring); }
+.workspace-row-link:focus-visible strong { color: var(--ring); }
+@media (hover: hover) {
+  .workspace-list-row:hover { background: var(--surface-hover); }
+  .workspace-row-link:hover strong { color: var(--ring); }
+}

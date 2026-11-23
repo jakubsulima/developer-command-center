@@ -1,5 +1,8 @@
 .action-status-trigger { --action-status-color:#8b9bb0; display:inline-flex; align-items:center; gap:var(--space-2); width:max-content; max-width:100%; min-height:28px; margin:var(--space-2) 0 0 -8px; padding:0 var(--space-2); border:0; border-radius:var(--radius-control); color:var(--action-status-color); background:transparent; font:inherit; font-size:11px; font-weight:600; line-height:16px; cursor:pointer; }
-.action-status-trigger:hover, .action-status-trigger:focus-visible { background:color-mix(in srgb, var(--action-status-color) 12%, transparent); }
+.action-status-trigger:focus-visible { background:color-mix(in srgb, var(--action-status-color) 12%, transparent); }
+@media (hover: hover) {
+  .action-status-trigger:hover { background:color-mix(in srgb, var(--action-status-color) 12%, transparent); }
+}
 .action-status-trigger .action-status-trigger-chevron { width:12px; height:12px; opacity:.72; }
 :is(.action-status-trigger, .action-status-option, .project-action-group-heading).ready { --action-status-color:#8b9bb0; }
 :is(.action-status-trigger, .action-status-option, .project-action-group-heading).in_progress { --action-status-color:#60a5fa; }
