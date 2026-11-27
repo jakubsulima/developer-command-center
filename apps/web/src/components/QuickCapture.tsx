@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { CaptureComposer } from "./CaptureComposer";
 import { useActionFeedback } from "./action-feedback-context";
-import { lazy, Suspense, useState, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
 import { useAuth } from "../auth/useAuth";
 import { draftStorageKey } from "../hooks/usePersistentDraft";
 import { requestAppQuickAdd } from "./appQuickAddRequest";
@@ -26,17 +26,46 @@ export function QuickCapture({ onClose, closeGuard, onSavingChange }: { onClose?
   const { notifyUndo } = useActionFeedback();
   const navigate = useNavigate();
   const [previousOpen, setPreviousOpen] = useState(false);
+  const undoLock = useRef(false);
+  const [undoing, setUndoing] = useState(false);
+  const [undoError, setUndoError] = useState("");
   const [receipt, setReceipt] = useState<InboxItem>();
+  const receiptRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (receipt) receiptRef.current?.focus(); }, [receipt]);
   const address = (item: InboxItem) => `/knowledge?section=inbox&status=${item.status}&item=${item.id}`;
   return <>
     {previousOpen ? <Suspense fallback={<p role="status">Otwieranie szkicu…</p>}><PreviousQuickAdd open onClose={() => setPreviousOpen(false)} /></Suspense> : null}
-    {hasPreviousDraft ? <p>Masz wcześniejszy szkic. <Button variant="ghost" onClick={() => { if (closeGuard?.current && !closeGuard.current()) return; if (onClose) { onClose(); requestAppQuickAdd(); } else setPreviousOpen(true); }}>Otwórz poprzedni formularz</Button></p> : null}
-    <CaptureComposer id="quick-capture-content" draftKey="quick-capture" closeGuard={closeGuard} onSavingChange={onSavingChange} onSubmit={capture} onClose={onClose} onSuccess={(item) => {
+    {hasPreviousDraft && !receipt ? <p>Masz wcześniejszy szkic. <Button variant="ghost" onClick={() => { if (closeGuard?.current && !closeGuard.current()) return; if (onClose) { onClose(); requestAppQuickAdd(); } else setPreviousOpen(true); }}>Otwórz poprzedni formularz</Button></p> : null}
+    {!receipt && <CaptureComposer id="quick-capture-content" draftKey="quick-capture" closeGuard={closeGuard} onSavingChange={onSavingChange} onSubmit={capture} onClose={onClose} onSuccess={(item) => {
       if (!item) return;
-      setReceipt(item);
+      if (!onClose) { setUndoError(""); setReceipt(item); return; }
       notifyUndo({ event: "saved", message: "Zapisano w Skrzynce.", undo: () => undoCapture(item.id), action: { label: "Otwórz", onClick: () => navigate(address(item)) } });
       onClose?.();
-    }} />
-    {receipt && !onClose ? <div className="capture-receipt"><Link to={address(receipt)}>Otwórz zapis</Link><Link to={`${address(receipt)}&organize=true`}>Uporządkuj</Link><Button variant="ghost" onClick={() => { setReceipt(undefined); document.getElementById("quick-capture-content")?.focus(); }}>Zapisz kolejną myśl</Button></div> : null}
+    }} />}
+    {receipt && <div className="capture-receipt">
+      <p role="status" tabIndex={-1} ref={receiptRef}>Zapisano w Skrzynce.</p>
+      <Link className="button button-secondary" to={address(receipt)}>Otwórz zapis</Link>
+      <Button variant="primary" disabled={undoing} onClick={() => {
+        setReceipt(undefined);
+        requestAnimationFrame(() => document.getElementById("quick-capture-content")?.focus());
+      }}>Zapisz kolejną myśl</Button>
+      <Button variant="ghost" loading={undoing} onClick={async () => {
+        if (undoLock.current) return;
+        undoLock.current = true;
+        setUndoing(true);
+        setUndoError("");
+        try {
+          await undoCapture(receipt.id);
+          setReceipt(undefined);
+          requestAnimationFrame(() => document.getElementById("quick-capture-content")?.focus());
+        } catch {
+          setUndoError("Nie udało się cofnąć zapisu. Spróbuj ponownie.");
+        } finally {
+          undoLock.current = false;
+          setUndoing(false);
+        }
+      }}>Cofnij zapis</Button>
+      {undoError && <p role="alert">{undoError}</p>}
+    </div>}
   </>;
 }

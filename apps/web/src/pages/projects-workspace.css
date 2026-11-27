@@ -104,7 +104,7 @@
 .project-row-metrics > span { display: inline-flex; flex-direction: row-reverse; align-items: baseline; gap: var(--space-2); }
 .project-row-metrics small { font-size: inherit; }
 .project-row-metrics strong { color: var(--secondary-foreground); font-weight: 500; font-variant-numeric: tabular-nums; }
-.project-row-history > .button { min-height: 44px; white-space: normal; }
+.project-row-history > .button { position: relative; z-index: 1; min-height: 44px; white-space: normal; }
 
 @media (min-width: 1200px) {
   .projects-index {
@@ -133,4 +133,13 @@
   .project-row-signal > svg { height: var(--workspace-row-line-height); }
   .project-row-metrics { grid-column: 3; grid-row: 1; line-height: var(--workspace-row-line-height); }
   .project-row-history { grid-column: 4; grid-row: 1; }
+}
+
+.project-group-empty { display: grid; justify-items: start; gap: 8px; }
+.project-overview-compact-actions { margin-top: 16px; }
+@media (max-width: 1199px) {
+  .project-overview-workspace .project-desktop-context { display: grid; gap: 16px; margin-top: 16px; }
+  .project-overview-workspace .project-desktop-context > .panel { padding: 16px; }
+  .project-overview-context-list { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+  .project-overview-context-list a { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; }
 }

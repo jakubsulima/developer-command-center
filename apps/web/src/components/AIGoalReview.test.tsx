@@ -10,7 +10,7 @@ import { humanizeEntityReferences } from "../domain/humanizeAIText";
 
 function renderReview() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<MemoryRouter initialEntries={["/review"]}><QueryClientProvider client={client}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={["/ai"]}><QueryClientProvider client={client}><DemoAuthProvider><StoreProvider><App /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 }
 
 function renderStart() {
@@ -38,23 +38,30 @@ describe("AIGoalReview", () => {
   it("wymaga świadomej zgody i pokazuje deterministyczną symulację", async () => {
     const user = userEvent.setup();
     renderReview();
-    await user.click(await screen.findByRole("tab", { name: "AI" }));
-    await screen.findByRole("heading", { name: "Przegląd grup działań z AI" });
-    await user.click(screen.getByRole("button", { name: "Przeanalizuj moje grupy działań" }));
+    await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
-    expect(within(consent).getByText(/nie wysyłamy profilu/i)).toBeInTheDocument();
+    expect(within(consent).getByText(/Obliczenia odbywają się w tej przeglądarce/i)).toBeInTheDocument();
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
     expect(await screen.findByText("Zakres analizy")).toBeInTheDocument();
     expect(screen.getByText("Symulacja")).toBeInTheDocument();
+    await user.click(screen.getAllByText("Uzasadnienie, źródła i ocena")[0]!);
     const target = screen.getAllByLabelText("Dotyczy")[0]!;
     expect(within(target).getByRole("link", { name: /Zbudować spokojny budżet domowy/i })).toHaveAttribute("href", "/goals/goal-budget");
     expect(screen.queryByRole("link", { name: /Przejdź do grupy/ })).not.toBeInTheDocument();
+
+    const recommendations = screen.getByRole("heading", { name: "Zalecenia AI" });
+    const options = screen.getByLabelText("Więcej opcji");
+    await user.click(options);
+    await user.click(screen.getByRole("button", { name: "Wygeneruj ponownie" }));
+    const confirmation = screen.getByRole("dialog", { name: "Wygenerować nowy Przegląd AI?" });
+    await user.click(within(confirmation).getByRole("button", { name: "Anuluj" }));
+    expect(options).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Zalecenia AI" })).toBe(recommendations);
   });
 
   it("draft AI nie zapisuje się przed zatwierdzeniem", async () => {
     const user = userEvent.setup();
     renderReview();
-    await user.click(await screen.findByRole("tab", { name: "AI" }));
     await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
     const add = await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" });
@@ -69,7 +76,6 @@ describe("AIGoalReview", () => {
   it("dodaje zalecenie AI do Planu wyłącznie po akceptacji i zapisuje wybrany dzień", async () => {
     const user = userEvent.setup();
     renderReview();
-    await user.click(await screen.findByRole("tab", { name: "AI" }));
     await user.click(await screen.findByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     await user.click(within(screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" })).getByRole("button", { name: /uruchom analizę/i }));
     await user.click((await screen.findAllByRole("button", { name: "Przejrzyj krok i zaplanuj" }))[0]!);
@@ -80,8 +86,8 @@ describe("AIGoalReview", () => {
     expect(nextWeekDate).toBeTruthy();
     await user.selectOptions(day, nextWeekDate!);
     await user.click(within(dialog).getByRole("button", { name: "Zatwierdź i dodaj do Planu" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Działanie dodane do Planu.");
-    await user.click(screen.getByRole("tab", { name: "Plan" }));
+    expect((await screen.findByText("Działanie dodane do Planu.")).closest('[role="status"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Otwórz Plan tygodnia" }));
     expect(await screen.findByRole("link", { name: title })).toBeInTheDocument();
   });
 
@@ -92,10 +98,10 @@ describe("AIGoalReview", () => {
     expect(screen.queryByText("Główna rekomendacja")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Przeanalizuj moje grupy działań" }));
     const consent = screen.getByRole("dialog", { name: "Zanim uruchomisz Przegląd AI" });
-    expect(within(consent).getByText(/aktywne grupy, ich kryteria/i)).toBeInTheDocument();
+    expect(within(consent).getByText(/Symulacja wykorzysta dane demonstracyjne/i)).toBeInTheDocument();
     await user.click(within(consent).getByRole("button", { name: /uruchom analizę/i }));
     expect(await screen.findByText("Główna rekomendacja")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/review?tab=ai");
+    expect(screen.getByRole("link", { name: /Zobacz pełną analizę/ })).toHaveAttribute("href", "/ai");
     expect(screen.getByRole("button", { name: /Sygnały i dalszy plan/ })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "Pomocne" }));
     expect(screen.getByRole("button", { name: "Pomocne" })).toHaveAttribute("aria-pressed", "true");

@@ -23,7 +23,10 @@ import { getFirstFlowSnapshot, recordFirstFlowStage } from "../lib/firstFlow";
 import { locationAddress } from "../domain/navigation";
 import { actionStatusLabels, polishCount } from "../domain/labels";
 import { AIStartGuidance } from "../components/AIStartGuidance";
-import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
+import { describeActionSchedule, resolveCompactRoutineTitle } from "../domain/actionPresentation";
+import { isActionVisibleInList } from "../domain/actionsList";
+import { isOpenAction } from "../domain/weeklyReview";
+import { setStartPinWithUndo } from "../components/setStartPinWithUndo";
 import "./start-workspace.css";
 
 function StartActionRow({ action, context, knowledgeCount, openStatus, onToggleComplete, busy, error, retry, breadcrumbs, returnTo, timeZone, today, routineTitle }: {
@@ -53,7 +56,7 @@ function StartActionRow({ action, context, knowledgeCount, openStatus, onToggleC
 }
 
 export function StartPage() {
-  const { state, mode, setActionStatus, undoActionCompletion, materializeRecurring } = useStore();
+  const { state, mode, updateAction, setActionStatus, undoActionCompletion, materializeRecurring } = useStore();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [searchParams] = useSearchParams();
@@ -61,6 +64,8 @@ export function StartPage() {
   const materializeOnMount = useRef(materializeRecurring);
   const [statusTarget, setStatusTarget] = useState<ActionStatusTarget>();
   const [resultActionId, setResultActionId] = useState<string>();
+  const [pickId, setPickId] = useState("");
+  const todayHeading = useRef<HTMLHeadingElement>(null);
   const now = useWorkspaceClock();
   const planRead = useCurrentWeekPlan(now);
   const currentPlan = planRead.plan;
@@ -103,8 +108,18 @@ export function StartPage() {
   };
 
   const todayItems = showAll("today") ? summary.todayActions : summary.todayActions.slice(0, 5);
-  const hasWork = summary.todayActions.length || summary.upcomingActions.length || summary.attentionCount;
-  const showNoPlan = !summary.isPristineWorkspace && summary.recommendation.kind === "calm" && !hasWork;
+  const candidates = todayItems.length ? [] : state.actions.filter((action) =>
+    isOpenAction(action) && action.status !== "blocked" && isActionVisibleInList(state, action)
+  );
+  const selected = candidates.find((action) => action.id === pickId);
+  const pinSelected = async () => {
+    if (!selected) return;
+    const saved = await mutation.run("start-pin", () => setStartPinWithUndo(selected, true, updateAction, notifyUndo));
+    if (saved) {
+      setPickId("");
+      todayHeading.current?.focus({ preventScroll: true });
+    }
+  };
 
   return <AppShell addAction={{ label: "Dodaj Działanie", shortLabel: "Działanie", ariaLabel: "Dodaj nowe Działanie na Starcie", quickAdd: { mode: "action", scheduledFor: currentDate, draftKey: "start" } }}>
     <PageHeading className="start-page-heading" title="Start" eyebrow={new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long", timeZone: state.workspaceTimezone }).format(now)} />
@@ -117,12 +132,25 @@ export function StartPage() {
 
       <section className="start-layout" aria-labelledby="start-today-title">
         <header className="start-section-heading">
-          <h2 id="start-today-title">Na dziś</h2>
+          <h2 id="start-today-title" ref={todayHeading} tabIndex={-1}>Na dziś</h2>
           <span className="start-today-count" aria-label={`${polishCount(summary.todayActions.length, "Działanie", "Działania", "Działań")} na dziś`}>{summary.todayActions.length}</span>
         </header>
         {todayItems.length ? <ul className="workspace-list" role="list">{todayItems.map(renderAction)}</ul> : <div className="start-today-empty">
           <p>{summary.isPristineWorkspace ? "Zacznij od jednego kroku" : "Nic nie jest zaplanowane ani przypięte na dziś."}</p>
-          {summary.isPristineWorkspace || showNoPlan ? <Button variant="secondary" onClick={() => requestAppQuickAdd({ mode: "action", scheduledFor: currentDate, draftKey: "start" })}><Plus aria-hidden="true" />{summary.isPristineWorkspace ? "Dodaj Działanie" : "Ustal następny krok"}</Button> : null}
+          {candidates.length > 0 && <form className="start-pick-action" onSubmit={(event) => { event.preventDefault(); void pinSelected(); }}>
+            <label htmlFor="start-existing-action">Wybierz istniejące Działanie</label>
+            <select id="start-existing-action" value={selected?.id ?? ""} disabled={mutation.isBusy("start-pin")} onChange={(event) => setPickId(event.target.value)}>
+              <option value="">Wybierz z listy</option>
+              {candidates.map((action) => {
+                const context = resolveActionContext(action, state);
+                const date = action.scheduledFor && describeActionSchedule(action, currentDate, state.workspaceTimezone);
+                return <option key={action.id} value={action.id}>{[action.title, context.name, date].filter(Boolean).join(" · ")}</option>;
+              })}
+            </select>
+            <Button type="submit" variant="primary" disabled={!selected} loading={mutation.isBusy("start-pin")}>Przypnij na dziś</Button>
+          </form>}
+          {mutation.error("start-pin") && <p role="alert">{mutation.error("start-pin")}</p>}
+          <Button variant="secondary" onClick={() => requestAppQuickAdd({ mode: "action", scheduledFor: currentDate, draftKey: "start" })}><Plus aria-hidden="true" />Dodaj Działanie</Button>
         </div>}
         {summary.todayActions.length > 5 ? <Link className="section-link" to={showAll("today") ? "/" : "/?show=today"}>{showAll("today") ? "Zwiń listę" : "Zobacz wszystkie"}</Link> : null}
       </section>

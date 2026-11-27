@@ -46,7 +46,7 @@ export function ActionResultDialog({ action, open, onClose }: { action?: GoalAct
   const close = () => { if (!locked.current && draft.flush()) onClose(); };
   return <CreationDialog open={open && Boolean(action)} closeDisabled={saving} title="Dodaj rezultat" onClose={close}><div className="quick-add"><CreationBody><fieldset className="creation-fields" disabled={saving || Boolean(completion.receipt)}>
     <p>Działanie: {action?.title}</p>
-    <p className="modal-intro">Rezultat zostanie zapisany jako kanoniczny element Wiedzy typu <strong>Rezultat</strong>. Ukończenie Działania pozostaje zapisane niezależnie od tego dialogu.</p>
+    <p className="modal-intro">{tab === "new" ? "Rezultat pojawi się w Wiedzy." : "Wybrany rezultat zostanie powiązany z tym działaniem."} {action?.status === "completed" ? "Działanie jest już ukończone." : "Status działania pozostanie bez zmian."}</p>
     <div className="result-tabs" role="tablist" aria-label="Sposób dodania rezultatu">
       <button type="button" role="tab" aria-selected={tab === "new"} onClick={() => setTab("new")}><FilePlus2 />Nowy rezultat</button>
       <button type="button" role="tab" aria-selected={tab === "existing"} onClick={() => setTab("existing")}><Link2 />Istniejący</button>

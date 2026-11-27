@@ -4,15 +4,15 @@ import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
-import { demoState } from "../data/demo";
+import { demoState, normalizeDemoWorkspace } from "../data/demo";
 import { emptyState } from "../data/empty";
 import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import { executeDomainCommand, type InboxTriageIntent } from "../domain/commands";
-import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
+import { migrateLegacyWorkspaceState } from "../domain/goals";
 import { materializeRecurringActions } from "../domain/recurrence";
 import { normalizeCapture } from "../domain/capture";
 import { releaseDueInboxItems } from "../domain/inbox";
-import type { ActionResultInput, AppState, CreateKnowledgeInput, InboxItem, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
+import type { ActionResultInput, AppState, CreateKnowledgeInput, GoalAction, InboxItem, NewLearningGoalInput, NewProjectInput, ProjectPreset } from "../domain/types";
 import { StoreContext, type AppStore, type CreatedProjectReference, type WeeklyReviewSaveMetadata } from "./store-context";
 import { WorkspaceMutationCoordinator } from "./workspaceMutationCoordinator";
 import { WorkspaceDataFreshness, type WorkspaceFreshnessState } from "./workspaceDataFreshness";
@@ -84,7 +84,7 @@ function runScopedCommand(
 
 
 function cloneDemoState() {
-  return ensureGoalModel(structuredClone(demoState));
+  return normalizeDemoWorkspace(structuredClone(demoState));
 }
 
 function localGoalReviewSourceSignature(state: AppState) {
@@ -102,7 +102,7 @@ function loadDemoState(): AppState {
     if (!saved) return cloneDemoState();
     const parsed = JSON.parse(saved) as Partial<AppState>;
     const demo = cloneDemoState();
-    return ensureGoalModel({
+    return normalizeDemoWorkspace({
       ...demo,
       ...parsed,
       knowledge: parsed.knowledge ?? [],
@@ -217,7 +217,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
     let active = true;
     void localRepository.load().then((saved) => {
       if (!active) return;
-      if (saved) setState(migrateLegacyWorkspaceState(saved));
+      if (saved) setState(saved);
       setLocalHydrated(true);
     }).catch(() => setLocalHydrated(true));
     return () => { active = false; };
@@ -262,7 +262,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
     return freshness.request(async () => {
       if (mode === "demo") {
         const saved = await localRepository.load();
-        const snapshot = saved ? migrateLegacyWorkspaceState(saved) : stateRef.current;
+        const snapshot = saved ?? stateRef.current;
         mutationCoordinator.refresh(snapshot);
         await invalidateActiveWorkspaceQueries();
         return snapshot;
@@ -666,28 +666,53 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
       return id;
     },
     async updateAction(actionId, changes, requestedVersion) {
-      await ensureWorkspaceState();
+      const workspace = await ensureWorkspaceState();
+      const actionInWorkspace = workspace.actions.find((action) => action.id === actionId);
+      // Historical actions can be present in the detail query outside the bounded workspace snapshot.
+      const loadedAction = mode === "supabase" && workspace.workspaceId && !actionInWorkspace
+        ? await (await import("../data/supabaseWorkspaceRepository")).createSupabaseWorkspaceRepository().loadAction(actionId, workspace.workspaceId)
+        : undefined;
+      const detailKey = ["workspace-action", mode, workspace.workspaceId, actionId] as const;
       let expectedVersion = 1;
       let failed = false;
-      const actionForLane = stateRef.current.actions.find((action) => action.id === actionId);
+      let optimisticAction: GoalAction | undefined;
+      const actionForLane = actionInWorkspace ?? loadedAction;
       await mutationCoordinator.run({
         key: actionMutationLane(actionId, actionForLane?.goalId),
         apply: () => {
-          const previousAction = stateRef.current.actions.find((action) => action.id === actionId);
-          expectedVersion = requestedVersion ?? previousAction?.version ?? 1;
+          const previous = stateRef.current;
+          if (identityRef.current !== identityKey || previous.workspaceId !== workspace.workspaceId) throw new Error("workspace_access_denied");
+          const previousAction = previous.actions.find((action) => action.id === actionId);
+          const base = !previousAction && loadedAction ? { ...previous, actions: [...previous.actions, loadedAction] } : previous;
+          expectedVersion = requestedVersion ?? previousAction?.version ?? loadedAction?.version ?? 1;
           const changedAt = new Date().toISOString();
-          const nextState = executeDomainCommand(stateRef.current, { type: "update_action", actionId, expectedVersion, ...changes, changedAt });
-          const optimisticAction = nextState.actions.find((action) => action.id === actionId);
+          const nextState = executeDomainCommand(base, { type: "update_action", actionId, expectedVersion, ...changes, changedAt });
+          const updatedAction = nextState.actions.find((action) => action.id === actionId);
+          optimisticAction = updatedAction;
           return {
             nextState,
-            rollback: (current: AppState) => previousAction ? { ...current, actions: current.actions.map((action) => action.id === actionId ? previousAction : action) } : current,
-            reapply: (fresh: AppState) => optimisticAction ? { ...fresh, actions: fresh.actions.map((action) => action.id === actionId ? optimisticAction : action) } : fresh
+            rollback: (current) => ({
+              ...current,
+              actions: previousAction
+                ? current.actions.map((action) => action.id === actionId ? previousAction : action)
+                : current.actions.filter((action) => action.id !== actionId)
+            }),
+            reapply: (fresh) => {
+              if (!updatedAction) return fresh;
+              const actions = fresh.actions.map((action) => action.id === actionId ? updatedAction : action);
+              if (loadedAction && !actions.some((action) => action.id === actionId)) actions.push(updatedAction);
+              return { ...fresh, actions };
+            }
           };
         },
         persist: async () => {
           if (mode === "demo") return;
           try {
             await runRemote(async () => (await loadRepository()).updateActionRemote(actionId, expectedVersion, changes), `action:${actionId}`);
+            if (loadedAction && optimisticAction && identityRef.current === identityKey) {
+              await queryClient.cancelQueries({ queryKey: detailKey, exact: true });
+              if (identityRef.current === identityKey) queryClient.setQueryData(detailKey, optimisticAction);
+            }
           } catch (error) {
             failed = true;
             throw error;
@@ -695,6 +720,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
         },
         reconcile: async () => {
           if (!failed) return undefined;
+          if (loadedAction) void queryClient.invalidateQueries({ queryKey: detailKey, exact: true });
           const refreshed = await remoteQuery.refetch();
           return refreshed.data ? migrateLegacyWorkspaceState(refreshed.data) : undefined;
         }
@@ -1451,7 +1477,7 @@ export function StoreProvider({ children, captureOnly = false }: { children: Rea
       void localRepository.clear();
       setState(cloneDemoState());
     }
-  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, applyRemoteSnapshot, dataFreshness, ensureWorkspaceState, hydrateKnowledge, identityKey, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
+  }), [aiGoalReview, aiGoalReviewCheckedAt, aiGoalReviewError, aiGoalReviewFreshness, aiGoalReviewReadError, aiGoalReviewReadStatus, aiGoalReviewStatus, applyRemoteSnapshot, dataFreshness, ensureWorkspaceState, hydrateKnowledge, identityKey, invalidateActiveWorkspaceQueries, localHydrated, localRepository, mode, mutationCoordinator, queryClient, refreshLatestGoalReview, refreshWorkspace, releaseDueInbox, remoteQuery, runRemote, state, syncState, user]);
 
   if (mode === "supabase" && remoteQuery.isPending) {
     return <div className="app-loading" role="status"><span className="loading-mark">&gt;_</span><span>Ładowanie przestrzeni pracy…</span></div>;

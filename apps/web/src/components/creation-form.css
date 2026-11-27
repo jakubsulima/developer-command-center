@@ -17,6 +17,106 @@
 .capture-composer > .quick-add-footer { position: sticky; bottom: 0; z-index: 2; background: var(--background); }
 .capture-composer > .quick-add-footer > .capture-composer-actions { position: static; width: 100%; padding: 0; background: transparent; }
 .creation-dialog .capture-composer > .quick-add-footer { position: static; flex: 0 0 auto; background: var(--creation-surface); }
+
+.creation-dialog.quick-add-library-modal .knowledge-kind-picker {
+  margin: 0 0 8px;
+}
+
+.quick-add-library-modal .knowledge-kind-picker > div {
+  gap: 8px;
+}
+
+.quick-add-library-modal .knowledge-kind-picker label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.quick-add-library-modal .knowledge-kind-picker label:is(:hover, :has(input:checked)) {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.quick-add-library-modal .knowledge-kind-picker strong {
+  font-size: 13px;
+}
+
+.quick-add-library-modal .knowledge-kind-picker :is(small, .knowledge-kind-picker-icon, .knowledge-kind-picker-description) {
+  display: none;
+}
+
+.quick-add-library-modal .knowledge-note-fields,
+.quick-add-library-modal .knowledge-note-more-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-add-library-modal .knowledge-note-content-label textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+}
+
+.quick-add-library-modal .knowledge-note-context {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.quick-add-library-modal :is(.knowledge-note-more, .quick-add-library-details) > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  border-top: 1px solid var(--border);
+  color: var(--secondary-foreground);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.quick-add-library-modal :is(.knowledge-note-more, .quick-add-library-details) > summary::-webkit-details-marker {
+  display: none;
+}
+
+.quick-add-library-modal :is(.knowledge-note-more, .quick-add-library-details) > summary::after {
+  width: 8px;
+  height: 8px;
+  margin-inline-end: 8px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  content: "";
+}
+
+.quick-add-library-modal :is(.knowledge-note-more, .quick-add-library-details)[open] > summary::after {
+  transform: rotate(225deg);
+}
+
+.quick-add-library-modal :is(.knowledge-note-more-fields, .quick-add-library-fields) .field-label {
+  margin: 0;
+}
+
+.quick-add-library-modal :is(.knowledge-note-more-fields, .quick-add-library-fields) select {
+  width: 100%;
+  min-width: 0;
+}
+
+.quick-add-library-modal .checkbox-field {
+  margin: 0;
+}
+
+.quick-add-library-modal .quick-add-draft .button {
+  padding-inline: 8px;
+  font-size: 12px;
+}
+
 @media (max-width: 767px) {
   .creation-dialog .creation-fields :is(input, textarea, select) { font-size: 16px; min-height: 44px; }
 }

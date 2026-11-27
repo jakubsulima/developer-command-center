@@ -26,12 +26,17 @@ export function shiftActionDate(value: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
-export function describeActionSchedule(action: Pick<GoalAction, "scheduledFor" | "pinnedToToday">, today: string, timeZone: string, style: ActionDateStyle = "compact") {
-  if (!action.scheduledFor) return action.pinnedToToday ? "Na dziś" : "Bez terminu";
+export function describeActionSchedule(action: Pick<GoalAction, "scheduledFor">, today: string, timeZone: string, style: ActionDateStyle = "compact") {
+  if (!action.scheduledFor) return "Bez terminu";
   if (action.scheduledFor === today) return "Dzisiaj";
   if (action.scheduledFor === shiftActionDate(today, 1)) return "Jutro";
   const formatted = formatActionDate(action.scheduledFor, timeZone, { style, today });
   return action.scheduledFor < today ? `Zaległe · ${formatted}` : formatted;
+}
+
+export function describeActionOccurrence(action: Pick<GoalAction, "recurringTemplateId" | "occurrenceDate">) {
+  if (!action.recurringTemplateId || !action.occurrenceDate) return undefined;
+  return `wystąpienie rutyny z ${formatActionDate(action.occurrenceDate, "UTC", { style: "detail" })}`;
 }
 
 export function resolveRoutineTitle(action: Pick<GoalAction, "recurringTemplateId">, templates: readonly Pick<RecurringActionTemplate, "id" | "title">[]) {

@@ -8,28 +8,28 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { DraftStatus } from "../components/DraftStatus";
+import { horizontalTabIndex } from "../components/horizontalTabIndex";
 import { Badge, Button, Panel } from "../components/ui";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { blockedActions } from "../domain/weeklyReview";
-import { formatWorkspaceDateRange } from "../domain/activity";
+import { formatWorkspaceDateRange, localDateForTimeZone } from "../domain/activity";
 import { polishPluralForm } from "../domain/labels";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import type { ReviewRecord, WeeklyReviewSnapshot } from "../domain/types";
-import { AIGoalReview } from "../components/AIGoalReview";
 import { WeeklyPlanPanel, type WeeklyPlanDraft } from "../components/WeeklyPlanPanel";
-import { nextWorkspaceWeek, selectedReviewGoalIds, weeklyPlanActions } from "../domain/weeklyPlan";
+import { currentWorkspaceWeek, nextWorkspaceWeek, selectedReviewGoalIds, weeklyPlanActions } from "../domain/weeklyPlan";
 import type { WeeklyActivityDetail, WeeklyActivityKind } from "../data/workspaceRepository";
 import { buildWeeklyReviewMarkdown, weeklyReviewTrendPoints, type WeeklyTrendMetric } from "../domain/weeklyReviewTrends";
 
 const reviewFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" });
 const reviewTabs = [
-  { id: "summary", label: "Tydzień", icon: CalendarCheck, title: "Podsumowanie tygodnia" },
-  { id: "plan", label: "Plan", icon: CalendarDays, title: "Plan na kolejny tydzień" },
-  { id: "ai", label: "AI", icon: Sparkles, title: "Przegląd grup działań z AI" },
-  { id: "history", label: "Historia", icon: RefreshCw, title: "Historia i stan przestrzeni" }
+  { id: "summary", label: "Tydzień", icon: CalendarCheck },
+  { id: "plan", label: "Plan", icon: CalendarDays },
+  { id: "history", label: "Historia", icon: RefreshCw }
 ] as const;
 type ReviewTab = typeof reviewTabs[number]["id"];
+type PlanningPeriod = "current" | "next";
 
 interface WeeklyReviewNoteDraft { note: string; pendingRevisionId?: string }
 
@@ -43,11 +43,13 @@ export function ReviewPage() {
   const planRead = useCurrentWeekPlan(now);
   const currentPlan = planRead.plan;
   const draft = usePersistentDraft<WeeklyReviewNoteDraft>("weekly-review-note", { note: "" }, 450, { targetId: weekly.startDate, migrateFrom: { kind: "weekly-review-note" } });
+  const today = localDateForTimeZone(now, state.workspaceTimezone);
+  const currentWeek = currentWorkspaceWeek(now, state.workspaceTimezone);
   const nextWeek = nextWorkspaceWeek(now, state.workspaceTimezone);
-  const requestedTab = new URLSearchParams(location.search).get("tab");
-  const activeView = reviewTabs.find((tab) => tab.id === requestedTab) ?? reviewTabs[0];
-  const activeTab = activeView.id;
-  const aiTabActive = activeTab === "ai";
+  const searchParams = new URLSearchParams(location.search);
+  const requestedTab = searchParams.get("tab");
+  const planningPeriod: PlanningPeriod = searchParams.get("week") === "current" ? "current" : "next";
+  const activeTab = reviewTabs.find((tab) => tab.id === requestedTab)?.id ?? "summary";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activityKind, setActivityKind] = useState<WeeklyActivityKind | null>(null);
@@ -62,6 +64,7 @@ export function ReviewPage() {
   const latestThisWeek = state.reviews.filter((review) => review.type === "weekly" && (review.periodStart ? review.periodStart === weekly.startDate : new Date(review.completedAt) >= weekly.start && new Date(review.completedAt) < weekly.end)).sort((left, right) => right.completedAt.localeCompare(left.completedAt))[0];
   const completedThisWeek = Boolean(latestThisWeek);
   const planDraft = usePersistentDraft<WeeklyPlanDraft>(`weekly-plan-${nextWeek.startDate}`, { selectedGoalIds: selectedReviewGoalIds(latestThisWeek?.answers ?? {}), includeStandalone: false, changes: {} });
+  const currentPlanDraft = usePersistentDraft<WeeklyPlanDraft>("current-week-plan-dates", { selectedGoalIds: [], includeStandalone: false, changes: {} }, 450, { targetId: `${state.workspaceTimezone}/${currentWeek.startDate}` });
   const activeGoalCount = state.goals.filter((goal) => goal.status === "active" && goal.visibility === "active").length;
   const blockedCount = blockedActions(state).length;
   const inboxCount = state.inbox.filter((item) => item.status === "unprocessed").length;
@@ -120,9 +123,11 @@ export function ReviewPage() {
     .map((id) => state.goals.find((goal) => goal.id === id))
     .filter((goal): goal is (typeof state.goals)[number] => Boolean(goal));
 
-  const tabHref = (tab: ReviewTab) => {
+  const tabHref = (tab: ReviewTab, period?: PlanningPeriod) => {
     const params = new URLSearchParams(location.search);
     params.set("tab", tab);
+    if (period === "current") params.set("week", period);
+    if (period === "next") params.delete("week");
     return `${location.pathname}?${params.toString()}${location.hash}`;
   };
   const updateTab = (tab: ReviewTab) => {
@@ -155,20 +160,12 @@ export function ReviewPage() {
   };
 
   const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
-    const nextIndex = event.key === "ArrowRight"
-      ? (currentIndex + 1) % reviewTabs.length
-      : event.key === "ArrowLeft"
-        ? (currentIndex - 1 + reviewTabs.length) % reviewTabs.length
-        : event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? reviewTabs.length - 1
-            : undefined;
+    const nextIndex = horizontalTabIndex(event.key, currentIndex, reviewTabs.length);
     if (nextIndex === undefined) return;
     event.preventDefault();
     const nextTab = reviewTabs[nextIndex]!;
     updateTab(nextTab.id);
-    document.getElementById(`weekly-review-tab-${nextTab.id}`)?.focus();
+    document.getElementById(`weekly-review-tab-${nextTab.id}`)?.focus({ preventScroll: true });
   };
 
   const complete = async () => {
@@ -225,8 +222,8 @@ export function ReviewPage() {
   return (
     <AppShell addAction={{ label: "Dodaj", ariaLabel: "Dodaj" }}>
       <PageHeading
-        title={aiTabActive ? activeView.title : reviewTabs[0].title}
-        eyebrow={aiTabActive ? undefined : `${formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · aktualizuje się automatycznie`}
+        title="Podsumowanie tygodnia"
+        eyebrow={activeTab === "summary" ? formatWorkspaceDateRange(weekly.startDate, weekly.endDate) : undefined}
       />
       <div className="weekly-review-workspace">
         <div className="weekly-review-tablist" role="tablist" aria-label="Widoki podsumowania tygodnia">
@@ -248,10 +245,8 @@ export function ReviewPage() {
         </div>
 
         <div className="weekly-review-tabpanels">
-          {!aiTabActive ? <>
-            <CurrentWeekPlanNotice read={planRead} />
-            <div className="weekly-review-status">{completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}</div>
-          </> : null}
+          <CurrentWeekPlanNotice read={planRead} />
+          {activeTab === "summary" && <div className="weekly-review-status">{completedThisWeek ? <Badge tone="success"><Check />Zapisane</Badge> : <Badge tone="neutral"><RefreshCw />Na żywo</Badge>}</div>}
           <div id="weekly-review-panel-summary" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-summary" hidden={activeTab !== "summary"} tabIndex={0}>
             <Panel className="review-main weekly-summary-card">
               <div className="review-intro"><span className="review-intro-icon"><Sparkles /></span><span><small>Podsumowanie systemowe</small><h2>Ten tydzień w skrócie</h2><p>{weekly.metricsAvailable ? weekly.generatedSummary : "Czekam na aktualne dane tygodnia."}</p></span></div>
@@ -265,7 +260,7 @@ export function ReviewPage() {
                 <div className="weekly-activity-detail-heading"><div><span className="section-kicker">{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)} · {state.workspaceTimezone}</span><h3>{activityKind === "actions" ? "Ukończone Działania" : activityKind === "knowledge" ? "Dodana Wiedza" : "Aktualizacje postępu"}</h3></div><Button variant="ghost" onClick={() => setActivityKind(null)}>Zamknij</Button></div>
                 <div className="weekly-activity-filters">
                   <label>Projekt<select aria-label="Filtruj szczegóły po Projekcie" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}><option value="">Wszystkie Projekty</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
-                  <label>Grupa działań<select aria-label="Filtruj szczegóły po grupy" value={activityGoalFilter} onChange={(event) => setActivityGoalFilter(event.target.value)}><option value="">Wszystkie grupy</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
+                  <label>Grupa działań<select aria-label="Filtruj szczegóły po grupie" value={activityGoalFilter} onChange={(event) => setActivityGoalFilter(event.target.value)}><option value="">Wszystkie grupy</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
                 </div>
                 {activityPage.isPending ? <p className="muted-copy">Wczytuję szczegóły tego tygodnia…</p> : null}
                 {activityPage.isError ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać szczegółów. <Button variant="ghost" onClick={() => void activityPage.refetch()}>Spróbuj ponownie</Button></p> : null}
@@ -280,7 +275,8 @@ export function ReviewPage() {
                   <div className="weekly-execution-counts"><p><strong>{plannedCompleted} z {plannedActions.length}</strong><span>zaplanowanych Działań ukończono</span></p><p><strong>{additionalCompleted}</strong><span>ukończonych poza Planem</span></p></div>
                   {plannedActions.some((action) => !completedIds.has(action.id)) ? <details className="weekly-unfinished-plan"><summary>Nierozstrzygnięte kroki ({plannedActions.filter((action) => !completedIds.has(action.id)).length})</summary><ul>{plannedActions.filter((action) => !completedIds.has(action.id)).map((planned) => {
                     const current = state.actions.find((action) => action.id === planned.id);
-                    const status = current?.status === "cancelled" ? "anulowano" : current?.status === "skipped" ? "pominięto" : current?.status === "blocked" ? "zablokowane" : current?.scheduledFor && current.scheduledFor !== planned.scheduledFor ? `termin zmieniono na ${current.scheduledFor}` : "nieukończone";
+                    const dateChanged = current && (current.scheduledFor ?? null) !== (planned.scheduledFor ?? null);
+                    const status = current?.status === "cancelled" ? "anulowano" : current?.status === "skipped" ? "pominięto" : current?.status === "blocked" ? "zablokowane" : dateChanged ? current.scheduledFor ? `termin zmieniono na ${current.scheduledFor}` : "usunięto termin" : "nieukończone";
                     return <li key={planned.id}>{current ? <Link to={`/actions/${planned.id}`}>{planned.title}</Link> : planned.title}<span>{status}</span></li>;
                   })}</ul></details> : null}
                 </> : <p>Ten Plan nie zawierał zapisanych Działań.</p>}
@@ -306,8 +302,8 @@ export function ReviewPage() {
                 <span className="weekly-primary-suggestion-source"><Lightbulb />Sugestia na podstawie bieżących danych</span>
                 <Link className="weekly-primary-suggestion-link" to={weekly.suggestions[0].to}><span><strong>{weekly.suggestions[0].title}</strong><small>{weekly.suggestions[0].detail}</small></span></Link>
                 {weekly.suggestions.length > 1 ? <details className="weekly-other-suggestions">
-                  <summary>Zobacz wszystkie sprawy ({weekly.suggestions.slice(1).reduce((sum, suggestion) => sum + (suggestion.count ?? 0), 0)})</summary>
-                  <p className="weekly-signal-note">Suma kategorii to liczba sygnałów; to samo Działanie może pojawić się w więcej niż jednej kategorii.</p>
+                  <summary>Zobacz pozostałe sygnały ({weekly.suggestions.slice(1).reduce((sum, suggestion) => sum + (suggestion.count ?? 0), 0)})</summary>
+                  <p className="weekly-signal-note">To samo działanie może pojawić się w kilku kategoriach.</p>
                   <div className="weekly-suggestion-list">{weekly.suggestions.slice(1).map((suggestion) => <div className="weekly-suggestion-group" key={suggestion.id}><Link to={suggestion.to}><span><strong>{suggestion.title}</strong><small>{suggestion.detail}</small></span></Link>{suggestion.items?.length ? <ul>{suggestion.items.map((item) => <li key={item.id}><Link to={item.to}>{item.title}</Link></li>)}</ul> : null}</div>)}</div>
                 </details> : null}
                 {weekly.suggestions.length === 1 && weekly.suggestions[0].id === "continue" ? <p className="weekly-signal-note">Nie wykryto zaległości, blokad, grup działań bez kroku ani nowych elementów w Skrzynce.</p> : null}
@@ -321,7 +317,7 @@ export function ReviewPage() {
               <label className="field-label" htmlFor="review-note">Najważniejsza decyzja <span className="optional-label">opcjonalnie</span></label>
               <textarea id="review-note" rows={2} disabled={saving} placeholder="Np. Najpierw odblokowuję budżet, pozostałe Grupy działań czekają." value={draft.value.note} onChange={(event) => draft.setValue({ ...draft.value, note: event.target.value })} />
               <div className="weekly-decision-footer"><div><DraftStatus status={draft.status} />{draft.dirty ? <Button variant="ghost" onClick={draft.discard}>Wyczyść</Button> : null}</div></div>
-              <Link className="button button-primary weekly-next-plan-link" to={tabHref("plan")}><CalendarDays />Zaplanuj kolejny tydzień</Link>
+              <Link className="button button-primary weekly-next-plan-link" to={tabHref("plan", "next")}><CalendarDays />Zaplanuj kolejny tydzień</Link>
             </Panel>
             <details className="weekly-current-state">
               <summary>Stan przestrzeni na teraz</summary>
@@ -330,12 +326,17 @@ export function ReviewPage() {
           </div>
 
           <div id="weekly-review-panel-plan" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-plan" hidden={activeTab !== "plan"} tabIndex={0}>
-            <WeeklyPlanPanel state={state} week={nextWeek} value={planDraft.value} onChange={planDraft.setValue} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />
+            <div className="weekly-plan-week-picker" role="group" aria-label="Tydzień planu">
+              <button type="button" aria-pressed={planningPeriod === "current"} onClick={() => navigate(tabHref("plan", "current"), { state: location.state })}>Ten tydzień</button>
+              <button type="button" aria-pressed={planningPeriod === "next"} onClick={() => navigate(tabHref("plan", "next"), { state: location.state })}>Następny</button>
+            </div>
+            <div hidden={planningPeriod !== "current"}>
+              <WeeklyPlanPanel key={`${state.workspaceTimezone}/${currentWeek.startDate}`} state={state} week={currentWeek} period="current" plannedActionIds={plannedActions.map((action) => action.id)} today={today} value={currentPlanDraft.value} onChange={currentPlanDraft.setValue} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />
+            </div>
+            <div hidden={planningPeriod !== "next"}>
+              <WeeklyPlanPanel key={`${state.workspaceTimezone}/${nextWeek.startDate}`} state={state} week={nextWeek} today={today} value={planDraft.value} onChange={planDraft.setValue} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />
+            </div>
             <Link className="weekly-plan-close-link" to={tabHref("summary")}>Przejdź do zamknięcia tygodnia</Link>
-          </div>
-
-          <div id="weekly-review-panel-ai" className="weekly-review-tabpanel" role="tabpanel" aria-labelledby="weekly-review-tab-ai" hidden={!aiTabActive} tabIndex={0}>
-            <AIGoalReview />
           </div>
 
           <div id="weekly-review-panel-history" className="weekly-review-tabpanel weekly-history-grid" role="tabpanel" aria-labelledby="weekly-review-tab-history" hidden={activeTab !== "history"} tabIndex={0}>
@@ -388,7 +389,7 @@ export function ReviewPage() {
           </div>
         </div>
 
-        {activeTab === "summary" || activeTab === "plan" ? <Panel className="weekly-review-submit" aria-labelledby="weekly-review-submit-title">
+        {activeTab === "summary" ? <Panel className="weekly-review-submit" aria-labelledby="weekly-review-submit-title">
           <div className="weekly-review-submit-heading"><span className="section-kicker"><CalendarCheck />Zamknięcie tygodnia</span><h2 id="weekly-review-submit-title">Co zapisze zamknięcie</h2></div>
           <details className="weekly-close-details"><summary>Podgląd zapisu</summary><div className="weekly-close-preview">
             <div><strong>Tydzień</strong><span>{formatWorkspaceDateRange(weekly.startDate, weekly.endDate)}</span></div>

@@ -1,10 +1,11 @@
-import { Check, Circle, CircleCheck } from "lucide-react";
+import { Check } from "lucide-react";
 import { useStore } from "../app/useStore";
 import { resolveActionContext, describeActionContext } from "../domain/actionContext";
 import { resolveRoutineTitle } from "../domain/actionPresentation";
 import { navigationCardId } from "../domain/navigation";
 import type { GoalAction } from "../domain/types";
 import { ActionSignals } from "./ActionSignals";
+import { ActionChecklist } from "./ActionChecklist";
 import { NavigationLink } from "./ContextNavigation";
 import { Button } from "./ui";
 import { PreviewPanel } from "./PreviewPanel";
@@ -33,7 +34,7 @@ export function ActionPreview({ action, today, returnTo, busy, error, onClose, o
     <div className="actions-preview-context">{context.to !== "/" ? <NavigationLink to={context.to} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Wszystkie Działania" sourceCardId={sourceCardId}>{describeActionContext(context)}</NavigationLink> : describeActionContext(context)}</div>
     {action.status === "blocked" ? <section className="actions-preview-blocker"><h3>Co blokuje Działanie?</h3><p>{action.blocker || "Nie podano powodu."}</p></section> : null}
     <section className="actions-preview-description"><h3>Opis</h3><p>{action.detail || "Brak opisu. Możesz go dodać w pełnym widoku Działania."}</p></section>
-    {action.checklist.length ? <section><h3>Lista kroków</h3><ul className="actions-preview-checklist">{action.checklist.map((item) => <li key={item.id}>{item.completed ? <CircleCheck aria-label="Ukończone" /> : <Circle aria-label="Do zrobienia" />}<span>{item.title}</span></li>)}</ul></section> : null}
+    {action.checklist.length ? <section><h3>Lista kroków</h3><ActionChecklist key={action.id} action={action} busy={busy} /></section> : null}
     {knowledge.length ? <section><h3>Powiązana Wiedza</h3><ul className="actions-preview-knowledge">{knowledge.map((item) => <li key={item.id}><NavigationLink to={`/knowledge/${encodeURIComponent(item.id)}`} breadcrumbs={breadcrumbs} returnTo={returnTo} returnLabel="Wszystkie Działania" sourceCardId={sourceCardId}>{item.title}</NavigationLink></li>)}</ul></section> : null}
     {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={onRetry}>Spróbuj ponownie</button></p> : null}
     <div className="actions-preview-footer">

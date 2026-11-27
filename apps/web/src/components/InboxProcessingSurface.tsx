@@ -20,7 +20,7 @@ export function InboxProcessingSurface({ desktop, open, title, busy, focusKey, o
 
   if (!desktop) return <CreationDialog open={open} closeDisabled={busy} title={title} onClose={onClose}>{children}</CreationDialog>;
   return <aside className="inbox-processing-panel creation-dialog" id="inbox-processing-panel" aria-label="Przetwarzanie wpisu" aria-busy={busy}>
-    <header className="inbox-processing-heading"><div><span>Skrzynka</span><h2 ref={headingRef} tabIndex={-1}>{open ? title : "Przetwarzanie wpisu"}</h2></div>{focusKey ? <button type="button" className="icon-button" aria-label="Zamknij przetwarzanie wpisu" title="Zamknij (Esc)" disabled={busy} onClick={onClose}><X aria-hidden="true" /></button> : null}</header>
+    <header className="inbox-processing-heading"><h2 ref={headingRef} tabIndex={-1}>{title}</h2>{focusKey ? <button type="button" className="icon-button" aria-label="Zamknij przetwarzanie wpisu" title="Zamknij (Esc)" disabled={busy} onClick={onClose}><X aria-hidden="true" /></button> : null}</header>
     {open ? children : idle}
   </aside>;
 }

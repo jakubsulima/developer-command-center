@@ -51,8 +51,25 @@ danych produkcyjnych.
 ## 3. Auth URL i test telefonu
 
 Po pierwszym wdrożeniu skopiuj produkcyjny adres `https://...vercel.app` do
-Supabase `Authentication → URL Configuration → Site URL`. Dodaj dokładny adres
-do Redirect URLs, jeśli później pojawią się magic links, reset hasła lub OAuth.
+Supabase `Authentication → URL Configuration → Site URL`.
+
+W prywatnym wdrożeniu z `VITE_ENABLE_SIGNUP=false` ekran logowania kieruje
+właściciela do listy użytkowników w Supabase. Administrator może ustawić
+hasło istniejącego konta przez
+[`auth.admin.updateUserById`](https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid)
+w zaufanym środowisku serwerowym.
+
+Aby włączyć samodzielne odzyskiwanie hasła niezależnie od rejestracji, ustaw
+`VITE_ENABLE_PASSWORD_RESET=true`. Bez tej zmiennej odzyskiwanie dziedziczy
+ustawienie `VITE_ENABLE_SIGNUP`. Dodaj dokładny adres aplikacji z końcówką
+`/reset-password` do `Authentication → URL Configuration → Redirect URLs`.
+Zrób to osobno dla każdego środowiska z odzyskiwaniem hasła. Sprawdź
+wysyłkę e-maili Auth i zachowaj w szablonie resetu link `{{ .ConfirmationURL }}`.
+Użytkownik otwiera link w tej samej przeglądarce, w której rozpoczął reset.
+Jeśli administrator obsługuje zgłoszenia, ustaw publiczny adres kontaktowy
+`VITE_AUTH_SUPPORT_EMAIL`. Opcjonalne `VITE_AI_REVIEW_PROVIDER_LABEL` pokazuje
+nazwę dostawcy w potwierdzeniu Przeglądu AI i powinno odpowiadać konfiguracji
+funkcji serwerowej.
 
 Na telefonie otwórz adres po HTTPS, zaloguj się i użyj opcji przeglądarki
 „Dodaj do ekranu głównego”. Sprawdź co najmniej: odświeżenie zagnieżdżonej trasy,

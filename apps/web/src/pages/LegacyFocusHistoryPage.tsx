@@ -5,7 +5,7 @@ import { useAuth } from "../auth/useAuth";
 import { useStore } from "../app/useStore";
 import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import { AppShell } from "../components/AppShell";
-import { EmptyState, Panel } from "../components/ui";
+import { Button, EmptyState, Panel } from "../components/ui";
 import { useMemo } from "react";
 
 export function LegacyFocusHistoryPage() {
@@ -23,7 +23,8 @@ export function LegacyFocusHistoryPage() {
   });
   const session = localSession ?? legacyQuery.data;
   if (!localSession && legacyQuery.isPending) return <AppShell><EmptyState icon={<History />} title="Ładowanie historii" detail="Pobieram zachowany zapis Focus…" /></AppShell>;
-  if (!session) return <AppShell><EmptyState icon={<History />} title="Nie znaleziono historycznego wpisu" detail="Ta dawna sesja nie istnieje w bieżącej przestrzeni pracy." /></AppShell>;
+  if (!session && legacyQuery.isError) return <AppShell><EmptyState icon={<History />} title="Nie udało się wczytać historii" detail="Spróbuj ponownie pobrać zapis sesji." action={<Button loading={legacyQuery.isFetching} onClick={() => void legacyQuery.refetch()}>Spróbuj ponownie</Button>} /></AppShell>;
+  if (!session) return <AppShell><EmptyState icon={<History />} title="Nie znaleziono historycznego wpisu" detail="Ta dawna sesja nie istnieje w bieżącej przestrzeni pracy." action={<Link className="button button-primary" to="/review?tab=history">Wróć do historii tygodni</Link>} /></AppShell>;
   const goal = state.goals.find((item) => item.id === session.projectId);
   const action = state.actions.find((item) => item.id === session.workItemId);
   const duration = session.endedAt ? Math.max(0, Math.round((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60000)) : undefined;

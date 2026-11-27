@@ -1,48 +1,69 @@
 import { formatActionDate } from "../domain/actionPresentation";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
 import { localDateForTimeZone } from "../domain/activity";
-import { readingPositionLabel } from "../domain/readingProgress";
-import { Archive, BookMarked, Inbox, MoreHorizontal, PanelRightOpen, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, BookMarked, FileText, Library, MoreHorizontal, PanelRightOpen, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
-import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
-import type { KnowledgeItem, KnowledgeKind, ReadingStatus } from "../domain/types";
+import { Button, EmptyState, ListSkeleton } from "../components/ui";
+import { ActionFilterControl } from "../components/ActionFilterControl";
+import type { InboxItem, KnowledgeItem, KnowledgeKind, ReadingStatus } from "../domain/types";
 import { useActionFeedback } from "../components/action-feedback-context";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { routeForEntity } from "../domain/routes";
 import { KnowledgeInbox } from "./InboxPage";
 import { KnowledgeKindBadge } from "../components/KnowledgeKindBadge";
 import { readingStatusLabels } from "../domain/labels";
-import { entityCardVariants } from "../components/ui-variants";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { NavigationLink } from "../components/ContextNavigation";
-import { locationAddress, navigationCardId } from "../domain/navigation";
+import { locationAddress, navigationCardId, readNavigationRestore } from "../domain/navigation";
 import { createKnowledgeFilter } from "../domain/knowledgeFilters";
 import { filterableKnowledgeKinds, isFilterableKnowledgeKind } from "../domain/knowledge-kinds";
 import { knowledgeKindLabels } from "../domain/labels";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/useAuth";
 import { KnowledgePreview } from "../components/KnowledgePreview";
+import { resolveKnowledgeProjectContexts } from "../domain/knowledge";
+import { prepareKnowledgeNote } from "../domain/knowledgeNote";
+import { safeHttpUrl } from "../domain/http-url";
+import type { QuickAddRequest } from "../components/creationDraft";
+import "../components/workspace-list.css";
+import "./knowledge-workspace.css";
 
 type View = "active" | "archived" | "trashed";
+const filterKeys = ["kind", "format", "readingStatus", "revisit", "goal", "area"];
+
+function knowledgeExcerpt(item: KnowledgeItem) {
+  const detail = item.detail.trim();
+  if (!detail) return "";
+  const title = item.title.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl");
+  if (item.type === "note" && prepareKnowledgeNote(detail).title.toLocaleLowerCase("pl") === title) {
+    return detail.split(/\r?\n/).slice(1).join(" ").trim();
+  }
+  return detail.replace(/\s+/g, " ").toLocaleLowerCase("pl") === title ? "" : detail;
+}
 
 export function KnowledgePage() {
   const { state, loading, setVisibility } = useStore();
   const { user, mode } = useAuth();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
+  const address = locationAddress(location);
   const navigate = useNavigate();
   const { notifyUndo } = useActionFeedback();
   const mutation = useKeyedMutation();
   const query = params.get("q") ?? "";
-  const setQuery = (value: string) => setParams((current) => {
-    const next = new URLSearchParams(current);
-    if (value) next.set("q", value); else next.delete("q");
-    return next;
-  }, { replace: true });
+  const changeFilters = (change: (next: URLSearchParams) => void, replace = false) => {
+    const next = new URLSearchParams(params);
+    change(next);
+    setParams(next, { replace });
+  };
+  const setFilter = (key: string, value: string, replace = false) => changeFilters((next) => {
+    if (value) next.set(key, value); else next.delete(key);
+  }, replace);
+  const clearFilters = () => changeFilters((next) => ["q", ...filterKeys].forEach((key) => next.delete(key)));
   const section = params.get("section") === "inbox" ? "inbox" : "library";
   const kind = (params.get("kind") ?? "all") as KnowledgeKind | "all";
   const now = useWorkspaceClock();
@@ -52,16 +73,42 @@ export function KnowledgePage() {
   const readingStatus = (["to_read", "reading", "read", "paused", "abandoned"] as string[]).includes(statusParam ?? "") ? statusParam as ReadingStatus : undefined;
   const goalFilter = params.get("goal") ?? "";
   const areaFilter = params.get("area") ?? "";
+  const project = state.areas.find((area) => area.id === areaFilter);
+  const group = state.goals.find((goal) => goal.id === goalFilter);
   const viewParam = params.get("visibility");
   const view: View = viewParam === "archived" || viewParam === "trashed" ? viewParam : "active";
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<{ search: string; params: URLSearchParams }>();
+  const pendingFilters = filterDraft?.search === location.search ? filterDraft.params : undefined;
+  const filterFields = pendingFilters ?? params;
+  const draftBooksOnly = filterFields.get("format") === "book";
+  const changeFilterDraft = (change: (next: URLSearchParams) => void) => setFilterDraft((current) => {
+    if (!current) return current;
+    const next = new URLSearchParams(current.params);
+    change(next);
+    return { ...current, params: next };
+  });
+  const setDraftFilter = (key: string, value: string) => changeFilterDraft((next) => {
+    if (value) next.set(key, value); else next.delete(key);
+  });
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [actionsItemId, setActionsItemId] = useState<string>();
   const previewTriggerRef = useRef<HTMLElement | null>(null);
   const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
   const [debouncedQuery, setDebouncedQuery] = useState(() => params.get("q") ?? "");
   const normalized = debouncedQuery.trim().toLocaleLowerCase("pl");
   const knowledgePage = useWorkspaceInfinitePage<KnowledgeItem>("knowledge", 50, { revisitOnOrBefore, resourceFormat: booksOnly ? "book" : undefined, readingStatus, knowledgeKind: booksOnly ? "resource" : kind === "all" ? undefined : kind, searchText: normalized, projectId: areaFilter || undefined, knowledgeGoalId: goalFilter || undefined, knowledgeVisibility: view });
-  const advancedFilterCount = Number(kind !== "all") + Number(Boolean(goalFilter)) + Number(Boolean(areaFilter)) + Number(Boolean(readingStatus)) + Number(booksOnly) + Number(view !== "active");
+  const newInboxPage = useWorkspaceInfinitePage<InboxItem>("inbox", 50, { inboxStatus: "unprocessed" });
+  const newInboxCount = newInboxPage.data?.totalCount;
+  const advancedFilters = [
+    !booksOnly && kind !== "all" && isFilterableKnowledgeKind(kind) ? { label: knowledgeKindLabels[kind], keys: ["kind"] } : null,
+    booksOnly ? { label: "Książki", keys: ["format", "readingStatus"] } : null,
+    booksOnly && readingStatus ? { label: readingStatusLabels[readingStatus], keys: ["readingStatus"] } : null,
+    revisitOnOrBefore ? { label: "Do powrotu", keys: ["revisit"] } : null,
+    project ? { label: `Projekt: ${project.name}`, keys: ["area"] } : null,
+    group ? { label: `Grupa działań: ${group.title}`, keys: ["goal"] } : null,
+
+  ].filter((filter) => filter !== null);
+  const hasFilters = Boolean(query.trim() || advancedFilters.length);
   useEffect(() => { const legacyId = section === "library" ? params.get("item") : null; if (legacyId) navigate(`/knowledge/${legacyId}`, { replace: true }); }, [navigate, params, section]);
   useEffect(() => {
     const next = new URLSearchParams(params); let changed = false;
@@ -69,10 +116,10 @@ export function KnowledgePage() {
     if (booksOnly && next.has("kind")) { next.delete("kind"); changed = true; }
     if (statusParam && (!readingStatus || !booksOnly)) { next.delete("readingStatus"); changed = true; }
     if (viewParam && !["active", "archived", "trashed"].includes(viewParam)) { next.delete("visibility"); changed = true; }
-    if (goalFilter && !state.goals.some((goal) => goal.id === goalFilter)) { next.delete("goal"); changed = true; }
-    if (areaFilter && !state.areas.some((area) => area.id === areaFilter)) { next.delete("area"); changed = true; }
+    if (!loading && goalFilter && !group) { next.delete("goal"); changed = true; }
+    if (!loading && areaFilter && !project) { next.delete("area"); changed = true; }
     if (changed) setParams(next, { replace: true });
-  }, [areaFilter, booksOnly, goalFilter, kind, params, readingStatus, setParams, state.areas, state.goals, statusParam, viewParam]);
+  }, [areaFilter, booksOnly, goalFilter, group, kind, loading, params, project, readingStatus, setParams, statusParam, viewParam]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query), 250);
     return () => window.clearTimeout(timer);
@@ -92,8 +139,11 @@ export function KnowledgePage() {
     }
     return [...merged.values()];
   }, [createdItems, knowledgePage.data, knowledgePage.isPending, state.knowledge, state.workspaceId]);
-  const loadedNoteIds = new Set(knowledgeItems.filter((item) => item.type === "note").map((item) => item.id));
-  const sourceBookIds = [...new Set(state.knowledgeLinks.filter((link) => link.meaning === "source" && loadedNoteIds.has(link.knowledgeItemId) && link.targetKnowledgeItemId).map((link) => link.targetKnowledgeItemId!))].sort();
+  const sourceByNote = useMemo(() => new Map(state.knowledgeLinks.flatMap((link) => link.meaning === "source" && link.targetKnowledgeItemId ? [[link.knowledgeItemId, link.targetKnowledgeItemId] as const] : [])), [state.knowledgeLinks]);
+  const sourceBookIds = [...new Set(knowledgeItems.flatMap((item) => {
+    const source = item.type === "note" && sourceByNote.get(item.id);
+    return source ? [source] : [];
+  }))].sort();
   const sourceBooksQuery = useQuery({
     queryKey: ["knowledge-source-books", mode, state.workspaceId, user?.id, sourceBookIds],
     enabled: sourceBookIds.length > 0,
@@ -112,8 +162,18 @@ export function KnowledgePage() {
     visibility: view
   }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, revisitOnOrBefore, state, view]);
   const results = knowledgeItems.filter(matches).sort((left, right) => (revisitOnOrBefore ? left.revisitOn ?? "" : left.updatedAt ?? left.createdAt ?? "").localeCompare(revisitOnOrBefore ? right.revisitOn ?? "" : right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
+  const totalCount = knowledgePage.data?.totalCount ?? results.length;
+  const hasPartialResults = results.length > 0 && results.length < totalCount;
+  const restoreCardId = readNavigationRestore(address)?.sourceCardId;
+  const restoreItemId = restoreCardId?.startsWith("knowledge-") ? restoreCardId.slice("knowledge-".length) : undefined;
+  const restoreItem = restoreItemId ? state.knowledge.find((item) => item.id === restoreItemId) : undefined;
+  const needsRestorePage = section === "library" && Boolean(restoreItemId && !results.some((item) => item.id === restoreItemId) && (!restoreItem || matches(restoreItem)) && knowledgePage.hasNextPage && !knowledgePage.isFetchNextPageError);
+  const { fetchNextPage, isFetching } = knowledgePage;
+  useEffect(() => {
+    if (needsRestorePage && !isFetching && fetchNextPage) void fetchNextPage();
+  }, [fetchNextPage, isFetching, needsRestorePage]);
   const previewItem = results.find((item) => item.id === params.get("preview"));
-  const sourceBookLink = previewItem ? state.knowledgeLinks.find((link) => link.knowledgeItemId === previewItem.id && link.meaning === "source" && link.targetKnowledgeItemId) : undefined;
+  const previewSourceId = previewItem && sourceByNote.get(previewItem.id);
   const openPreview = (item: KnowledgeItem, trigger: HTMLElement) => {
     previewTriggerRef.current = trigger;
     const next = new URLSearchParams(params);
@@ -134,93 +194,154 @@ export function KnowledgePage() {
     notifyUndo({
       event: visibility === "archived" ? "archived" : "changed",
       message: visibility === "archived" ? `„${item.title}” przeniesiono do Archiwum.` : `„${item.title}” przeniesiono do Kosza.`,
-      undo: () => setVisibility("knowledge", item.id, previous)
+      undo: () => setVisibility("knowledge", item.id, previous),
+      action: { label: visibility === "archived" ? "Otwórz archiwum" : "Otwórz kosz", onClick: () => {
+        setParams(new URLSearchParams({ visibility }));
+      } }
     });
   };
-  const creationRequest = { mode: section === "library" ? "library" as const : "inbox" as const, libraryKind: booksOnly || kind === "resource" ? "resource" as const : kind === "decision" ? "decision" as const : "note" as const, isBook: booksOnly, readingStatus, areaId: areaFilter || undefined, goalId: goalFilter || undefined, draftKey: section === "library" ? "knowledge-library" : "knowledge-inbox" };
+  const creationRequest: QuickAddRequest = { mode: section === "library" ? "library" : "inbox", libraryKind: booksOnly || kind === "resource" ? "resource" : kind === "decision" ? "decision" : "note", isBook: booksOnly, readingStatus, areaId: areaFilter || undefined, goalId: goalFilter || undefined, draftKey: section === "library" ? "knowledge-library" : "knowledge-inbox" };
+  const creationMenu = [
+    { label: "Dodaj notatkę", icon: <FileText />, request: { ...creationRequest, directLibraryEntry: true, libraryKind: "note" as const, isBook: false, readingStatus: undefined } },
+    { label: "Dodaj materiał", icon: <Library />, request: { ...creationRequest, directLibraryEntry: true, libraryKind: "resource" as const } },
+    { label: "Wybierz rodzaj lub wznów szkic", icon: <BookMarked />, request: creationRequest }
+  ];
+  const switchSection = (target: "library" | "inbox") => changeFilters((next) => {
+    if (target === "inbox") next.set("section", "inbox");
+    else for (const key of ["section", "status", "item", "capture", "organize"]) next.delete(key);
+  });
 
   return (
-    <AppShell addAction={{ label: section === "library" ? "Nowa Wiedza" : "Do Skrzynki", shortLabel: section === "library" ? "Wiedza" : "Skrzynka", ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : "Dodaj do Skrzynki", quickAdd: creationRequest }}>
+    <AppShell navigationReady={section === "inbox" || (!knowledgePage.isPending && !needsRestorePage)} addAction={{ label: section === "library" ? "Dodaj do Biblioteki" : "Do Skrzynki", shortLabel: section === "library" ? "Wiedza" : "Skrzynka", ariaLabel: section === "library" ? "Dodaj nowy element Wiedzy" : "Dodaj do Skrzynki", quickAdd: creationRequest, menu: section === "library" ? creationMenu : undefined }}>
 
-      <PageHeading title="Wiedza" eyebrow="Biblioteka materiałów i Skrzynka do późniejszego przetworzenia" />
-      <div className="knowledge-section-bar">
-        <div className="knowledge-section-tabs" role="tablist" aria-label="Widoki Wiedzy">
-          <button type="button" role="tab" aria-selected={section === "library"} onClick={() => { params.delete("section"); params.delete("status"); params.delete("item"); params.delete("capture"); setParams(params); }}><BookMarked /><span>Biblioteka</span><small>{knowledgePage.data?.totalCount ?? "…"}</small></button>
-          <button type="button" role="tab" aria-selected={section === "inbox"} onClick={() => { params.set("section", "inbox"); setParams(params); }}><Inbox /><span>Skrzynka</span></button>
-        </div>
+      <PageHeading title="Wiedza" />
+      <div className="knowledge-top-tabs" role="tablist" aria-label="Widoki Wiedzy" onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const target = event.key === "Home" ? "library" : event.key === "End" ? "inbox" : section === "library" ? "inbox" : "library";
+          event.currentTarget.querySelector<HTMLElement>(`#knowledge-tab-${target}`)?.focus();
+          if (target !== section) switchSection(target);
+        }}>
+          <button type="button" role="tab" id="knowledge-tab-library" aria-controls="knowledge-section" aria-selected={section === "library"} tabIndex={section === "library" ? 0 : -1} onClick={() => { if (section !== "library") switchSection("library"); }}>Biblioteka</button>
+          <button type="button" role="tab" id="knowledge-tab-inbox" aria-controls="knowledge-section" aria-selected={section === "inbox"} tabIndex={section === "inbox" ? 0 : -1} onClick={() => { if (section !== "inbox") switchSection("inbox"); }}>Skrzynka{newInboxCount ? <small><span className="sr-only">Nowe wpisy: </span>{newInboxCount}</small> : null}</button>
       </div>
+      <div id="knowledge-section" role="tabpanel" aria-labelledby={`knowledge-tab-${section}`}>
       {section === "inbox" ? <KnowledgeInbox /> : <>
       <div className={`knowledge-workspace${previewItem ? " has-preview" : ""}`} onKeyDown={(event) => {
         if (event.key === "Escape" && previewItem && !document.querySelector('[aria-modal="true"]')) { event.preventDefault(); closePreview(); }
       }}>
       <div className="knowledge-collection">
-      <div className="knowledge-controls">
-        <div className="knowledge-filter-topbar">
-          <div className="knowledge-search"><Search /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj w bibliotece…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-          <Button className="knowledge-filter-toggle" variant="secondary" aria-expanded={filtersOpen} aria-controls="knowledge-advanced-filters" onClick={() => setFiltersOpen((current) => !current)}><SlidersHorizontal /><span>Filtry</span>{advancedFilterCount ? <small>{advancedFilterCount}</small> : null}</Button>
+      <section className="knowledge-library-toolbar" aria-label="Filtry Biblioteki">
+        <div className="knowledge-visibility" role="group" aria-label="Widoczność Biblioteki">
+          {([["active", "Aktywne"], ["archived", "Archiwum"], ["trashed", "Kosz"]] as const).map(([value, label]) => <Button key={value} variant={view === value ? "secondary" : "ghost"} aria-pressed={view === value} onClick={() => changeFilters((next) => {
+            if (value === "active") next.delete("visibility");
+            else next.set("visibility", value);
+            next.delete("preview");
+          })}>{label}</Button>)}
         </div>
-        <div className="knowledge-kind-filters" role="group" aria-label="Rodzaj Wiedzy">
-          <button type="button" aria-pressed={kind === "all" && !booksOnly} onClick={() => { params.delete("kind"); params.delete("format"); params.delete("readingStatus"); setParams(params); }}><BookMarked /><span>Wszystkie</span></button>
-          <button type="button" aria-pressed={Boolean(revisitOnOrBefore)} onClick={() => { if (revisitOnOrBefore) params.delete("revisit"); else { params.set("revisit", "due"); params.delete("visibility"); } setParams(params); }}>Do powrotu</button>
-          <button type="button" aria-pressed={booksOnly} onClick={() => { params.delete("kind"); params.delete("readingStatus"); params.set("format", "book"); setParams(params); }}><BookMarked /><span>Książki</span></button>
-          {kind !== "all" ? <button type="button" aria-pressed="true" onClick={() => setFiltersOpen(true)}>{knowledgeKindLabels[kind]}</button> : null}
-        </div>
-        {filtersOpen ? <div className="knowledge-advanced-filters" id="knowledge-advanced-filters">
-          <label className="knowledge-kind-select"><span>Rodzaj</span><select aria-label="Rodzaj Wiedzy" value={kind} onChange={(event) => { params.delete("format"); params.delete("readingStatus"); if (event.target.value === "all") params.delete("kind"); else params.set("kind", event.target.value); setParams(params); }}><option value="all">Wszystkie rodzaje</option>{filterableKnowledgeKinds.map((value) => <option key={value} value={value}>{knowledgeKindLabels[value]}</option>)}</select></label>
-          <div className="knowledge-filter-fields">
-            <label><span>Grupa działań</span><select aria-label="Filtr grupy" value={goalFilter} onChange={(event) => { if (event.target.value) params.set("goal", event.target.value); else params.delete("goal"); setParams(params); }}><option value="">Każdy Grupa działań</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></label>
-            <label><span>Projekt</span><select aria-label="Filtr Projektu" value={areaFilter} onChange={(event) => { if (event.target.value) params.set("area", event.target.value); else params.delete("area"); setParams(params); }}><option value="">Każdy Projekt</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
-            {booksOnly ? <label><span>Status czytania</span><select aria-label="Filtr statusu czytania" value={readingStatus ?? ""} onChange={(event) => { if (event.target.value) params.set("readingStatus", event.target.value); else params.delete("readingStatus"); setParams(params); }}><option value="">Każdy status</option>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
-          </div>
-          <div className="knowledge-visibility-filter">
-            <span>Widok</span>
-            <div role="group" aria-label="Widoczność obiektów">
-              <button type="button" aria-pressed={view === "active"} onClick={() => { params.delete("visibility"); setParams(params); }}>Aktywne</button>
-              <button type="button" aria-pressed={view === "archived"} onClick={() => { params.set("visibility", "archived"); setParams(params); }}><Archive />Archiwum</button>
-              <button type="button" aria-pressed={view === "trashed"} onClick={() => { params.set("visibility", "trashed"); setParams(params); }}><Trash2 />Kosz</button>
+        <div className="knowledge-search-bar">
+          <div className="knowledge-search-field"><Search aria-hidden="true" /><input type="search" aria-label="Szukaj w wiedzy" placeholder="Szukaj wpisu…" value={query} onChange={(event) => setFilter("q", event.target.value, true)} /></div>
+          <ActionFilterControl inline triggerRef={filterButtonRef} label="Filtry" dialogTitle="Filtry Biblioteki"
+            ariaLabel={advancedFilters.length ? `Filtry Biblioteki, aktywne: ${advancedFilters.length}` : "Filtry Biblioteki"} active={advancedFilters.length > 0} open={Boolean(pendingFilters)}
+            onOpenChange={(open) => setFilterDraft(open ? { search: location.search, params: new URLSearchParams(params) } : undefined)}
+            footer={<>
+              <Button variant="ghost" disabled={!filterKeys.some((key) => filterFields.has(key))} onClick={() => changeFilterDraft((next) => filterKeys.forEach((key) => next.delete(key)))}>Resetuj</Button>
+              <Button variant="primary" onClick={() => {
+                if (pendingFilters && pendingFilters.toString() !== params.toString()) setParams(pendingFilters);
+                setFilterDraft(undefined);
+              }}>Pokaż wyniki</Button>
+            </>}>
+            <div className="knowledge-filter-fields">
+              <label><span>Rodzaj</span><select aria-label="Rodzaj Wiedzy" value={draftBooksOnly ? "book" : filterFields.get("kind") ?? "all"} onChange={(event) => changeFilterDraft((next) => {
+                const value = event.target.value;
+                for (const key of ["kind", "format", "readingStatus"]) next.delete(key);
+                if (value === "book") next.set("format", "book");
+                else if (value !== "all") next.set("kind", value);
+              })}>
+                <option value="all">Wszystkie rodzaje</option>
+                {filterableKnowledgeKinds.map((value) => <option key={value} value={value}>{knowledgeKindLabels[value]}</option>)}
+                <option value="book">Książki</option>
+              </select></label>
+              {draftBooksOnly ? <label className="knowledge-reading-filter"><span>Status czytania</span><select aria-label="Filtr statusu czytania" value={filterFields.get("readingStatus") ?? ""} onChange={(event) => setDraftFilter("readingStatus", event.target.value)}>
+                <option value="">Wszystkie statusy</option>{Object.entries(readingStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select></label> : null}
+              <label><span>Projekt</span><select aria-label="Filtr Projektu" value={filterFields.get("area") ?? ""} onChange={(event) => setDraftFilter("area", event.target.value)}>
+                <option value="">Wszystkie projekty</option>{state.areas.filter((area) => area.visibility === "active" || area.id === areaFilter).map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+              </select></label>
+              <label><span>Grupa działań</span><select aria-label="Filtr grupy" value={filterFields.get("goal") ?? ""} onChange={(event) => setDraftFilter("goal", event.target.value)}>
+                <option value="">Wszystkie grupy</option>{state.goals.filter((goal) => goal.visibility === "active" || goal.id === goalFilter).map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
+              </select></label>
             </div>
-          </div>
-          {advancedFilterCount ? <Button className="knowledge-clear-advanced" variant="ghost" onClick={() => { params.delete("goal"); params.delete("area"); params.delete("kind"); params.delete("readingStatus"); params.delete("format"); params.delete("visibility"); setParams(params); }}>Wyczyść dodatkowe filtry</Button> : null}
+            <label className="checkbox-field knowledge-revisit-filter"><input type="checkbox" checked={filterFields.get("revisit") === "due"} onChange={(event) => setDraftFilter("revisit", event.target.checked ? "due" : "")} /><span>Tylko wpisy do powrotu</span></label>
+          </ActionFilterControl>
+        </div>
+        {hasFilters ? <div className="knowledge-results-summary">
+          {advancedFilters.length ? <div className="knowledge-active-filters" role="group" aria-label="Aktywne filtry">
+            {advancedFilters.map(({ label, keys }) => <Button key={keys[0]} className="knowledge-filter-chip" variant="ghost" aria-label={`Usuń filtr: ${label}`} onClick={() => {
+              filterButtonRef.current?.focus({ preventScroll: true });
+              changeFilters((next) => keys.forEach((key) => next.delete(key)));
+            }}><span>{label}</span><X aria-hidden="true" /></Button>)}
+          </div> : null}
+          <Button className="knowledge-reset-filters" variant="ghost" onClick={() => {
+            filterButtonRef.current?.focus({ preventScroll: true });
+            clearFilters();
+          }}>Wyczyść filtry</Button>
         </div> : null}
-      </div>
-      <div className="knowledge-view-row">
-        <p className="results-summary" aria-live="polite">{knowledgePage.data?.totalCount === undefined ? `${results.length} wczytanych` : `${results.length} z ${knowledgePage.data.totalCount} elementów`}{view !== "active" ? ` · ${view === "archived" ? "Archiwum" : "Kosz"}` : ""}{kind !== "all" || booksOnly || goalFilter || areaFilter || readingStatus || normalized ? " · aktywne filtry" : ""}</p>
-      </div>
+      </section>
+      <p className={hasPartialResults ? "knowledge-result-count" : "sr-only"} role="status">
+        {!loading && !knowledgePage.isPending && (!knowledgePage.isError || knowledgePage.data)
+          ? hasPartialResults ? `${results.length} z ${totalCount} wyników` : `Wyniki: ${results.length}`
+          : ""}
+      </p>
       {loading || knowledgePage.isPending ? <ListSkeleton label="Ładowanie Wiedzy" /> : null}
       {knowledgePage.isError && !knowledgePage.data ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać Biblioteki Wiedzy. <button type="button" onClick={() => void knowledgePage.refetch()}>Spróbuj ponownie</button></p> : null}
       {knowledgePage.isFetchNextPageError ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnej strony. Dotychczasowe wyniki pozostają dostępne. <button type="button" onClick={() => void knowledgePage.fetchNextPage()}>Ponów tę stronę</button></p> : null}
       {results.length ? (
-        <div className="knowledge-library-surface"><div className="knowledge-list">
+        <ul className="workspace-list knowledge-result-list" role="list" aria-label="Wyniki w Bibliotece">
           {results.map((item) => {
             const mutationKey = `visibility:${item.id}`;
-            const relationCount = new Set(state.knowledgeLinks.filter((link) => link.knowledgeItemId === item.id).map((link) => link.targetKnowledgeItemId ? `knowledge:${link.targetKnowledgeItemId}` : link.areaId ? `project:${link.areaId}` : link.goalId ? `goal:${link.goalId}` : link.actionId ? `action:${link.actionId}` : `routine:${link.recurringTemplateId ?? ""}`)).size;
-            const relationLabel = relationCount === 1 ? "1 powiązanie" : relationCount >= 2 && relationCount <= 4 ? `${relationCount} powiązania` : `${relationCount} powiązań`;
-            const sourceLink = item.type === "note" ? state.knowledgeLinks.find((link) => link.knowledgeItemId === item.id && link.meaning === "source" && link.targetKnowledgeItemId) : undefined;
-            const sourceBook = sourceLink?.targetKnowledgeItemId ? sourceBooksById.get(sourceLink.targetKnowledgeItemId) : undefined;
-            const helper = item.resourceFormat === "book" ? [item.resourceAuthor, readingPositionLabel(item), item.readingStatus ? readingStatusLabels[item.readingStatus] : undefined].filter(Boolean).join(" · ") : item.sourceInboxItemId ? "Źródło: Skrzynka" : item.type === "note" ? (relationCount ? relationLabel : null) : item.detail.trim() || (relationCount ? relationLabel : null);
-            const firstLine = item.detail.split("\n").find((line) => line.trim())?.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl");
-            const titleIsFirstLine = item.type === "note" && Boolean(firstLine && firstLine === item.title.trim().replace(/\s+/g, " ").toLocaleLowerCase("pl"));
-            const noteDetail = titleIsFirstLine ? item.detail.replace(/^\s*[^\n]*\n?/, "").trim() : item.detail;
-            const longNote = noteDetail.length > 600 || noteDetail.split("\n").length > 8;
-            return (
-              <Panel className={`${entityCardVariants({ density: "compact" })} entity-card`} key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} data-preview-selected={previewItem?.id === item.id || undefined} tabIndex={-1}>
-                <span className="knowledge-row-badges">{item.revisitOn ? <Badge>Powrót: {formatActionDate(item.revisitOn, state.workspaceTimezone)}</Badge> : null}{item.resourceFormat === "book" ? <Badge>Książka</Badge> : <KnowledgeKindBadge kind={item.type} />}</span>
-                <span className="knowledge-row-content"><NavigationLink className="knowledge-title-link entity-card-open" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)} onClick={(event) => {
-                  if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); openPreview(item, event.currentTarget); }
-                }}><strong className="line-clamp-2">{item.title}</strong></NavigationLink>{helper ? <small className="knowledge-row-helper line-clamp-1">{helper}</small> : null}{sourceBook ? <NavigationLink className="knowledge-row-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: "/knowledge" }]} returnTo={locationAddress(location)} returnLabel="Wróć do Wiedzy">Źródło: {sourceBook.title}{sourceBook.resourceAuthor ? ` · ${sourceBook.resourceAuthor}` : ""}</NavigationLink> : null}{item.type === "note" && noteDetail ? <>{longNote ? <details className="knowledge-row-note-details"><summary>{noteDetail.slice(0, 520).trimEnd()}… <span>Pokaż więcej</span></summary><p>{noteDetail}</p></details> : <small className="knowledge-row-note-preview">{noteDetail}</small>}</> : null}{mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}</span>
-                <div className="knowledge-actions">
-                  <button type="button" className="icon-button knowledge-preview-trigger" aria-label={`Podejrzyj Wiedzę: ${item.title}`} title="Podejrzyj Wiedzę" aria-expanded={previewItem?.id === item.id} aria-controls={previewItem ? "knowledge-preview" : undefined} onClick={(event) => openPreview(item, event.currentTarget)}><PanelRightOpen aria-hidden="true" /></button>
-                  <Button variant="ghost" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal /></Button>
+            const sourceId = sourceByNote.get(item.id);
+            const sourceBook = sourceId ? sourceBooksById.get(sourceId) : undefined;
+            const projectContexts = resolveKnowledgeProjectContexts(state, item.id);
+            const projectIds = new Set(projectContexts.map((context) => context.projectId));
+            const namedProjects = state.areas.filter((area) => projectIds.has(area.id)).map((area) => area.name);
+            const onlyGroup = !namedProjects.length && state.knowledgeLinks.find((link) => link.knowledgeItemId === item.id && link.goalId)?.goalId;
+            const groupTitle = onlyGroup && state.goals.find((group) => group.id === onlyGroup)?.title;
+            const excerpt = knowledgeExcerpt(item);
+            const sourceHref = safeHttpUrl(item.sourceUrl) ?? (/^\S+$/.test(excerpt) ? safeHttpUrl(excerpt) : undefined);
+            const projectLabel = namedProjects.length ? `${namedProjects[0]}${namedProjects.length > 1 ? ` +${namedProjects.length - 1}` : ""}` : groupTitle;
+            const bookContext = item.resourceFormat === "book" && [item.resourceAuthor, item.readingStatus && readingStatusLabels[item.readingStatus]].filter(Boolean).join(" · ");
+            const revisitContext = item.revisitOn && `Powrót: ${formatActionDate(item.revisitOn, state.workspaceTimezone)}`;
+            const inboxContext = item.sourceInboxItemId && "Źródło: Skrzynka";
+            const context = revisitContext || inboxContext || bookContext || projectLabel || (sourceHref && new URL(sourceHref).hostname) || excerpt;
+            return <li className="workspace-list-row knowledge-result-row" key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} data-preview-selected={previewItem?.id === item.id || undefined} tabIndex={-1}>
+              <div className="knowledge-result-content">
+                <NavigationLink className="knowledge-title-link" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: address }]} returnTo={address} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)} onClick={(event) => {
+                  if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                    event.preventDefault();
+                    openPreview(item, event.currentTarget);
+                  }
+                }}><strong className="line-clamp-2">{item.title}</strong></NavigationLink>
+                <div className="knowledge-result-meta">
+                  {item.resourceFormat === "book" ? <span className="knowledge-result-book"><BookMarked aria-hidden="true" />Książka</span> : <KnowledgeKindBadge kind={item.type} compact />}
+                  {sourceBook && !revisitOnOrBefore ? <NavigationLink className="knowledge-result-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: address }]} returnTo={address} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)}>Źródło: {sourceBook.title}</NavigationLink> : context ? <span className="line-clamp-1">{context}</span> : null}
                 </div>
-              </Panel>
-            );
+                {mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}
+              </div>
+              <div className="knowledge-result-actions">
+                <button type="button" className="button button-ghost knowledge-preview-trigger" aria-label={`Podejrzyj Wiedzę: ${item.title}`} title="Podgląd" aria-expanded={previewItem?.id === item.id} aria-controls={previewItem ? "knowledge-preview" : undefined} onClick={(event) => openPreview(item, event.currentTarget)}><PanelRightOpen aria-hidden="true" /><span>Podgląd</span></button>
+                <Button variant="ghost" className="knowledge-row-menu" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal aria-hidden="true" /></Button>
+              </div>
+            </li>;
           })}
-        </div></div>
-      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />} title={normalized ? "Brak pasujących obiektów" : `Brak obiektów: ${view === "active" ? "aktywne" : view === "archived" ? "Archiwum" : "Kosz"}`} detail={normalized ? "Spróbuj krótszego zapytania albo innego słowa." : "Użyj przycisku + w nagłówku, aby zapisać notatkę, materiał, decyzję lub rezultat."} action={normalized || kind !== "all" || goalFilter || areaFilter || view !== "active" ? <Button onClick={() => { setQuery(""); const next = new URLSearchParams(params); ["q", "kind", "format", "readingStatus", "revisit", "goal", "area", "visibility"].forEach((key) => next.delete(key)); setParams(next); }}>Wyczyść filtry</Button> : undefined} /> : null}
-      {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
-      {results.length && knowledgePage.data && !knowledgePage.hasNextPage && !knowledgePage.isFetching && !knowledgePage.isError ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
+        </ul>
+      ) : !knowledgePage.isPending && !knowledgePage.isError ? <EmptyState icon={<BookMarked />}
+        title={hasFilters ? "Brak pasujących wpisów" : view === "archived" ? "Archiwum jest puste" : view === "trashed" ? "Kosz jest pusty" : "Biblioteka jest pusta"}
+        detail={hasFilters ? "Zmień frazę lub filtry." : view === "active" ? "Dodaj notatkę, materiał lub decyzję." : "Wróć do aktywnych wpisów, aby zobaczyć Bibliotekę."}
+      /> : null}
+      {results.length && knowledgePage.hasNextPage ? <div className="list-pagination"><Button loading={knowledgePage.isFetchingNextPage} onClick={() => void knowledgePage.fetchNextPage()}>Wczytaj więcej</Button></div> : null}
       </div>
-      {previewItem ? <KnowledgePreview item={previewItem} sourceBook={sourceBookLink?.targetKnowledgeItemId ? sourceBooksById.get(sourceBookLink.targetKnowledgeItemId) : undefined} returnTo={locationAddress(location)} onClose={closePreview} /> : null}
+      {previewItem ? <KnowledgePreview item={previewItem} sourceBook={previewSourceId ? sourceBooksById.get(previewSourceId) : undefined} returnTo={address} onClose={closePreview} /> : null}
       </div>
       <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
         const item = knowledgeItems.find((candidate) => candidate.id === actionsItemId);
@@ -236,6 +357,7 @@ export function KnowledgePage() {
       })()}</Modal>
 
       </>}
+      </div>
     </AppShell>
   );
 }

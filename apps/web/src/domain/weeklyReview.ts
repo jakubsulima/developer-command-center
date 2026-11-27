@@ -80,7 +80,7 @@ export function deriveWeeklyReview(state: AppState, now = new Date(), source: "d
   });
   if (goalsWithoutNextAction.length) suggestions.push({
     id: "next-actions",
-    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednego grupy" : polishCount(goalsWithoutNextAction.length, "grupy", "grup działań", "grup działań")}`,
+    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednej grupy" : polishCount(goalsWithoutNextAction.length, "grupy", "grup działań", "grup działań")}`,
     detail: "Wybierz zadanie nadrzędne z pełnej listy i dodaj do niego konkretny następny krok.",
     to: `/goals/${goalsWithoutNextAction[0]!.id}`,
     count: goalsWithoutNextAction.length,

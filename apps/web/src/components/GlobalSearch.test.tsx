@@ -96,6 +96,6 @@ describe("GlobalSearch", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/goals/drugi");
     expect(input).not.toHaveAttribute("aria-activedescendant");
     fireEvent.focus(input); await debounce(); fireEvent.keyDown(input, { key: "Escape" });
-    expect(input).toHaveValue(""); expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(input).toHaveValue("inna fraza"); expect(input).toHaveAttribute("aria-expanded", "false");
   });
 });

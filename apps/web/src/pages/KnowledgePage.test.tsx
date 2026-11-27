@@ -44,8 +44,9 @@ function start(path: string) {
 it("czyści wyszukiwanie bez przywracania starego q po debounce", async () => {
   const user = userEvent.setup();
   start("/knowledge?q=missing");
+  expect(screen.getByRole("heading", { name: "Brak pasujących wpisów" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Wyczyść filtry" }));
-  await waitFor(() => expect(screen.queryByText("Brak pasujących obiektów")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Brak pasujących wpisów")).not.toBeInTheDocument());
   expect(screen.getByTestId("url")).toHaveTextContent(/^$/);
   expect(screen.getByRole("searchbox")).toHaveValue("");
 });
@@ -59,6 +60,23 @@ it("respektuje zmianę URL i historię także podczas oczekującego wyszukiwania
   await user.click(screen.getByText("Wstecz test"));
   expect(screen.getByRole("searchbox")).toHaveValue("originalx");
   await waitFor(() => expect(mocks.page).toHaveBeenCalledWith("knowledge", 50, expect.objectContaining({ searchText: "originalx" })));
+});
+
+it("stosuje filtry dopiero po zatwierdzeniu i usuwa nieaktualny status czytania", async () => {
+  const user = userEvent.setup();
+  start("/knowledge?format=book&readingStatus=reading");
+
+  expect(screen.getByRole("button", { name: "Usuń filtr: Książki" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^Filtry Biblioteki/ }));
+  const kind = screen.getByRole("combobox", { name: "Rodzaj Wiedzy" });
+  expect(kind).toHaveValue("book");
+
+  await user.selectOptions(kind, "note");
+  expect(screen.getByTestId("url")).toHaveTextContent(/^\?format=book&readingStatus=reading$/);
+  expect(screen.queryByRole("combobox", { name: "Filtr statusu czytania" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Pokaż wyniki" }));
+  expect(screen.queryByRole("button", { name: "Usuń filtr: Książki" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("url")).toHaveTextContent(/^\?kind=note$/);
 });
 
 it("pokazuje nową notatkę poza pierwszą stroną, deduplikuje ją i respektuje archiwizację", async () => {
@@ -84,7 +102,7 @@ it("wybiera źródłową książkę spoza początkowo załadowanej Wiedzy", asyn
   start("/knowledge");
   await user.click(screen.getByText("Dodaj test"));
   await user.type(await screen.findByLabelText("Treść notatki"), "Notatka do źródła");
-  await user.click(screen.getByText("Więcej", { exact: true }));
+  await user.click(screen.getByText("Szczegóły", { exact: true }));
   await user.selectOptions(screen.getByLabelText(/Źródłowa książka/), "off-page-book");
   await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
   await waitFor(() => expect(createdInputs).toHaveLength(1));

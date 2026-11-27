@@ -663,7 +663,7 @@ export function executeDomainCommand(state: AppState, command: DomainCommand): A
       scheduledFor: command.scheduledFor === null ? undefined : command.scheduledFor ?? item.scheduledFor,
       pinnedToToday: command.pinnedToToday ?? item.pinnedToToday,
       goalId: command.goalId === null ? undefined : command.goalId ?? item.goalId,
-      isNext: command.goalId !== undefined && command.goalId !== item.goalId ? false : item.isNext,
+      isNext: command.goalId !== undefined && (command.goalId ?? undefined) !== item.goalId ? false : item.isNext,
       areaId: command.areaId === null ? undefined : command.areaId ?? item.areaId,
       position: command.position ?? item.position,
       checklist: command.checklist ?? item.checklist,

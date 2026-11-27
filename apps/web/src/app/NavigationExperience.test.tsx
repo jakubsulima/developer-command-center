@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { emptyState } from "../data/empty";
+import type { AppState } from "../domain/types";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
@@ -43,7 +44,7 @@ describe("spójna nawigacja kontekstowa", () => {
       expect(shell).toHaveClass("mobile-header-hidden");
       expect(bottomNav).toHaveAttribute("data-compact", "true");
       expect(within(bottomNav).getByRole("link", { name: "Działania" })).toBeVisible();
-      expect(within(bottomNav).getByRole("link", { name: "Przegląd AI" })).toBeVisible();
+      expect(within(bottomNav).getByRole("link", { name: "Wiedza" })).toBeVisible();
 
       if (flow === "status") {
         trigger.focus();
@@ -80,36 +81,42 @@ describe("spójna nawigacja kontekstowa", () => {
     }
   });
 
-  it("otwiera Przegląd AI z dolnego paska i aktywuje właściwy skrót po zmianie zakładki", async () => {
+  it("otwiera Przegląd AI z menu Więcej i utrzymuje zaznaczenie po otwarciu ustawień AI", async () => {
     seedNavigationState();
     const user = userEvent.setup();
     renderApp("/review");
-    const summaryTab = await screen.findByRole("tab", { name: "Tydzień", selected: true });
-    const bottomNav = within(screen.getByRole("navigation", { name: "Nawigacja mobilna" }));
-    const aiLink = bottomNav.getByRole("link", { name: "Przegląd AI" });
-    const moreButton = bottomNav.getByRole("button", { name: "Otwórz menu Więcej" });
+    await screen.findByRole("tab", { name: "Tydzień", selected: true });
+    const bottomNav = () => within(screen.getByRole("navigation", { name: "Nawigacja mobilna" }));
+    expect(bottomNav().getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
+    expect(bottomNav().queryByRole("link", { name: "Przegląd AI" })).not.toBeInTheDocument();
+    await user.click(bottomNav().getByRole("button", { name: "Otwórz menu Więcej" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("link", { name: /^Przegląd AI/ }));
+    await screen.findByRole("heading", { name: "Przegląd AI", level: 1 });
+    const moreButton = bottomNav().getByRole("button", { name: "Otwórz menu Więcej" });
+    expect(screen.queryByRole("tablist", { name: "Widoki podsumowania tygodnia" })).not.toBeInTheDocument();
     expect(moreButton).toHaveAttribute("aria-current", "page");
+    await user.click(moreButton);
+    const more = screen.getByRole("dialog", { name: "Więcej" });
+    expect(within(more).getByRole("link", { name: /^Przegląd AI/, current: "page" })).toBeVisible();
+    await user.keyboard("{Escape}");
 
-    await user.click(aiLink);
-
-    expect(screen.getByRole("tab", { name: "AI", selected: true })).toBeVisible();
-    expect(aiLink).toHaveAttribute("aria-current", "page");
-    expect(moreButton).not.toHaveAttribute("aria-current");
-
-    await user.click(summaryTab);
-
+    await user.click(screen.getByLabelText("Więcej opcji"));
+    await user.click(screen.getByRole("button", { name: "Ustawienia AI" }));
+    const dialog = screen.getByRole("dialog", { name: "Ustawienia AI" });
+    expect(within(dialog).getByRole("combobox", { name: "Zakres danych analizowanych przez AI" })).toBeVisible();
+    await user.click(within(dialog).getByRole("button", { name: "Zamknij okno" }));
     expect(moreButton).toHaveAttribute("aria-current", "page");
-    expect(aiLink).not.toHaveAttribute("aria-current");
   });
 
   it("zachowuje ten sam górny pasek podczas zmiany widoków podsumowania", async () => {
     seedNavigationState();
     const user = userEvent.setup();
-    renderApp("/review?tab=ai");
-    const search = await screen.findByRole("button", { name: "Otwórz wyszukiwanie" });
+    renderApp("/review?tab=plan");
+    await screen.findByRole("heading", { name: "Podsumowanie tygodnia" });
+    const search = screen.getByRole("button", { name: "Otwórz wyszukiwanie" });
     const add = screen.getByRole("button", { name: "Dodaj" });
 
-    for (const name of ["Tydzień", "Plan", "Historia", "AI"]) {
+    for (const name of ["Tydzień", "Plan", "Historia"]) {
       await user.click(screen.getByRole("tab", { name }));
       expect(screen.getByRole("tab", { name, selected: true })).toBeVisible();
       expect(screen.getByRole("button", { name: "Otwórz wyszukiwanie" })).toBe(search);
@@ -163,6 +170,40 @@ describe("spójna nawigacja kontekstowa", () => {
     const trail = screen.getByRole("navigation", { name: "Ścieżka kontekstu" });
     expect(within(trail).getAllByRole("link", { name: "Projekt Nawigacji" })).toHaveLength(1);
     expect(trail.querySelector(".context-breadcrumbs")).not.toHaveTextContent("Wiedza Nawigacji");
+  });
+
+  it("po edycji odtwarza dodatkową stronę Biblioteki, filtry, pozycję i fokus", async () => {
+    seedNavigationState();
+    const state = JSON.parse(localStorage.getItem("command-center-state-v1")!) as AppState;
+    for (let index = 0; index < 50; index++) {
+      const id = `older-note-${index}`;
+      state.knowledge.push({ id, type: "note", title: `Wiedza ${index}`, detail: "", updatedAt: "2026-08-01T08:00:00.000Z" });
+      state.knowledgeLinks.push({ id: `link-${id}`, knowledgeItemId: id, areaId: "nav-project", meaning: "reference", createdAt: "2026-08-01T08:00:00.000Z" });
+    }
+    const target = state.knowledge.find((item) => item.id === "nav-knowledge")!;
+    target.updatedAt = "2026-08-02T08:00:00.000Z";
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    const scroll = vi.spyOn(window, "scrollY", "get").mockReturnValue(320);
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    try {
+      renderApp("/knowledge?q=Wiedza&area=nav-project");
+      await user.click(await screen.findByRole("button", { name: "Wczytaj więcej" }));
+      await user.click(await screen.findByRole("link", { name: "Wiedza Nawigacji" }));
+      await user.click(await screen.findByRole("button", { name: "Edytuj" }));
+      await user.type(screen.getByLabelText("Treść notatki opcjonalnie"), "Doprecyzowana treść");
+      await user.click(screen.getByRole("button", { name: "Zapisz zmiany" }));
+      await screen.findByText("Doprecyzowana treść");
+      await user.click(screen.getByRole("button", { name: "Wróć do Wiedzy" }));
+      const row = (await screen.findByRole("link", { name: "Wiedza Nawigacji" })).closest("li");
+      await waitFor(() => expect(row).toHaveFocus());
+      expect(screen.getByRole("searchbox")).toHaveValue("Wiedza");
+      expect(screen.getByRole("button", { name: "Usuń filtr: Projekt: Projekt Nawigacji" })).toBeInTheDocument();
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 320 }));
+    } finally {
+      scroll.mockRestore();
+      scrollTo.mockRestore();
+    }
   });
 
   it("przekierowuje stary adres Działania przez replace do nowej trasy", async () => {

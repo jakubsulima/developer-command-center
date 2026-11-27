@@ -1,3 +1,4 @@
+import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
 import type { AppState } from "../domain/types";
 import { DEFAULT_AI_REVIEW_SETTINGS } from "../domain/aiReviewSettings";
 
@@ -134,7 +135,7 @@ export const demoState: AppState = {
   ],
   learningGoals: [{ id: "goal-ts-modeling", title: "Projektuj skalowalne modele danych", criterion: "Zaprojektuj i obroń model dla realnego systemu", status: "shaped", skills: ["TypeScript Architecture", "PostgreSQL"] }],
   knowledge: [
-    { id: "know-1", type: "artifact", title: "Diagram ERD — Transactions v1", detail: "FinTrack API • zaktualizowano wczoraj" },
+    { id: "know-1", type: "artifact", title: "Diagram ERD — Transactions v1", detail: "Diagram relacji dla transakcji w FinTrack API", updatedAt: "2026-08-01T08:00:00.000Z" },
     { id: "know-2", type: "decision", title: "Typ danych dla kwot pieniężnych", detail: "DECIMAL(18,2) zamiast float • 2 źródła" },
     { id: "know-3", type: "resource", title: "PostgreSQL: constraints and normalization", detail: "Dokumentacja źródłowa • użyte w 2 projektach" },
     { id: "know-book", type: "resource", title: "Designing Data-Intensive Applications", detail: "Notatki i zastosowania z książki", resourceFormat: "book", resourceAuthor: "Martin Kleppmann", readingStatus: "reading" },
@@ -154,3 +155,36 @@ export const demoState: AppState = {
   },
   aiProposal: "pending"
 };
+
+const demoProjectIds = new Set(demoState.projects.map(({ id }) => id));
+const demoLearningIds = new Set(demoState.learningGoals.map(({ id }) => id));
+const demoExampleTimestamp = "2026-08-01T08:00:00.000Z";
+
+/** Only fixture aggregates become current demo records. Other legacy data remains historical. */
+export function normalizeDemoWorkspace(state: AppState): AppState {
+  const projects = state.projects.filter(({ id }) => demoProjectIds.has(id));
+  const learningGoals = state.learningGoals.filter(({ id }) => demoLearningIds.has(id));
+  const projected = ensureGoalModel({ ...state, projects, learningGoals });
+  const projectIds = new Set(projects.map(({ id }) => id));
+  const goalIds = new Set([...projectIds, ...learningGoals.map(({ id }) => id)]);
+  const actionIds = new Set(projects.flatMap(({ workItems }) => workItems.map(({ id }) => id)));
+  const criterionIds = new Set(projects.flatMap(({ requirements }) => requirements.map(({ id }) => id)));
+  learningGoals.forEach(({ id }) => criterionIds.add(`${id}-criterion`));
+
+  return migrateLegacyWorkspaceState({
+    ...projected,
+    projects: state.projects,
+    learningGoals: state.learningGoals,
+    knowledge: projected.knowledge.map((item) => item.id === "know-1"
+      && item.title === "Diagram ERD — Transactions v1"
+      && item.detail === "FinTrack API • zaktualizowano wczoraj"
+      ? { ...item, detail: "Diagram relacji dla transakcji w FinTrack API", updatedAt: item.updatedAt ?? demoExampleTimestamp }
+      : item),
+    areas: projected.areas.map((area) => projectIds.has(area.id) && area.createdAt === new Date(0).toISOString()
+      ? { ...area, createdAt: demoExampleTimestamp, updatedAt: area.updatedAt === area.createdAt ? demoExampleTimestamp : area.updatedAt }
+      : area),
+    goals: projected.goals.map((goal) => goalIds.has(goal.id) ? { ...goal, legacySource: undefined } : goal),
+    actions: projected.actions.map((action) => actionIds.has(action.id) ? { ...action, legacySourceId: undefined } : action),
+    goalCriteria: projected.goalCriteria.map((criterion) => criterionIds.has(criterion.id) ? { ...criterion, legacySourceId: undefined } : criterion)
+  });
+}

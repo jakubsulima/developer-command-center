@@ -1,5 +1,6 @@
 import { executeDomainCommand, type DomainCommand } from "../domain/commands";
-import { migrateLegacyWorkspaceState } from "../domain/goals";
+import { normalizeDemoWorkspace } from "./demo";
+import { routeForEntity } from "../domain/routes";
 import type { AppState } from "../domain/types";
 import { deriveWeeklyReview } from "../domain/weeklyReview";
 import { isVisibleWorkspaceAction, isVisibleWorkspaceKnowledge, isVisibleWorkspaceProgress, withinDateRange, zonedStartOfDay } from "../domain/activity";
@@ -222,8 +223,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
       ? await readIndexedDb(indexedDb)
       : JSON.parse(storage.getItem(FALLBACK_KEY) ?? "null") as StoredWorkspace | null;
     if (!stored?.state) return null;
-    const snapshot = structuredClone(stored.state);
-    const migrated = stored.version < SCHEMA_VERSION ? migrateLegacyWorkspaceState(snapshot) : snapshot;
+    const migrated = normalizeDemoWorkspace(structuredClone(stored.state));
     return { ...migrated, aiReviewSettings: decodeAIReviewSettings(migrated.aiReviewSettings) };
   };
 
@@ -316,7 +316,7 @@ export function createLocalWorkspaceRepository(options: LocalRepositoryOptions =
         ...state.actions.filter((item) => `${item.title} ${item.detail}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "action" as const, title: item.title, detail: item.detail, route: `/actions/${item.id}` })),
         ...state.knowledge.filter((item) => `${item.title} ${item.detail} ${item.resourceAuthor ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "knowledge" as const, title: item.title, detail: item.detail, route: `/knowledge/${item.id}` })),
         ...state.areas.filter((item) => item.visibility === "active" && `${item.name} ${item.description ?? ""}`.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "project" as const, title: item.name, detail: item.description, route: `/projects/${item.id}` })),
-        ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: `/knowledge?section=inbox&item=${item.id}` }))
+        ...state.inbox.filter((item) => item.content.toLocaleLowerCase().includes(normalized)).map((item) => ({ id: item.id, type: "inbox" as const, title: item.content, route: routeForEntity({ type: "inbox", id: item.id, status: item.status }) }))
       ];
       return results.slice(0, Math.min(20, Math.max(1, limit)));
     },

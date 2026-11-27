@@ -181,7 +181,7 @@ export interface WorkspaceRepository {
   loadPage(query: WorkspacePageQuery): Promise<Page<WorkspacePageItem>>;
   loadKnowledgeItem(id: string): Promise<KnowledgeItem | undefined>;
   loadKnowledgeItems(ids: string[]): Promise<KnowledgeItem[]>;
-  loadAction(id: string): Promise<GoalAction | undefined>;
+  loadAction(id: string, workspaceId?: string): Promise<GoalAction | undefined>;
   loadLegacyFocusSession(id: string): Promise<FocusSessionRecord | undefined>;
   search(query: string, limit?: number): Promise<SearchResult[]>;
   exportWorkspace(workspaceId: string): Promise<WorkspaceExport>;

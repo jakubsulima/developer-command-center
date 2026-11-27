@@ -8,10 +8,10 @@ describe("prezentacja Działania", () => {
   });
 
   it("opisuje termin względem jawnego dzisiaj", () => {
-    expect(describeActionSchedule({ scheduledFor: "2026-09-20", pinnedToToday: false }, "2026-09-20", "Europe/Warsaw")).toBe("Dzisiaj");
-    expect(describeActionSchedule({ scheduledFor: "2026-09-21", pinnedToToday: false }, "2026-09-20", "Europe/Warsaw")).toBe("Jutro");
-    expect(describeActionSchedule({ scheduledFor: "2026-09-18", pinnedToToday: false }, "2026-09-20", "Europe/Warsaw")).toBe("Zaległe · 18 wrz");
-    expect(describeActionSchedule({ pinnedToToday: false }, "2026-09-20", "Europe/Warsaw")).toBe("Bez terminu");
+    expect(describeActionSchedule({ scheduledFor: "2026-09-20" }, "2026-09-20", "Europe/Warsaw")).toBe("Dzisiaj");
+    expect(describeActionSchedule({ scheduledFor: "2026-09-21" }, "2026-09-20", "Europe/Warsaw")).toBe("Jutro");
+    expect(describeActionSchedule({ scheduledFor: "2026-09-18" }, "2026-09-20", "Europe/Warsaw")).toBe("Zaległe · 18 wrz");
+    expect(describeActionSchedule({}, "2026-09-20", "Europe/Warsaw")).toBe("Bez terminu");
   });
 
   it("rozwiązuje nazwę Rutyny i bezpieczny fallback", () => {

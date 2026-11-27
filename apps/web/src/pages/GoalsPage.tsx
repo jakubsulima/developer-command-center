@@ -8,20 +8,16 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
-import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { entityCardVariants } from "../components/ui-variants";
 import { routeForEntity } from "../domain/routes";
 import type { GoalKind, GoalStatus } from "../domain/types";
-import { goalKindLabels as kindLabels, goalStatusLabels as statusLabels } from "../domain/labels";
+import { goalKindLabels as kindLabels, goalStatusLabels as statusLabels, polishPluralForm } from "../domain/labels";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
 
 
 function goalCountLabel(count: number) {
-  if (count === 1) return "1 Grupa działań";
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  return mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? `${count} Grupy działań` : `${count} grup działań`;
+  return `${count} ${polishPluralForm(count, "grupa działań", "grupy działań", "grup działań")}`;
 }
 
 export function GoalsPage() {
@@ -39,13 +35,16 @@ export function GoalsPage() {
   const groupType = params.get("groupType");
   const kind = params.get("kind") as GoalKind | null;
   const activeFilterCount = Number(status !== "active") + Number(Boolean(kind)) + Number(Boolean(groupType));
-  const statusTabs = (mobile = false) => <Tabs value={status} onValueChange={(value) => { const next = new URLSearchParams(params); next.set("status", value); setParams(next); if (mobile) setFiltersOpen(false); }} className="filter-pills">
-    <TabsList className={mobile ? "grid h-auto w-full grid-cols-2 items-stretch border-0 bg-transparent p-0" : "h-auto flex-wrap border-0 bg-transparent p-0"}>
-      {(["active", "paused", "achieved", "abandoned", "all"] as const).map((value) => <TabsTrigger className="min-h-10 justify-start" role="button" value={value} key={value}>{value === "all" ? "Wszystkie" : statusLabels[value]}</TabsTrigger>)}
-      <TabsTrigger className="min-h-10 justify-start" role="button" value="archived"><Archive />Archiwum</TabsTrigger>
-      <TabsTrigger className="min-h-10 justify-start" role="button" value="trashed"><Trash2 />Kosz</TabsTrigger>
-    </TabsList>
-  </Tabs>;
+  const statusButtons = <div className="filter-pills goal-status-filters" role="group" aria-label="Stan grup działań">
+    {([
+      ["active", "Aktywne"], ["paused", "Wstrzymane"], ["achieved", "Ukończone"], ["abandoned", "Porzucone"], ["all", "Wszystkie"], ["archived", "Archiwum"], ["trashed", "Kosz"]
+    ] as const).map(([value, label]) => <Button type="button" key={value} aria-pressed={status === value} variant={status === value ? "secondary" : "ghost"} onClick={() => {
+      const next = new URLSearchParams(params);
+      if (value === "active") next.delete("status");
+      else next.set("status", value);
+      setParams(next);
+    }}>{value === "archived" ? <Archive aria-hidden="true" /> : value === "trashed" ? <Trash2 aria-hidden="true" /> : null}{label}</Button>)}
+  </div>;
   useEffect(() => {
     const next = new URLSearchParams(params);
     let changed = false;
@@ -63,7 +62,7 @@ export function GoalsPage() {
     return visibilityMatches && (!kind || goal.kind === kind) && (!groupType || actionGroupType(goal) === groupType);
   }), [groupType, kind, state.goals, status]);
 
-  const groupTypeFilter = (id: string) => <><label className="sr-only" htmlFor={id}>Typ grupy</label><select id={id} value={groupType ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("groupType", event.target.value); else next.delete("groupType"); setParams(next); }}><option value="">Każdy typ grupy</option><option value="category">Kategorie</option><option value="task">Zadania nadrzędne</option></select></>;
+  const groupTypeFilter = (id: string) => <><label className="field-label" htmlFor={id}>Typ grupy</label><select id={id} value={groupType ?? ""} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set("groupType", event.target.value); else next.delete("groupType"); setParams(next); }}><option value="">Każdy typ grupy</option><option value="category">Kategorie</option><option value="task">Zadania nadrzędne</option></select></>;
 
   const saveTemplate = async () => {
     if (templateLocked.current || !template.name.trim()) return;
@@ -81,23 +80,23 @@ export function GoalsPage() {
 
   return (
     <AppShell addAction={{ label: "Nowa grupa działań", shortLabel: "Grupa działań", ariaLabel: "Dodaj nową grupę działań", quickAdd: { mode: "goal", pinnedToToday: false, draftKey: "goals-list", groupType: groupType === "task" ? "task" : "category", goalKind: kind ?? undefined } }}>
-      <PageHeading title="Grupy działań" eyebrow="Kategorie i zadania nadrzędne z Działaniami" />
+      <PageHeading title="Grupy działań" eyebrow="Kategorie i zadania nadrzędne z działaniami" />
       <div className="goals-index">
       <Button className="mobile-filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><Settings2 />Filtry ({activeFilterCount})</Button>
       <div className="goal-toolbar">
-        {statusTabs()}
-        <div className="goal-toolbar-side">{groupTypeFilter("desktop-group-type")}
-          <select aria-label="Rodzaj zadania" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        {statusButtons}
+        <div className="goal-toolbar-side"><div className="goal-kind-filter">{groupTypeFilter("desktop-group-type")}</div>
+          <label className="field-label goal-kind-filter">Rodzaj zadania<select aria-label="Rodzaj zadania" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Wszystkie rodzaje</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <Button onClick={() => setSettingsOpen(true)}><Settings2 />Szablony zadań</Button>
           {(kind || groupType || status !== "active") ? <Button variant="ghost" onClick={() => setParams({})}>Wyczyść filtry</Button> : null}
         </div>
       </div>
       <Modal open={filtersOpen} title={`Filtry grup działań (${activeFilterCount})`} onClose={() => setFiltersOpen(false)}>
         <div className="mobile-filter-sheet">{groupTypeFilter("mobile-group-type")}
-          {statusTabs(true)}
+          {statusButtons}
           <label className="field-label" htmlFor="mobile-goal-kind">Rodzaj zadania</label>
-          <select id="mobile-goal-kind" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Każdy typ</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <div className="modal-actions"><Button variant="ghost" disabled={!activeFilterCount} onClick={() => setParams({})}>Wyczyść filtry</Button><Button variant="primary" onClick={() => setFiltersOpen(false)}>Pokaż {goals.length} grup działań</Button></div>
+          <select id="mobile-goal-kind" value={kind ?? ""} onChange={(event) => { if (event.target.value) params.set("kind", event.target.value); else params.delete("kind"); setParams(params); }}><option value="">Wszystkie rodzaje</option>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <div className="modal-actions"><Button variant="ghost" disabled={!activeFilterCount} onClick={() => setParams({})}>Wyczyść filtry</Button><Button variant="primary" onClick={() => setFiltersOpen(false)}>Pokaż {goalCountLabel(goals.length)}</Button></div>
         </div>
       </Modal>
       <p className="results-summary">{goalCountLabel(goals.length)}{kind ? ` · typ: ${kindLabels[kind]}` : ""}</p>
@@ -108,13 +107,13 @@ export function GoalsPage() {
         const next = state.actions.find((action) => action.goalId === goal.id && action.isNext && ["ready", "in_progress"].includes(action.status));
         const blocked = state.actions.some((action) => action.goalId === goal.id && action.status === "blocked");
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
-        const overdue = state.actions.some((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status));
+        const overdueCount = state.actions.filter((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status)).length;
         const card = <>
           <h2 className="line-clamp-2">{goal.title}</h2><div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{actionGroupTypeLabels[actionGroupType(goal)]}</Badge><span>{statusLabels[goal.status]}</span></div>
           {areaName || next ? <div className="goal-card-context">{areaName ? <span className="goal-card-project"><Layers3 />{areaName}</span> : null}{next ? <span className="goal-card-next"><Flag />{next.title}</span> : null}</div> : null}
           {!areaName ? <span className="collection-desktop-placeholder goal-card-project">Bez Projektu</span> : null}
           {!next ? <span className="collection-desktop-placeholder goal-card-next">—</span> : null}
-          <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdue ? <Badge tone="warning">Zaległe</Badge> : null}{!next && actionGroupType(goal) === "task" && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
+          <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdueCount > 0 ? <Badge tone="warning">{overdueCount} {polishPluralForm(overdueCount, "zaległe działanie", "zaległe działania", "zaległych działań")} w grupie</Badge> : null}{!next && actionGroupType(goal) === "task" && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
         </>;
         return status === "archived" || status === "trashed"
           ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>

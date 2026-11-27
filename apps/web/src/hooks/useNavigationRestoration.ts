@@ -7,11 +7,12 @@ import {
   readNavigationState
 } from "../domain/navigation";
 
-export function useNavigationRestoration() {
+export function useNavigationRestoration(ready = true) {
   const location = useLocation();
   const restored = useRef<string | undefined>(undefined);
 
   useEffect(() => {
+    if (!ready) return;
     const address = locationAddress(location);
     const navigation = readNavigationState(location.state);
     const savedFromHistory = readNavigationRestore(address);
@@ -26,13 +27,13 @@ export function useNavigationRestoration() {
     const saved = savedFromHistory ?? savedFromReturn ?? ((navigationIsReturn || targetIsCurrentPage) && navigation
       ? { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY }
       : undefined);
-    if (!saved || restored.current === address) return;
-    restored.current = address;
+    if (!saved || restored.current === location.key) return;
 
     let timeout: number | undefined;
     let secondFrame: number | undefined;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
+        restored.current = location.key;
         if (saved.scrollY !== undefined) window.scrollTo({ top: saved.scrollY, left: 0, behavior: "auto" });
         const target = saved.sourceCardId ? document.querySelector<HTMLElement>(`[data-navigation-card-id="${CSS.escape(saved.sourceCardId)}"]`) : null;
         if (target) {
@@ -48,5 +49,5 @@ export function useNavigationRestoration() {
       if (secondFrame !== undefined) cancelAnimationFrame(secondFrame);
       if (timeout !== undefined) window.clearTimeout(timeout);
     };
-  }, [location]);
+  }, [location, ready]);
 }

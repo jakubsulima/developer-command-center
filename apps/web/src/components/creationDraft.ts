@@ -11,6 +11,7 @@ export type QuickAddRequest = {
   materialKnowledgeIds?: string[];
   projectCategoryIds?: string[];
   libraryKind?: CreatableKnowledgeKind;
+  directLibraryEntry?: boolean;
   isBook?: boolean;
   readingStatus?: ReadingStatus;
   actionId?: string;

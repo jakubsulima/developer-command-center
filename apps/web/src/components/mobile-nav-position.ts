@@ -27,7 +27,7 @@ function readFrame(nav: HTMLElement, label: HTMLElement): NavFrame {
   return { nav, width, height, labelHeight: label.getBoundingClientRect().height, labelOpacity: getComputedStyle(label).opacity };
 }
 
-export function useMobileNavIndicator(loading: boolean, pathname: string, aiReviewActive: boolean) {
+export function useMobileNavIndicator(loading: boolean, activeRoute: string) {
   const position = useContext(MobileNavPositionContext);
   const indicatorRef = useRef<HTMLSpanElement>(null);
 
@@ -48,7 +48,7 @@ export function useMobileNavIndicator(loading: boolean, pathname: string, aiRevi
       { transform: `translateX(${previousIndex * 100}%)` },
       { transform: indicator.style.transform },
     ], motion);
-  }, [loading, pathname, aiReviewActive, position]);
+  }, [loading, activeRoute, position]);
 
   useLayoutEffect(() => {
     const nav = indicatorRef.current?.parentElement;

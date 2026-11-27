@@ -19,8 +19,11 @@ export function categoryConversionBlocker(state: AppState, group: Goal): string 
   return undefined;
 }
 
-export function actionGroupAssignment(state: AppState, action: GoalAction, groupId?: string) {
-  if (groupId === undefined || groupId === (action.goalId ?? "")) return {};
-  const group = state.goals.find((item) => item.id === groupId);
-  return { goalId: groupId || null, areaId: group?.areaId ?? action.areaId ?? null };
+export function actionProjectId(state: Pick<AppState, "goals">, action: GoalAction) {
+  return action.areaId ?? state.goals.find((group) => group.id === action.goalId)?.areaId;
+}
+
+export function actionGroupAssignment(state: Pick<AppState, "goals">, action: GoalAction, areaId: string, goalId: string) {
+  if (areaId === (actionProjectId(state, action) ?? "") && goalId === (action.goalId ?? "")) return {};
+  return { areaId: areaId || null, goalId: goalId || null };
 }

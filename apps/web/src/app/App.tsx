@@ -1,6 +1,9 @@
 import { RecentWorkTracker } from "../components/ReturnToWork";
 import { lazy, Suspense, useEffect, useRef } from "react";
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { SearchX } from "lucide-react";
+import { AppShell, PageHeading } from "../components/AppShell";
+import { Button, EmptyState } from "../components/ui";
 import { AppRouteLoading } from "../components/AppRouteLoading";
 import { MobileNavPositionContext, type MobileNavPosition } from "../components/mobile-nav-position";
 import { StartPage } from "../pages/StartPage";
@@ -53,7 +56,26 @@ const RoutinesPage = lazy(() => timedImport("routines", () => import("../pages/R
 const ProjectsPage = lazy(() => timedImport("projects", () => import("../pages/ProjectsPage").then((module) => ({ default: module.ProjectsPage }))));
 const ProjectDetailPage = lazy(() => timedImport("project-detail", () => import("../pages/ProjectDetailPage").then((module) => ({ default: module.ProjectDetailPage }))));
 const ReviewPage = lazy(() => timedImport("review", () => import("../pages/ReviewPage").then((module) => ({ default: module.ReviewPage }))));
+const AIReviewPage = lazy(() => timedImport("ai-review", () => import("../pages/AIReviewPage").then((module) => ({ default: module.AIReviewPage }))));
 const SettingsPage = lazy(() => timedImport("settings", () => import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))));
+
+function WeeklyReviewRoute() {
+  const { search, hash, state } = useLocation();
+  const params = new URLSearchParams(search);
+  if (params.get("tab") !== "ai") return <ReviewPage />;
+  params.delete("tab");
+  return <Navigate to={{ pathname: "/ai", search: params.toString(), hash }} state={state} replace />;
+}
+
+function focusWorkspaceSearch() {
+  if (window.matchMedia("(max-width: 767px)").matches) {
+    const input = document.getElementById("page-inline-search");
+    if (input) input.focus();
+    else document.getElementById("page-inline-search-trigger")?.click();
+    return;
+  }
+  document.getElementById("global-search")?.focus();
+}
 
 export function App() {
   const location = useLocation();
@@ -87,10 +109,11 @@ export function App() {
         <Route path="/learning" element={<Navigate to="/goals?kind=learning" replace />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/knowledge/:knowledgeId" element={<KnowledgeDetailPage />} />
-        <Route path="/review" element={<ReviewPage />} />
+        <Route path="/review" element={<WeeklyReviewRoute />} />
+        <Route path="/ai" element={<AIReviewPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/history/focus/:sessionId" element={<LegacyFocusHistoryPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<AppShell><PageHeading title="Nie znaleziono strony" /><EmptyState icon={<SearchX />} title="Sprawdź adres" detail="Możesz też wyszukać element, którego szukasz." action={<div className="button-row"><Link className="button button-primary" to="/">Wróć do Startu</Link><Button onClick={focusWorkspaceSearch}>Wyszukaj</Button></div>} /></AppShell>} />
       </Routes></Suspense>
       </MobileNavPositionContext.Provider>
     </ActionFeedbackProvider>

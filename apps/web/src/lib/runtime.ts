@@ -5,6 +5,8 @@ type RuntimeEnvironment = {
   VITE_DATA_BACKEND?: string;
   VITE_ENABLE_DEMO_MODE?: string;
   VITE_ENABLE_SIGNUP?: string;
+  VITE_ENABLE_PASSWORD_RESET?: string;
+  VITE_AUTH_SUPPORT_EMAIL?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 };
@@ -13,6 +15,8 @@ export type RuntimeConfig = {
   backend: DataBackend;
   demoEnabled: boolean;
   signupEnabled: boolean;
+  passwordResetEnabled?: boolean;
+  authSupportEmail?: string;
   configurationError?: string;
   supabase?: {
     url: string;
@@ -73,7 +77,13 @@ export function resolveRuntimeConfig(environment: RuntimeEnvironment): RuntimeCo
     };
   }
 
-  return { backend, demoEnabled, signupEnabled, supabase: { url, publishableKey } };
+  const contact = environment.VITE_AUTH_SUPPORT_EMAIL?.trim();
+  return {
+    backend, demoEnabled, signupEnabled,
+    passwordResetEnabled: environment.VITE_ENABLE_PASSWORD_RESET === undefined ? undefined : enabled(environment.VITE_ENABLE_PASSWORD_RESET),
+    authSupportEmail: contact && /^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/.test(contact) ? contact : undefined,
+    supabase: { url, publishableKey }
+  };
 }
 
 export const runtimeConfig = resolveRuntimeConfig(import.meta.env);

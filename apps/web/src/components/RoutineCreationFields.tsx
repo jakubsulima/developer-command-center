@@ -5,11 +5,11 @@ export function RoutineCreationFields({ value, onChange, contextOptions }: { val
   const update = (changes: Partial<QuickAddDraft>) => onChange({ ...value, ...changes });
   return <div className="creation-fields">
     <details><summary>Zacznij od gotowej propozycji</summary><div className="preset-library">{[
-      { title: "Przegląd grup działań", unit: "week" as const, checklist: "Zadania nadrzędne bez następnego kroku\nBlokady i terminy\nPilny Inbox" },
+      { title: "Przegląd grup działań", unit: "week" as const, checklist: "Zadania nadrzędne bez następnego kroku\nBlokady i terminy\nPilne wpisy w Skrzynce" },
       { title: "Przegląd budżetu", unit: "week" as const, checklist: "Sprawdź saldo\nZapisz jedną decyzję" },
       { title: "Powtórka materiału", unit: "week" as const, checklist: "Otwórz materiały\nZapisz luki" },
       { title: "Backup", unit: "month" as const, checklist: "Uruchom kopię\nZweryfikuj odtworzenie" },
-      { title: "Opróżnij Inbox", unit: "week" as const, checklist: "Podejmij decyzję o każdym elemencie" }
+      { title: "Opróżnij Skrzynkę", unit: "week" as const, checklist: "Podejmij decyzję o każdym elemencie" }
     ].map((preset) => <button key={preset.title} type="button" onClick={() => update({ title: preset.title, routineUnit: preset.unit, routineChecklist: preset.checklist })}>{preset.title}</button>)}</div></details>
     <label className="field-label" htmlFor="quick-add-routine-unit">Powtarzaj</label><select id="quick-add-routine-unit" value={value.routineUnit} onChange={(event) => update({ routineUnit: event.target.value as QuickAddDraft["routineUnit"] })}><option value="day">Codziennie</option><option value="week">Co tydzień</option><option value="month">Co miesiąc</option></select>
     <label className="field-label" htmlFor="quick-add-routine-interval">Co ile?</label><input id="quick-add-routine-interval" type="number" min="1" max="99" value={value.routineInterval} onChange={(event) => update({ routineInterval: event.target.value })} />
