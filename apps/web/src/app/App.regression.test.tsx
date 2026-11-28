@@ -282,7 +282,15 @@ describe("regresje nowego modelu grup działań", () => {
     const routine = screen.getByRole("heading", { name: "Przegląd budżetu" }).closest("section") as HTMLElement;
     expect(within(routine).getByText("Co tydzień · Wt")).toBeInTheDocument();
     expect(within(routine).getByRole("link", { name: "Zbudować spokojny budżet domowy" })).toBeInTheDocument();
-    expect(within(routine).getByText("Najbliższe wykonania")).toBeInTheDocument();
+    expect(within(routine).getByText("Najbliższy termin")).toBeInTheDocument();
+    await user.click(within(routine).getByText("Szczegóły"));
+    expect(within(routine).getByText("Po przerwie")).toBeVisible();
+    await user.click(within(routine).getByRole("button", { name: "Wstrzymaj" }));
+    expect(await within(routine).findByRole("button", { name: "Wznów" })).toBeVisible();
+    expect(within(routine).getByText("Wstrzymana")).toBeVisible();
+    expect(within(routine).queryByText("Najbliższy termin")).not.toBeInTheDocument();
+    await user.click(within(routine).getByRole("button", { name: "Wznów" }));
+    expect(await within(routine).findByRole("button", { name: "Wstrzymaj" })).toBeVisible();
     await user.click(within(routine).getByRole("link", { name: "Edytuj ustawienia rutyny: Przegląd budżetu" }));
     expect(await screen.findByRole("dialog", { name: "Edytuj Rutynę" })).toBeInTheDocument();
   });

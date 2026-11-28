@@ -483,7 +483,7 @@ describe("lista wszystkich Działań", () => {
     expect(await screen.findByRole("heading", { name: "Pobrać historię transakcji" }, { timeout: 5000 })).toBeInTheDocument();
     const contextNavigation = document.querySelector<HTMLElement>(".context-navigation")!;
     expect(within(contextNavigation).getByRole("link", { name: "Działania" })).toHaveAttribute("href", "/actions?view=overdue");
-    await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
+    await user.click(within(contextNavigation).getByRole("link", { name: "Działania" }));
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue");
   });
@@ -515,7 +515,7 @@ describe("lista wszystkich Działań", () => {
     const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
     await user.click(within(preview).getByRole("link", { name: "Otwórz pełny widok" }));
     const contextNavigation = await screen.findByRole("navigation", { name: "Ścieżka kontekstu" });
-    await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
+    await user.click(within(contextNavigation).getByRole("link", { name: "Działania" }));
     expect(await screen.findByRole("complementary", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue&project=area-finanse&preview=action-budget-overdue");
   });

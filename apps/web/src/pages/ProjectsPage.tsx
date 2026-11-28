@@ -33,6 +33,7 @@ export function ProjectsPage() {
   const desktop = useDesktopLayout();
   const { state, setAreaVisibility } = useStore();
   const location = useLocation();
+  const listAddress = locationAddress(location);
   const [params, setParams] = useSearchParams();
   const viewParam = params.get("view");
   const view = viewParam === "archived" || viewParam === "trashed" ? viewParam : "active";
@@ -106,7 +107,7 @@ export function ProjectsPage() {
       return <li className="project-card project-index-row" key={project.id} data-navigation-card-id={cardId} tabIndex={-1}>
         <div className="project-row-identity">
           <Title aria-label={project.name}>
-            <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink>
+            <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: listAddress }]} returnTo={listAddress} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink>
           </Title>
           {rowCategories.length ? <div className="project-row-categories">{rowCategories.map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
         </div>

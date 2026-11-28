@@ -15,10 +15,10 @@ import { ProjectPresetPicker } from "../components/ProjectPresetPicker";
 import { DraftStatus } from "../components/DraftStatus";
 import { horizontalTabIndex } from "../components/horizontalTabIndex";
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
-import { Archive, Beaker, BookMarked, BookOpen, CalendarDays, Circle, CircleCheck, CircleX, Clock3, FileText, Flag, FolderKanban, History, ListChecks, LoaderCircle, MoreHorizontal, Pencil, ShieldAlert, SkipForward, Trash2 } from "lucide-react";
+import { Archive, ArrowRight, Beaker, BookMarked, BookOpen, CalendarDays, ChevronRight, Circle, CircleCheck, CircleX, Clock3, FileText, Flag, FolderKanban, History, ListChecks, LoaderCircle, MoreHorizontal, Pencil, ShieldAlert, SkipForward, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { AppShell, PageActions } from "../components/AppShell";
+import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, Panel } from "../components/ui";
 import { actionStatusLabels, goalStatusLabels, knowledgeKindLabels, readingStatusLabels } from "../domain/labels";
@@ -215,17 +215,18 @@ export function ProjectDetailPage() {
 
   const linkExistingBook = (item: KnowledgeItem) => void run(() => linkKnowledge(item.id, { areaId: project.id }, "material"), () => undefined);
   const closeStatusEditor = () => setStatusTarget(undefined);
-  const renderAction = (action: typeof actions[number], { desktopOverview = false, featuredLabel, description }: {
+  const renderAction = (action: typeof actions[number], { desktopOverview = false, featured = false, description }: {
     desktopOverview?: boolean;
-    featuredLabel?: string;
+    featured?: boolean;
     description?: string;
   } = {}) => {
     const statusKey = `project-action-status:${action.id}`;
     const error = mutation.error(statusKey);
     const group = action.goalId ? goals.find((goal) => goal.id === action.goalId) : undefined;
-    const cardId = desktopOverview ? `overview-${navigationCardId("action", action.id)}` : featuredLabel ? "project-now-card" : undefined;
-    const indicator = featuredLabel ?? (action.isNext ? "Następne" : undefined);
+    const cardId = desktopOverview ? `overview-${navigationCardId("action", action.id)}` : featured ? "project-now-card" : undefined;
+    const indicator = featured ? (desktopOverview ? "Najbliższy ruch" : undefined) : action.isNext ? "Następne" : undefined;
     return <ActionListRow key={action.id} action={action} cardId={cardId} navigation={projectNavigation}
+      className={featured ? "project-overview-featured-action" : undefined}
       linkLabel={desktopOverview ? undefined : `Otwórz Działanie: ${action.title}`}
       timeZone={state.workspaceTimezone} today={today} routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)} showUnscheduled={false}
       busy={project.visibility !== "active" || mutation.isBusy(statusKey)} onOpenStatus={() => setStatusTarget({ action, menu: true })}
@@ -238,6 +239,7 @@ export function ProjectDetailPage() {
       }}
       context={group && !description ? { label: `Grupa: ${group.title}`, to: `/goals/${encodeURIComponent(group.id)}` } : undefined}
       indicator={indicator ? <span className="action-next-badge">{indicator}</span> : null}
+      tools={featured ? <ChevronRight aria-hidden="true" /> : undefined}
       description={action.status === "blocked" && action.blocker ? undefined : description}>
       {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void mutation.retry(statusKey)?.()}>Spróbuj ponownie</button></p> : null}
     </ActionListRow>;
@@ -284,11 +286,10 @@ export function ProjectDetailPage() {
   };
   const historyActionFilterOption = { value: "history" as const, label: projectActionFilterLabels.history, count: historicalActions.length, icon: <History /> };
   return <AppShell addAction={project.visibility === "active" ? addAction : undefined}>
-    <div className="project-detail-toolbar">
-      <ContextNavigation current={{ label: project.name, to: projectUrl }} fallbackBreadcrumbs={[{ label: "Projekty", to: "/projects" }]} fallbackReturnTo="/projects" fallbackReturnLabel="Wszystkie Projekty" showBack />
-      <div className="project-heading-tools">
-        <PageActions />
-        {project.visibility === "active" && <details className="project-more-menu project-management-menu">
+    <PageHeading
+      className="project-detail-toolbar"
+      context={<ContextNavigation current={{ label: project.name, to: projectUrl }} fallbackBreadcrumbs={[{ label: "Projekty", to: "/projects" }]} fallbackReturnTo="/projects" fallbackReturnLabel="Wszystkie Projekty" showBack="outside-trail" includeCurrent />}
+      action={project.visibility === "active" && <details className="project-more-menu project-management-menu">
           <summary aria-label={`Opcje Projektu: ${project.name}`} aria-haspopup="menu" title="Opcje Projektu"><MoreHorizontal aria-hidden="true" /></summary>
           <div role="menu" aria-label={`Zarządzaj Projektem: ${project.name}`}>
             <Button role="menuitem" onClick={(event) => {
@@ -302,8 +303,7 @@ export function ProjectDetailPage() {
             <Button role="menuitem" variant="ghost" className="project-menu-danger" onClick={(event) => { closeProjectMenu(event.currentTarget); setDialog("trash"); }}><Trash2 aria-hidden="true" />Przenieś do Kosza</Button>
           </div>
         </details>}
-      </div>
-    </div>
+    />
     {view === "overview" ? <CurrentWeekPlanNotice read={planRead} /> : null}
     <header className="project-detail-head persistent-project-head">
       <div>
@@ -337,22 +337,31 @@ export function ProjectDetailPage() {
       aria-labelledby={wideWorkspace ? undefined : `${tabId}-tab-${view}`}
       tabIndex={wideWorkspace ? undefined : 0}
     >
-    {view === "overview" ? <div className="project-overview-workspace"><div className="project-overview-main">
-      {!highlightedActionId ? <section className="project-overview" aria-labelledby="project-overview-title">
-        <h2 className="sr-only" id="project-overview-title">Co jest teraz najważniejsze</h2>
-        {signal && signalAction ? <ul className="workspace-list" role="list">{renderAction(signalAction, { featuredLabel: "Najbliższy ruch", description: signal.description })}</ul> : signal ? <Panel className={`project-now-card project-now-card-${signal.kind}`} data-navigation-card-id="project-now-card" tabIndex={-1}>
-          <span className="project-now-icon"><ListChecks /></span>
-          <div><span className="eyebrow">Najbliższy ruch · {signal.label}</span><h3>{signal.title}</h3><p>{signal.description}</p></div>
-          {currentGoals.length ? <Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "action", areaId: project.id, draftKey: `project-${project.id}-actions` })}>Dodaj Działanie</Button>
-              : <Button variant="primary" onClick={preset === "reading" ? () => setView("knowledge") : openGroupForm}>{preset === "reading" ? "Otwórz Wiedzę" : "Utwórz grupę działań"}</Button>}
-        </Panel> : <Panel className="project-now-card project-now-card-inactive"><span className="project-now-icon"><ListChecks /></span><div><span className="eyebrow">Projekt poza aktywną przestrzenią</span><h3>{project.visibility === "archived" ? "Projekt w Archiwum" : "Projekt w Koszu"}</h3><p>Jego Działania pozostają zachowane w tym kontekście.</p></div><Button variant="primary" onClick={() => setView("actions")}>Pokaż Działania</Button></Panel>}
-
-      </section> : null}
-      {wideWorkspace && project.visibility === "active" ? <ProjectOverviewActions actions={displayedActions} filter={actionFilter} filters={[...statusActionFilterOptions, ...scheduleActionFilterOptions, historyActionFilterOption]} onFilter={(value) => setActionFilter(value as ProjectActionFilter)} renderAction={(action) => renderAction(action, { desktopOverview: true, featuredLabel: action.id === highlightedActionId ? "Najbliższy ruch" : undefined })} /> : null}
-      {!wideWorkspace && project.visibility === "active" && <div className="project-overview-compact-actions">
-        <Button variant="secondary" onClick={() => setView("actions")}>Wszystkie otwarte działania ({openActions.length})</Button>
-      </div>}
-    </div>{project.visibility === "active" ? <ProjectOverviewContext reading={preset === "reading"} goals={currentGoals} knowledge={knowledge} navigation={projectNavigation} knowledgeLoading={projectKnowledgeQuery.isPending} knowledgeError={projectKnowledgeQuery.isError} onRetryKnowledge={() => void projectKnowledgeQuery.refetch()} onShowGoals={() => setView("goals")} onShowKnowledge={() => setView("knowledge")} /> : null}</div> : null}
+    {view === "overview" ? <div className="project-overview-workspace">
+      <div className="project-overview-main">
+        {!highlightedActionId ? <section className="project-overview-priority" aria-labelledby="project-overview-title">
+          <div className="project-overview-section-heading">
+            <h2 id="project-overview-title"><span className="project-overview-icon"><Flag aria-hidden="true" /></span>Co jest teraz najważniejsze</h2>
+          </div>
+          {signalAction && signal ? <ul className="workspace-list" role="list">{renderAction(signalAction, { featured: true, description: signal.description })}</ul> :
+            <div className="project-overview-next-copy" data-navigation-card-id="project-now-card" tabIndex={-1}>
+              <div>
+                <h3>{signal?.title ?? (project.visibility === "archived" ? "Projekt w Archiwum" : "Projekt w Koszu")}</h3>
+                <p>{signal?.description ?? "Jego Działania pozostają zachowane w tym kontekście."}</p>
+              </div>
+              {!signal ? <Button variant="secondary" onClick={() => setView("actions")}>Pokaż Działania</Button>
+                : currentGoals.length ? <Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "action", areaId: project.id, draftKey: `project-${project.id}-actions` })}>Dodaj Działanie</Button>
+                  : <Button variant="primary" onClick={preset === "reading" ? () => setView("knowledge") : openGroupForm}>{preset === "reading" ? "Otwórz Wiedzę" : "Utwórz grupę działań"}</Button>}
+            </div>}
+          {!wideWorkspace && project.visibility === "active" ?
+            <Button className="project-overview-compact-actions" variant="ghost" onClick={() => setView("actions")}>
+              <span>Działania</span><small>Otwarte ({openActions.length})</small><ArrowRight aria-hidden="true" />
+            </Button> : null}
+        </section> : null}
+        {wideWorkspace && project.visibility === "active" ? <ProjectOverviewActions actions={displayedActions} highlightedActionId={highlightedActionId} filter={actionFilter} filters={[...statusActionFilterOptions, ...scheduleActionFilterOptions, historyActionFilterOption]} onFilter={(value) => setActionFilter(value as ProjectActionFilter)} renderAction={(action) => renderAction(action, { desktopOverview: true, featured: action.id === highlightedActionId })} /> : null}
+      </div>
+      {project.visibility === "active" ? <ProjectOverviewContext reading={preset === "reading"} goals={currentGoals} knowledge={knowledge} navigation={projectNavigation} knowledgeLoading={projectKnowledgeQuery.isPending} knowledgeError={projectKnowledgeQuery.isError} onRetryKnowledge={() => void projectKnowledgeQuery.refetch()} onShowGoals={() => setView("goals")} onShowKnowledge={() => setView("knowledge")} /> : null}
+    </div> : null}
 
     <div className={`project-sections${studyWorkspace ? " project-study-sections" : ""}`}>
       {visibleSections.includes("knowledge") ? <section aria-labelledby="project-knowledge-title">

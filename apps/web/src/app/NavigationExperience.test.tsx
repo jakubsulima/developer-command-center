@@ -127,6 +127,31 @@ describe("spójna nawigacja kontekstowa", () => {
     expect(within(screen.getByRole("search", { name: "Wyszukiwanie globalne" })).getByRole("combobox")).toHaveFocus();
   });
 
+  it("utrzymuje Dodaj we wspólnym nagłówku Projektu i pozwala wrócić przez breadcrumbs", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/projects?view=active");
+    await user.click(await screen.findByRole("link", { name: "Otwórz projekt Projekt Nawigacji" }));
+    await screen.findByRole("heading", { name: "Projekt Nawigacji", level: 1 });
+
+    const heading = within(screen.getByRole("main").querySelector<HTMLElement>(".page-heading")!);
+    const add = heading.getByRole("button", { name: "Dodaj w Projekcie Projekt Nawigacji" });
+    const breadcrumbs = heading.getByRole("navigation", { name: "Ścieżka kontekstu" });
+    const projects = within(breadcrumbs).getByRole("link", { name: "Projekty" });
+    expect(projects).toHaveAttribute("href", "/projects?view=active");
+    expect(within(breadcrumbs).getByText("Projekt Nawigacji")).toHaveAttribute("aria-current", "page");
+
+    for (const name of ["Grupy działań", "Działania", "Wiedza", "Przegląd"]) {
+      await user.click(screen.getByRole("tab", { name }));
+      expect(heading.getByRole("button", { name: "Dodaj w Projekcie Projekt Nawigacji" })).toBe(add);
+      expect(heading.getByRole("navigation", { name: "Ścieżka kontekstu" })).toBe(breadcrumbs);
+    }
+
+    await user.click(projects);
+    await screen.findByRole("heading", { name: "Projekty", level: 1 });
+    await waitFor(() => expect(screen.getByRole("link", { name: "Otwórz projekt Projekt Nawigacji" }).closest("li")).toHaveFocus());
+  });
+
   it("przenosi pełny kontekst przez Projekt → Grupa działań → Działanie → Wiedza i wraca do źródła", async () => {
     seedNavigationState();
     const user = userEvent.setup();
@@ -211,6 +236,23 @@ describe("spójna nawigacja kontekstowa", () => {
     renderApp("/goals/nav-goal?action=nav-action");
     expect(await screen.findByRole("heading", { name: "Wykonać krok" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Ścieżka kontekstu" })).toHaveTextContent("Grupa działań Nawigacji");
+  });
+
+  it("pokazuje wyszukiwanie, Dodaj i bieżącą ścieżkę w nagłówku Działania", async () => {
+    seedNavigationState();
+    const user = userEvent.setup();
+    renderApp("/actions/nav-action");
+    await screen.findByRole("heading", { name: "Wykonać krok", level: 1 });
+
+    const heading = within(screen.getByRole("main").querySelector<HTMLElement>(".page-heading")!);
+    const trail = heading.getByRole("navigation", { name: "Ścieżka kontekstu" });
+    expect(within(trail).getByRole("link", { name: "Grupa: Grupa działań Nawigacji" })).toHaveAttribute("href", "/goals/nav-goal");
+    expect(within(trail).getByText("Wykonać krok")).toHaveAttribute("aria-current", "page");
+    expect(heading.getByRole("button", { name: "Dodaj" })).toBeInTheDocument();
+
+    await user.click(heading.getByRole("button", { name: "Otwórz wyszukiwanie" }));
+    expect(within(heading.getByRole("search", { name: "Wyszukiwanie globalne" })).getByRole("combobox")).toHaveFocus();
+    expect(trail).toBeVisible();
   });
 
   it("edytuje Działanie i otwiera powód blokady bezpośrednio ze szczegółu", async () => {

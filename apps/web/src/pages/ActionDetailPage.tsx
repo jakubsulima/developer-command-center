@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { AppShell } from "../components/AppShell";
+import { AppShell, PageHeading } from "../components/AppShell";
 import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
 import { Button, EmptyState } from "../components/ui";
 import { actionStatusLabels } from "../domain/labels";
@@ -87,16 +87,15 @@ export function ActionDetailPage() {
   const parentLabel = context.kind === "goal" ? "Grupa działań" : context.kind === "project" ? "Projekt" : undefined;
   const returnTo = incomingNavigation?.returnTo ?? readNavigationBreadcrumbs(location.state)?.at(-2)?.to ?? context.to;
   const returningToParent = returnTo.split(/[?#]/, 1)[0] === context.to;
-  const parentInBreadcrumbs = breadcrumbs.slice(-4, -1).some((breadcrumb) => breadcrumb.to?.split(/[?#]/, 1)[0] === context.to);
+  const parentInBreadcrumbs = breadcrumbs.slice(-3, -1).some((breadcrumb) => breadcrumb.to?.split(/[?#]/, 1)[0] === context.to);
   const blocked = action.status === "blocked";
   const openEditor = () => setEditOpen(true);
 
-  return <AppShell appearance="focus-detail">
-    <div className="action-detail-page">
-      <div className="action-detail-toolbar">
-        <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={context.to} fallbackReturnLabel={parentLabel && context.name ? context.name : "Start"} showBack />
-        <div className="action-heading-tools">
-          <Button variant="ghost" onClick={openEditor}><Pencil aria-hidden="true" />Edytuj</Button>
+  return <AppShell appearance="focus-detail" addAction={{ label: "Dodaj", ariaLabel: "Dodaj" }}>
+    <PageHeading className="action-detail-toolbar"
+      context={<ContextNavigation current={{ label: action.title, to: actionRoute }} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={context.to} fallbackReturnLabel={parentLabel && context.name ? context.name : "Start"} showBack="outside-trail" includeCurrent />}
+      action={<div className="action-heading-tools">
+          <Button variant="ghost" className="action-heading-edit" aria-label="Edytuj" onClick={openEditor}><Pencil aria-hidden="true" /><span>Edytuj</span></Button>
           <details className="detail-tools-menu">
             <summary aria-label="Więcej opcji Działania"><MoreHorizontal aria-hidden="true" /></summary>
             <div>
@@ -114,11 +113,12 @@ export function ActionDetailPage() {
               <AIContextExport target={{ type: "action", id: action.id }} />
             </div>
           </details>
-        </div>
-      </div>
+        </div>}
+    />
+    <div className="action-detail-page">
       <header className="action-detail-header">
         <h1>{action.title}</h1>
-        {parentLabel && context.name && !(returningToParent && parentInBreadcrumbs) ? <NavigationLink aria-label={`${parentLabel}: ${context.name}`} className="action-parent-link" data-hide-mobile={returningToParent || undefined} data-hide-desktop={parentInBreadcrumbs || undefined} to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={currentBreadcrumb.label}>
+        {parentLabel && context.name && !parentInBreadcrumbs ? <NavigationLink aria-label={`${parentLabel}: ${context.name}`} className="action-parent-link" data-hide-mobile={returningToParent || undefined} to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={currentBreadcrumb.label}>
           {context.kind === "goal" ? <Flag aria-hidden="true" /> : <FolderKanban aria-hidden="true" />}
           <span>{context.name}</span>
         </NavigationLink> : null}

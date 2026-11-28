@@ -476,7 +476,7 @@ describe("goal-centric workspace", () => {
     await user.click(within(create).getByRole("button", { name: "Utwórz Rutynę" }));
     const routine = await screen.findByRole("heading", { name: "Cotygodniowy plan posiłków" });
     expect(routine).toBeInTheDocument();
-    expect(within(routine.closest("section") as HTMLElement).getByText("Najbliższe wykonania")).toBeInTheDocument();
+    expect(within(routine.closest("section") as HTMLElement).getByText("Najbliższy termin")).toBeInTheDocument();
     await user.click(within(routine.closest("section") as HTMLElement).getByRole("link", { name: "Edytuj ustawienia rutyny: Cotygodniowy plan posiłków" }));
     const edit = screen.getByRole("dialog", { name: "Edytuj Rutynę" });
     await user.clear(within(edit).getByLabelText("Nazwa"));

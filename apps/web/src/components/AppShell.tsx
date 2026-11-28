@@ -400,7 +400,7 @@ export function PageActions({ children }: { children?: ReactNode }) {
   return <div className="page-actions">{children}{add}</div>;
 }
 
-export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
+export function PageHeading({ title, eyebrow, context, action, className = "" }: { title?: string; eyebrow?: string; context?: ReactNode; action?: ReactNode; className?: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
@@ -428,9 +428,9 @@ export function PageHeading({ title, eyebrow, action, className = "" }: { title:
   };
 
   return (
-    <div className={`page-heading ${className}${searchOpen ? " is-search-open" : ""}`.trim()}>
+    <div className={`page-heading ${className}${context ? " page-heading-with-context" : ""}${searchOpen ? " is-search-open" : ""}`.trim()}>
       <div className="page-heading-copy">
-        <h1>{title}</h1>
+        {title && <h1>{title}</h1>}
         <div className="mobile-brand"><CommandBrand compact={searchOpen} /></div>
         {eyebrow && !searchOpen && <span className="eyebrow">{eyebrow}</span>}
       </div>
@@ -447,8 +447,9 @@ export function PageHeading({ title, eyebrow, action, className = "" }: { title:
         <PageActions>
           <button ref={searchTriggerRef} id="page-inline-search-trigger" type="button" className="icon-button page-search-button" aria-label="Otwórz wyszukiwanie" onClick={() => setSearchOpen(true)}><Search aria-hidden="true" /></button>
         </PageActions>
-        {action ? <div className="page-heading-secondary">{action}</div> : null}
       </>}
+      {context ? <div className="page-heading-context">{context}</div> : null}
+      {action && !searchOpen ? <div className="page-heading-secondary">{action}</div> : null}
     </div>
   );
 }

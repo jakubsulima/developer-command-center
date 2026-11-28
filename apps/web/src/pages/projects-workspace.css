@@ -136,10 +136,3 @@
 }
 
 .project-group-empty { display: grid; justify-items: start; gap: 8px; }
-.project-overview-compact-actions { margin-top: 16px; }
-@media (max-width: 1199px) {
-  .project-overview-workspace .project-desktop-context { display: grid; gap: 16px; margin-top: 16px; }
-  .project-overview-workspace .project-desktop-context > .panel { padding: 16px; }
-  .project-overview-context-list { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
-  .project-overview-context-list a { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; }
-}

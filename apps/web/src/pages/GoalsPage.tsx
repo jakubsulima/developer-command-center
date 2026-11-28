@@ -2,18 +2,18 @@ import { actionGroupType, actionGroupTypeLabels } from "../domain/actionGroups";
 import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CreationBody, CreationDialog, CreationFooter } from "../components/CreationForm";
-import { Archive, Flag, Layers3, RotateCcw, Settings2, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Flag, Folder, Layers3, ListChecks, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Modal } from "../components/Modal";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
-import { entityCardVariants } from "../components/ui-variants";
 import { routeForEntity } from "../domain/routes";
 import type { GoalKind, GoalStatus } from "../domain/types";
 import { goalKindLabels as kindLabels, goalStatusLabels as statusLabels, polishPluralForm } from "../domain/labels";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId } from "../domain/navigation";
+import "./goals-workspace.css";
 
 
 function goalCountLabel(count: number) {
@@ -102,22 +102,46 @@ export function GoalsPage() {
       <p className="results-summary">{goalCountLabel(goals.length)}{kind ? ` · typ: ${kindLabels[kind]}` : ""}</p>
       {storeLoading ? <ListSkeleton label="Ładowanie grup działań" /> : null}
 
-      {goals.length ? <><div className="goal-list-columns" aria-hidden="true"><span>Grupa / typ</span><span>Status</span><span>Projekt</span><span>Następne Działanie / sygnały</span></div><div className="goal-grid">{goals.map((goal) => {
+      {goals.length ? <><div className="goal-list-columns" aria-hidden="true"><span>Grupa</span><span>Projekt</span><span>Następne Działanie</span></div><div className="goal-grid">{goals.map((goal) => {
+        const type = actionGroupType(goal);
+        const GroupIcon = type === "category" ? Layers3 : ListChecks;
+        const isHistory = goal.visibility !== "active";
+        const cardId = navigationCardId("goal", goal.id);
         const areaName = state.areas.find((item) => item.id === goal.areaId)?.name;
         const next = state.actions.find((action) => action.goalId === goal.id && action.isNext && ["ready", "in_progress"].includes(action.status));
         const blocked = state.actions.some((action) => action.goalId === goal.id && action.status === "blocked");
         const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone }).format(new Date());
         const overdueCount = state.actions.filter((action) => action.goalId === goal.id && action.scheduledFor && action.scheduledFor < localToday && !["completed", "cancelled", "skipped"].includes(action.status)).length;
+        const missingNext = !next && type === "task" && goal.status === "active";
+        const hasSignals = blocked || overdueCount > 0 || missingNext;
         const card = <>
-          <h2 className="line-clamp-2">{goal.title}</h2><div className="goal-card-top"><Badge tone={goal.priority === "high" ? "warning" : "neutral"}>{actionGroupTypeLabels[actionGroupType(goal)]}</Badge><span>{statusLabels[goal.status]}</span></div>
-          {areaName || next ? <div className="goal-card-context">{areaName ? <span className="goal-card-project"><Layers3 />{areaName}</span> : null}{next ? <span className="goal-card-next"><Flag />{next.title}</span> : null}</div> : null}
-          {!areaName ? <span className="collection-desktop-placeholder goal-card-project">Bez Projektu</span> : null}
-          {!next ? <span className="collection-desktop-placeholder goal-card-next">—</span> : null}
-          <div className="goal-card-signals">{blocked ? <Badge tone="danger">Blokada</Badge> : null}{overdueCount > 0 ? <Badge tone="warning">{overdueCount} {polishPluralForm(overdueCount, "zaległe działanie", "zaległe działania", "zaległych działań")} w grupie</Badge> : null}{!next && actionGroupType(goal) === "task" && goal.status === "active" ? <Badge tone="warning">Brak następnego Działania</Badge> : null}</div>
+          <div className="goal-card-identity">
+            <span className="goal-card-icon" data-priority={goal.priority}><GroupIcon aria-hidden="true" /></span>
+            <div>
+              <h2>{goal.title}</h2>
+              <div className="goal-card-meta">
+                <span>{actionGroupTypeLabels[type]}</span>
+                <span className="goal-card-status" data-status={goal.status}>{statusLabels[goal.status]}</span>
+                {goal.priority === "high" ? <span className="sr-only">Wysoki priorytet</span> : null}
+              </div>
+            </div>
+          </div>
+          <div className="goal-card-details">
+            {areaName ? <span className="goal-card-project"><Folder aria-hidden="true" />{areaName}</span> : <span className="collection-desktop-placeholder goal-card-project">Bez Projektu</span>}
+            {next || hasSignals ? <div className="goal-card-work">
+              {next ? <span className="goal-card-next"><Flag aria-hidden="true" /><span className="sr-only">Następne Działanie</span>{next.title}</span> : null}
+              {hasSignals ? <div className="goal-card-signals">
+                {blocked ? <Badge tone="danger">Blokada</Badge> : null}
+                {overdueCount > 0 ? <Badge tone="warning">{overdueCount} {polishPluralForm(overdueCount, "zaległe działanie", "zaległe działania", "zaległych działań")} w grupie</Badge> : null}
+                {missingNext ? <Badge tone="warning">Brak następnego Działania</Badge> : null}
+              </div> : null}
+            </div> : null}
+          </div>
+          {!isHistory ? <ChevronRight className="goal-card-chevron" aria-hidden="true" /> : null}
         </>;
-        return status === "archived" || status === "trashed"
-          ? <Panel className={`${entityCardVariants({ density: "compact" })} goal-card entity-card`} key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw />Przywróć</Button></Panel>
-          : <NavigationLink className={`${entityCardVariants({ density: "compact" })} goal-card entity-card goal-card-link`} key={goal.id} data-navigation-card-id={navigationCardId("goal", goal.id)} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Grupy działań", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie grupy" sourceCardId={navigationCardId("goal", goal.id)} aria-label={`Otwórz grupę: ${goal.title}`}>{card}</NavigationLink>;
+        return isHistory
+          ? <Panel className="goal-card" key={goal.id}>{card}<Button onClick={() => void setGoalVisibility(goal.id, "active")}><RotateCcw aria-hidden="true" />Przywróć</Button></Panel>
+          : <NavigationLink className="goal-card goal-card-link" key={goal.id} data-navigation-card-id={cardId} to={routeForEntity({ type: "goal", id: goal.id })} breadcrumbs={[{ label: "Grupy działań", to: "/goals" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie grupy" sourceCardId={cardId} aria-label={`Otwórz grupę: ${goal.title}`}>{card}</NavigationLink>;
       })}</div></> : <EmptyState icon={<Flag />} title="Nie ma tu jeszcze grup działań" detail={status === "active" ? "Użyj przycisku + w nagłówku i dodaj kategorię, np. UI/UX, albo zadanie nadrzędne." : "Zmień filtr albo przywróć grupę z archiwum."} action={status === "active" && !kind ? undefined : <Button onClick={() => setParams({})}>Wyczyść filtry</Button>} />}
 
       <CreationDialog open={settingsOpen} title="Własne szablony zadań" closeDisabled={templateSaving} onClose={() => { if (!templateLocked.current) setSettingsOpen(false); }}>
