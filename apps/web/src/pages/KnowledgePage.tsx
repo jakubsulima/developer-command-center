@@ -19,7 +19,7 @@ import { readingStatusLabels } from "../domain/labels";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { NavigationLink } from "../components/ContextNavigation";
 import { locationAddress, navigationCardId, readNavigationRestore } from "../domain/navigation";
-import { createKnowledgeFilter } from "../domain/knowledgeFilters";
+import { createKnowledgeFilter, duplicateKnowledgeResultTitles, knowledgeResultTitleKey } from "../domain/knowledgeFilters";
 import { filterableKnowledgeKinds, isFilterableKnowledgeKind } from "../domain/knowledge-kinds";
 import { knowledgeKindLabels } from "../domain/labels";
 import { useQuery } from "@tanstack/react-query";
@@ -91,7 +91,7 @@ export function KnowledgePage() {
     if (value) next.set(key, value); else next.delete(key);
   });
   const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const [actionsItemId, setActionsItemId] = useState<string>();
+  const [openActions, setOpenActions] = useState<{ id: string; trigger: HTMLButtonElement }>();
   const previewTriggerRef = useRef<HTMLElement | null>(null);
   const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
   const [debouncedQuery, setDebouncedQuery] = useState(() => params.get("q") ?? "");
@@ -162,6 +162,8 @@ export function KnowledgePage() {
     visibility: view
   }), [areaFilter, booksOnly, goalFilter, kind, normalized, readingStatus, revisitOnOrBefore, state, view]);
   const results = knowledgeItems.filter(matches).sort((left, right) => (revisitOnOrBefore ? left.revisitOn ?? "" : left.updatedAt ?? left.createdAt ?? "").localeCompare(revisitOnOrBefore ? right.revisitOn ?? "" : right.updatedAt ?? right.createdAt ?? "") || left.id.localeCompare(right.id));
+  const duplicateTitles = duplicateKnowledgeResultTitles(results);
+  const duplicateResultIds = new Set(knowledgePage.data?.duplicateResultIds);
   const totalCount = knowledgePage.data?.totalCount ?? results.length;
   const hasPartialResults = results.length > 0 && results.length < totalCount;
   const restoreCardId = readNavigationRestore(address)?.sourceCardId;
@@ -187,6 +189,9 @@ export function KnowledgePage() {
     const fallback = Array.from(document.querySelectorAll<HTMLElement>(".knowledge-title-link")).find((link) => link.closest("[data-navigation-card-id]")?.getAttribute("data-navigation-card-id") === (previewItem ? navigationCardId("knowledge", previewItem.id) : undefined));
     const trigger = previewTriggerRef.current?.isConnected ? previewTriggerRef.current : fallback;
     trigger?.focus({ preventScroll: true });
+    if (trigger && document.activeElement !== trigger) {
+      window.requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+    }
   };
   const changeVisibility = async (item: KnowledgeItem, visibility: "archived" | "trashed") => {
     const previous = item.trashedAt ? "trashed" : item.archivedAt ? "archived" : "active";
@@ -308,12 +313,14 @@ export function KnowledgePage() {
             const onlyGroup = !namedProjects.length && state.knowledgeLinks.find((link) => link.knowledgeItemId === item.id && link.goalId)?.goalId;
             const groupTitle = onlyGroup && state.goals.find((group) => group.id === onlyGroup)?.title;
             const excerpt = knowledgeExcerpt(item);
+            const showResultExcerpt = item.type === "artifact" && Boolean(excerpt)
+              && (duplicateResultIds.has(item.id) || duplicateTitles.has(knowledgeResultTitleKey(item.title)));
             const sourceHref = safeHttpUrl(item.sourceUrl) ?? (/^\S+$/.test(excerpt) ? safeHttpUrl(excerpt) : undefined);
             const projectLabel = namedProjects.length ? `${namedProjects[0]}${namedProjects.length > 1 ? ` +${namedProjects.length - 1}` : ""}` : groupTitle;
             const bookContext = item.resourceFormat === "book" && [item.resourceAuthor, item.readingStatus && readingStatusLabels[item.readingStatus]].filter(Boolean).join(" · ");
             const revisitContext = item.revisitOn && `Powrót: ${formatActionDate(item.revisitOn, state.workspaceTimezone)}`;
             const inboxContext = item.sourceInboxItemId && "Źródło: Skrzynka";
-            const context = revisitContext || inboxContext || bookContext || projectLabel || (sourceHref && new URL(sourceHref).hostname) || excerpt;
+            const context = revisitContext || inboxContext || bookContext || projectLabel || (sourceHref && new URL(sourceHref).hostname) || (!showResultExcerpt && excerpt);
             return <li className="workspace-list-row knowledge-result-row" key={item.id} data-navigation-card-id={navigationCardId("knowledge", item.id)} data-preview-selected={previewItem?.id === item.id || undefined} tabIndex={-1}>
               <div className="knowledge-result-content">
                 <NavigationLink className="knowledge-title-link" to={routeForEntity({ type: "knowledge", id: item.id })} breadcrumbs={[{ label: "Wiedza", to: address }]} returnTo={address} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)} onClick={(event) => {
@@ -326,11 +333,12 @@ export function KnowledgePage() {
                   {item.resourceFormat === "book" ? <span className="knowledge-result-book"><BookMarked aria-hidden="true" />Książka</span> : <KnowledgeKindBadge kind={item.type} compact />}
                   {sourceBook && !revisitOnOrBefore ? <NavigationLink className="knowledge-result-source line-clamp-1" to={routeForEntity({ type: "knowledge", id: sourceBook.id })} breadcrumbs={[{ label: "Wiedza", to: address }]} returnTo={address} returnLabel="Wróć do Wiedzy" sourceCardId={navigationCardId("knowledge", item.id)}>Źródło: {sourceBook.title}</NavigationLink> : context ? <span className="line-clamp-1">{context}</span> : null}
                 </div>
+                {showResultExcerpt ? <p className="knowledge-result-excerpt line-clamp-2">{excerpt}</p> : null}
                 {mutation.error(mutationKey) ? <p className="inline-mutation-error" role="alert">{mutation.error(mutationKey)} <button type="button" onClick={() => void mutation.retry(mutationKey)?.()}>Spróbuj ponownie</button></p> : null}
               </div>
               <div className="knowledge-result-actions">
-                <button type="button" className="button button-ghost knowledge-preview-trigger" aria-label={`Podejrzyj Wiedzę: ${item.title}`} title="Podgląd" aria-expanded={previewItem?.id === item.id} aria-controls={previewItem ? "knowledge-preview" : undefined} onClick={(event) => openPreview(item, event.currentTarget)}><PanelRightOpen aria-hidden="true" /><span>Podgląd</span></button>
-                <Button variant="ghost" className="knowledge-row-menu" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} title="Więcej opcji" onClick={() => setActionsItemId(item.id)}><MoreHorizontal aria-hidden="true" /></Button>
+                <button type="button" className="button button-ghost knowledge-preview-trigger" aria-label={`Podejrzyj Wiedzę: ${item.title}`} aria-expanded={previewItem?.id === item.id} aria-controls={previewItem?.id === item.id ? "knowledge-preview" : undefined} onClick={(event) => openPreview(item, event.currentTarget)}><PanelRightOpen aria-hidden="true" /></button>
+                <Button variant="ghost" className="knowledge-row-menu" loading={mutation.isBusy(mutationKey)} aria-label={`Więcej opcji: ${item.title}`} aria-haspopup="dialog" title="Więcej opcji" onClick={(event) => setOpenActions({ id: item.id, trigger: event.currentTarget })}><MoreHorizontal aria-hidden="true" /></Button>
               </div>
             </li>;
           })}
@@ -343,12 +351,16 @@ export function KnowledgePage() {
       </div>
       {previewItem ? <KnowledgePreview item={previewItem} sourceBook={previewSourceId ? sourceBooksById.get(previewSourceId) : undefined} returnTo={address} onClose={closePreview} /> : null}
       </div>
-      <Modal open={Boolean(actionsItemId)} closeDisabled={Boolean(actionsItemId && mutation.isBusy(`visibility:${actionsItemId}`))} title="Wiedza — więcej opcji" onClose={() => setActionsItemId(undefined)}>{(() => {
-        const item = knowledgeItems.find((candidate) => candidate.id === actionsItemId);
-        if (!item) return null;
+      <Modal open={Boolean(openActions)} closeDisabled={Boolean(openActions && mutation.isBusy(`visibility:${openActions.id}`))} title="Wiedza — więcej opcji" onClose={() => setOpenActions(undefined)}>{(() => {
+        const item = knowledgeItems.find((candidate) => candidate.id === openActions?.id);
+        if (!item || !openActions) return null;
         const mutationKey = `visibility:${item.id}`;
-        const runAndClose = (operation: () => Promise<void>) => mutation.run(mutationKey, async () => { await operation(); setActionsItemId(undefined); });
+        const runAndClose = (operation: () => Promise<void>) => mutation.run(mutationKey, async () => { await operation(); setOpenActions(undefined); });
         return <div className="mobile-action-sheet">
+          <Button className="knowledge-menu-preview" onClick={() => {
+            setOpenActions(undefined);
+            openPreview(item, openActions.trigger);
+          }}><PanelRightOpen aria-hidden="true" />Podgląd</Button>
           {view === "active" ? <><Button loading={mutation.isBusy(mutationKey)} onClick={() => void runAndClose(() => changeVisibility(item, "archived"))}><Archive />Archiwizuj</Button><Button variant="danger" loading={mutation.isBusy(mutationKey)} onClick={() => void runAndClose(() => changeVisibility(item, "trashed"))}><Trash2 />Przenieś do Kosza</Button></> : null}
           {view === "archived" ? <><Button loading={mutation.isBusy(mutationKey)} onClick={() => void runAndClose(() => setVisibility("knowledge", item.id, "active"))}><RotateCcw />Przywróć</Button><Button variant="danger" loading={mutation.isBusy(mutationKey)} onClick={() => void runAndClose(() => changeVisibility(item, "trashed"))}><Trash2 />Przenieś do Kosza</Button></> : null}
           {view === "trashed" ? <Button loading={mutation.isBusy(mutationKey)} onClick={() => void runAndClose(() => setVisibility("knowledge", item.id, "active"))}><RotateCcw />Przywróć</Button> : null}

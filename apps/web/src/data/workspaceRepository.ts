@@ -91,6 +91,7 @@ export interface Page<T> {
   items: T[];
   nextCursor?: PageCursor;
   totalCount?: number;
+  duplicateResultIds?: string[];
 }
 
 export type WorkspacePageCollection = "inbox" | "knowledge" | "goal-progress" | "completed-actions" | "actions" | "reviews" | "weekly-activity";

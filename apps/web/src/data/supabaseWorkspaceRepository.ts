@@ -216,6 +216,9 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`WorkspacePage: ${error.message}`);
       const page = decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
       if (query.collection === "actions") return { ...page, items: await withActionReviewDates(page.items as GoalAction[]) };
+      if (query.collection === "knowledge" && data && typeof data === "object" && "duplicateResultIds" in data && Array.isArray(data.duplicateResultIds)) {
+        return { ...page, duplicateResultIds: data.duplicateResultIds.filter((id: unknown): id is string => typeof id === "string") };
+      }
       return page;
     },
     async loadKnowledgeItem(id): Promise<KnowledgeItem | undefined> {
