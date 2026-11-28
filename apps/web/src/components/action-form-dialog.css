@@ -32,6 +32,7 @@
 
 .action-form-dialog .action-origin-marker { white-space: normal; }
 .action-form-dialog .action-form-body > .field-label:first-child { margin-top: 0; }
+.action-edit-context-notice { margin: 8px 0; color: var(--muted-foreground); font-size: 13px; }
 
 .action-form-dialog .modal-actions {
   position: static;

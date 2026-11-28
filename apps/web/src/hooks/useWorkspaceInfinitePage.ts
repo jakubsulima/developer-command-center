@@ -1,14 +1,13 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useStore } from "../app/useStore";
-import { createLocalWorkspaceRepository, pageLocalWeeklyActivity } from "../data/localWorkspaceRepository";
+import { createLocalWorkspaceRepository, pageLocalKnowledge, pageLocalWeeklyActivity } from "../data/localWorkspaceRepository";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
-import { pageByCursor, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem, type WeeklyActivityKind } from "../data/workspaceRepository";
+import { pageByCursor, type Page, type PageCursor, type WorkspacePageCollection, type WorkspacePageItem, type WorkspacePageQuery, type WeeklyActivityKind } from "../data/workspaceRepository";
 import { actionListSortDirection, actionListSortValue, matchesActionListFilter, type ActionListFilter } from "../domain/actionsList";
 import type { AppState, InboxStatus, KnowledgeKind } from "../domain/types";
 import type { ReadingStatus } from "../domain/types";
 import type { KnowledgeVisibilityFilter } from "../domain/knowledgeFilters";
-import { createKnowledgeFilter } from "../domain/knowledgeFilters";
 
 const defaultPageSize: Record<WorkspacePageCollection, number> = {
   inbox: 50,
@@ -32,7 +31,7 @@ function localKnowledgeRevision(state: AppState) {
     state.knowledge,
     state.knowledgeLinks,
     state.actions.map((item) => [item.id, item.goalId, item.areaId]),
-    state.areas.map((item) => [item.id, item.visibility]),
+    state.areas.map((item) => [item.id, item.name, item.visibility]),
     state.goals.map((item) => [item.id, item.areaId]),
     state.recurringActionTemplates.map((item) => [item.id, item.goalId, item.areaId])
   ]);
@@ -71,7 +70,9 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
       : [...workspacePageQueryKey(collection, mode, state.workspaceId, options), localRevision],
     enabled: !loading && (collection !== "weekly-activity" || Boolean(options.activityKind && options.periodStart && options.periodEndExclusive && options.periodTimeZone)),
     initialPageParam: undefined as PageCursor | undefined,
-    queryFn: async ({ pageParam }) => {
+    queryFn: async ({ pageParam }): Promise<Page<WorkspacePageItem>> => {
+      const query: WorkspacePageQuery = { workspaceId: state.workspaceId ?? "demo", collection, pageSize, inboxStatus: options.inboxStatus, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus,
+        revisitOnOrBefore: options.revisitOnOrBefore, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam };
       if (mode === "demo" && collection === "inbox") {
         const items = state.inbox.filter((item) => !options.inboxStatus || item.status === options.inboxStatus);
         return { ...pageByCursor(items, pageSize, pageParam, (item) => item.createdAt, "desc"), totalCount: items.length };
@@ -81,34 +82,20 @@ export function useWorkspaceInfinitePage<T extends WorkspacePageItem>(collection
         return pageByCursor(actions, pageSize, pageParam, (action) => actionListSortValue(action, options.actionFilter!.view), actionListSortDirection(options.actionFilter.view));
       }
       if (mode === "demo" && collection === "weekly-activity") {
-        return pageLocalWeeklyActivity(state, { workspaceId: state.workspaceId ?? "demo", collection, pageSize, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
+        return pageLocalWeeklyActivity(state, query);
       }
       if (mode === "demo" && collection === "knowledge") {
-        const filter = createKnowledgeFilter(state, {
-          resourceFormat: options.resourceFormat,
-          readingStatus: options.readingStatus,
-        revisitOnOrBefore: options.revisitOnOrBefore,
-          knowledgeKind: options.knowledgeKind,
-          searchText: options.searchText,
-          projectId: options.projectId,
-          goalId: options.knowledgeGoalId,
-          visibility: options.knowledgeVisibility
-        });
-        const filtered = state.knowledge.filter(filter);
-        return {
-          ...pageByCursor(filtered, pageSize, pageParam, (item) => options.revisitOnOrBefore ? item.revisitOn ?? "" : item.updatedAt ?? item.createdAt ?? ""),
-          totalCount: filtered.length
-        };
+        return pageLocalKnowledge(state, query);
       }
       const repository = mode === "demo" ? localRepository : createSupabaseWorkspaceRepository();
-      return repository.loadPage({ workspaceId: state.workspaceId ?? "demo", collection, pageSize, inboxStatus: options.inboxStatus, goalId: options.goalId, actionFilter: options.actionFilter, resourceFormat: options.resourceFormat, readingStatus: options.readingStatus,
-        revisitOnOrBefore: options.revisitOnOrBefore, knowledgeKind: options.knowledgeKind, searchText: options.searchText, projectId: options.projectId, knowledgeGoalId: options.knowledgeGoalId, knowledgeVisibility: options.knowledgeVisibility, activityKind: options.activityKind, periodStart: options.periodStart, periodEndExclusive: options.periodEndExclusive, periodTimeZone: options.periodTimeZone, activityProjectId: options.activityProjectId, activityGoalId: options.activityGoalId, cursor: pageParam });
+      return repository.loadPage(query);
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     select: (data) => ({
       ...data,
       items: data.pages.flatMap((page) => page.items as T[]),
-      totalCount: data.pages[0]?.totalCount
+      totalCount: data.pages[0]?.totalCount,
+      duplicateResultIds: data.pages.flatMap((page) => page.duplicateResultIds ?? [])
     })
   });
 }

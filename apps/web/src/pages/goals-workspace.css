@@ -1,0 +1,130 @@
+.goals-index .goal-grid { gap: 8px; }
+.goals-index .goal-grid > .goal-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--card);
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.goals-index .goal-grid > .goal-card-link:focus-visible {
+  border-color: var(--selection-border);
+  background: var(--surface-hover);
+}
+.goal-card-identity {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.goal-card-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--secondary);
+  color: var(--ring);
+}
+.goal-card-icon[data-priority="high"] {
+  background: color-mix(in srgb, var(--warning) 14%, var(--card));
+  color: var(--warning);
+}
+.goal-card-icon svg, .goal-card-chevron { width: 16px; height: 16px; }
+.goals-index .goal-card-identity h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: wrap;
+}
+.goal-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.goal-card-status { display: inline-flex; align-items: center; gap: 8px; }
+.goal-card-status::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  content: "";
+}
+.goal-card-status[data-status="active"]::before { background: var(--success); }
+.goal-card-status[data-status="paused"]::before { background: var(--warning); }
+.goal-card-status[data-status="achieved"]::before { background: var(--ring); }
+.goal-card-chevron { grid-column: 2; grid-row: 1; align-self: start; margin-top: 8px; color: var(--muted-foreground); }
+.goal-card-details {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.goal-card-project:not(.collection-desktop-placeholder), .goal-card-next {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+}
+.goal-card-project, .goal-card-next {
+  color: var(--secondary-foreground);
+  font-size: 13px;
+  line-height: 20px;
+}
+.goal-card-project svg, .goal-card-next svg { width: 14px; height: 20px; flex: none; color: var(--muted-foreground); }
+.goal-card-next svg { color: var(--ring); }
+.goal-card-work { display: grid; gap: 8px; min-width: 0; }
+.goals-index .goal-card-signals { margin: 0; }
+.goal-card-signals .badge {
+  max-width: 100%;
+  padding: 0 8px;
+  white-space: normal;
+  line-height: 20px;
+}
+.goal-card-signals .badge-danger { background: color-mix(in srgb, var(--danger) 13%, var(--card)); }
+.goal-card-signals .badge-warning { background: color-mix(in srgb, var(--warning) 13%, var(--card)); }
+.goals-index .goal-card > .button { grid-column: 1 / -1; justify-self: start; width: auto; min-height: 44px; margin-top: 8px; }
+
+@media (hover: hover) {
+  .goals-index .goal-grid > .goal-card-link:hover { border-color: var(--selection-border); background: var(--surface-hover); }
+  .goal-card-link:hover .goal-card-chevron { color: var(--ring); }
+}
+
+@media (max-width: 1199px) {
+  .goal-card-details:has(> .collection-desktop-placeholder:only-child) { display: none; }
+}
+
+@media (min-width: 1200px) {
+  .goals-index { --goal-columns: minmax(0, 1.2fr) minmax(0, .65fr) minmax(0, 1fr) 16px; }
+  .goals-index .goal-list-columns,
+  .goals-index .goal-grid > .goal-card { grid-template-columns: var(--goal-columns); column-gap: 16px; }
+  .goals-index .goal-list-columns {
+    display: grid;
+    margin-bottom: 8px;
+    padding-inline: 16px;
+    border-inline: 1px solid transparent;
+    color: var(--muted-foreground);
+    font-size: 12px;
+  }
+  .goals-index .goal-grid { grid-template-columns: minmax(0, 1fr); }
+  .goals-index .goal-grid > .goal-card { align-items: center; }
+  .goal-card-details { display: contents; }
+  .goal-card-project { grid-column: 2; grid-row: 1; }
+  .goal-card-project.collection-desktop-placeholder { display: block; color: var(--muted-foreground); }
+  .goal-card-work { grid-column: 3; grid-row: 1; }
+  .goal-card-chevron { grid-column: 4; align-self: center; margin-top: 0; }
+}

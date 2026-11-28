@@ -7,7 +7,7 @@ import { useStore } from "../app/useStore";
 import { AppShell, PageHeading } from "../components/AppShell";
 import { Badge, Button } from "../components/ui";
 import { locationAddress } from "../domain/navigation";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { projectProjections, projectSignal, type ProjectSignal } from "../domain/projectModule";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import "../components/workspace-list.css";
@@ -33,7 +33,16 @@ export function ProjectsPage() {
   const desktop = useDesktopLayout();
   const { state, setAreaVisibility } = useStore();
   const location = useLocation();
-  const [view, setView] = useState<"active" | "archived" | "trashed">("active");
+  const listAddress = locationAddress(location);
+  const [params, setParams] = useSearchParams();
+  const viewParam = params.get("view");
+  const view = viewParam === "archived" || viewParam === "trashed" ? viewParam : "active";
+  const setView = (nextView: typeof view) => {
+    const next = new URLSearchParams(params);
+    if (nextView === "active") next.delete("view");
+    else next.set("view", nextView);
+    setParams(next);
+  };
   const projects = projectProjections(state, view);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [grouped, setGrouped] = useState(true);
@@ -44,7 +53,7 @@ export function ProjectsPage() {
   const closeCategoryMenu = (element: HTMLElement) => { element.closest("details")?.removeAttribute("open"); };
   const viewLabel = view === "active" ? "Aktywne" : view === "archived" ? "Archiwum" : "Kosz";
   const selectedCategory = categoryFilter === "uncategorized" ? "Bez kategorii" : categories.find((category) => category.id === categoryFilter)?.name;
-  const viewSummary = `Projekty w widoku: ${filteredProjects.length}${selectedCategory ? ` · ${selectedCategory}` : ""}`;
+  const viewSummary = `Projekty w widoku: ${filteredProjects.length}${grouped && groups.reduce((sum, group) => sum + group.projects.length, 0) > filteredProjects.length ? " (unikatowe)" : ""}${selectedCategory ? ` · ${selectedCategory}` : ""}`;
 
   const metrics = useMemo(() => new Map(projectProjections(state).map((project) => [project.id, {
     goals: project.goals.filter((goal) => goal.visibility === "active").length,
@@ -92,14 +101,15 @@ export function ProjectsPage() {
       {group.projects.length ? <ul className="workspace-list project-list" role="list">{group.projects.map((project) => {
       const counts = metrics.get(project.id) ?? { goals: 0, actions: 0, knowledge: 0 };
       const signal = view === "active" ? projectSignal(state, project.id) : undefined;
+      const rowCategories = categories.filter((category) => project.categoryIds?.includes(category.id) && (!grouped || category.id !== group.id));
       const cardId = grouped ? `project-${project.id}-${group.id}` : `project-${project.id}`;
       const Title = grouped ? "h3" : "h2";
       return <li className="project-card project-index-row" key={project.id} data-navigation-card-id={cardId} tabIndex={-1}>
         <div className="project-row-identity">
           <Title aria-label={project.name}>
-            {view === "active" ? <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: "/projects" }]} returnTo={locationAddress(location)} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink> : project.name}
+            <NavigationLink className="project-card-link" to={`/projects/${project.id}`} breadcrumbs={[{ label: "Projekty", to: listAddress }]} returnTo={listAddress} returnLabel="Wszystkie Projekty" sourceCardId={cardId} aria-label={`Otwórz projekt ${project.name}`}>{project.name}</NavigationLink>
           </Title>
-          {!grouped ? <div className="project-row-categories">{categories.filter((category) => project.categoryIds?.includes(category.id)).map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
+          {rowCategories.length ? <div className="project-row-categories">{rowCategories.map((category) => <span key={category.id} className="project-category-chip"><span style={{ backgroundColor: category.color }} />{category.name}</span>)}</div> : null}
         </div>
         {signal ? <div className="project-row-signal" data-signal={signal.kind} aria-label={`Najbliższy ruch: ${projectSignalText(signal)}${signal.actionId ? ` — ${signal.title}` : ""}`}>
           <ProjectSignalIcon signal={signal} />

@@ -1,5 +1,4 @@
-import { actionGroupAssignment } from "../domain/actionGroups";
-import { actionGroupType, actionGroupTypeLabels, categoryConversionBlocker } from "../domain/actionGroups";
+import { actionGroupAssignment, actionGroupType, actionGroupTypeLabels, categoryConversionBlocker } from "../domain/actionGroups";
 import { ActionGroupTypePicker } from "../components/ActionGroupTypePicker";
 import type { CreationReceipt } from "../components/creationDraft";
 import { useCreationReceipt } from "../components/useCreationReceipt";
@@ -7,6 +6,7 @@ import { InlineGoalAction } from "../components/InlineGoalAction";
 import { AIContextExport } from "../components/AIContextExport";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
+import "./goal-edit-dialog.css";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, Ban, Check, ChevronDown, Circle, Flag, FolderKanban, History, Link2, LockKeyhole, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -17,6 +17,7 @@ import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionStatusDialog, type ActionStatusTarget, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionListRow } from "../components/ActionListRow";
 import { ActionEditDialog, type ActionEditValue } from "../components/ActionEditDialog";
+import { ActionChecklist } from "../components/ActionChecklist";
 import { AlertDialog } from "../components/AlertDialog";
 import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
 import { Button, EmptyState, Panel } from "../components/ui";
@@ -28,7 +29,7 @@ import { ActionResultDialog } from "../components/ActionResultDialog";
 import { ActionKnowledgeRelations } from "../components/ActionKnowledgeRelations";
 import { ContextNavigation, NavigationLink } from "../components/ContextNavigation";
 import { breadcrumbsForPage, locationAddress, navigationCardId, type NavigationBreadcrumb } from "../domain/navigation";
-import type { ActionGroupType, GoalAction } from "../domain/types";
+import type { GoalAction } from "../domain/types";
 import type { GoalProgressPageItem } from "../data/workspaceRepository";
 import { mergePagedItems, useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
@@ -37,16 +38,6 @@ import { DraftConflictNotice } from "../components/DraftConflictNotice";
 import { isDraftVersionConflict } from "../components/draftConflict";
 import { localDateForTimeZone } from "../domain/activity";
 import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
-
-function ActionChecklist({ action, busy, onToggle }: { action: GoalAction; busy: boolean; onToggle: (entryId: string) => void }) {
-  const completed = action.checklist.filter((entry) => entry.completed).length;
-  const contentId = `action-checklist-${action.id}`;
-  const [expanded, setExpanded] = useState(false);
-  return <div className="action-checklist">
-    <button type="button" className="action-checklist-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={() => setExpanded((current) => !current)}>Checklista {completed}/{action.checklist.length}</button>
-    {expanded ? <div id={contentId} className="action-checklist-content">{action.checklist.map((entry) => <label key={entry.id}><input type="checkbox" checked={entry.completed} disabled={busy || ["completed", "cancelled", "skipped"].includes(action.status)} onChange={() => onToggle(entry.id)} />{entry.title}</label>)}</div> : null}
-  </div>;
-}
 
 export function GoalDetailPage() {
   const { state, updateAction, setActionStatus, undoActionCompletion, setNextAction, addProgress, updateGoal, setGoalStatus, setGoalVisibility, linkKnowledge, unlinkKnowledge } = useStore();
@@ -58,6 +49,7 @@ export function GoalDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const goal = state.goals.find((item) => item.id === goalId);
+  const criteria = state.goalCriteria.filter((item) => item.goalId === goalId);
   const initialProgress = useMemo(() => ({ goalId, commandId: crypto.randomUUID() }), [goalId]);
   const progressDraft = usePersistentDraft("goal-progress", { kind: "note" as "note" | "decision" | "result" | "evidence" | "blocker", content: "", commandId: initialProgress.commandId, receipt: undefined as CreationReceipt | undefined }, 450, { targetId: goalId ?? "new", enabled: Boolean(goalId) });
   const statusReasonDraft = usePersistentDraft("goal-status-reason", { content: "" }, 450, { targetId: goalId ?? "new", baseVersion: goal?.version, enabled: Boolean(goalId) });
@@ -76,7 +68,16 @@ export function GoalDetailPage() {
   const [editGoal, setEditGoal] = useState(false);
   const [criteriaExpanded, setCriteriaExpanded] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
-  const goalDraft = usePersistentDraft("goal-edit", { groupType: "task" as ActionGroupType, title: "", outcome: "", areaId: "", priority: "normal" as "low" | "normal" | "high", targetDate: "", criteria: "" }, 450, { targetId: goalId ?? "new", baseVersion: goal?.version, enabled: Boolean(goalId) });
+  const initialGoalForm = {
+    groupType: goal ? actionGroupType(goal) : "task" as const,
+    title: goal?.title ?? "",
+    outcome: goal?.outcome ?? "",
+    areaId: goal?.areaId ?? "",
+    priority: goal?.priority ?? "normal",
+    targetDate: goal?.targetDate ?? "",
+    criteria: criteria.map((item) => item.title).join("\n")
+  };
+  const goalDraft = usePersistentDraft("goal-edit", initialGoalForm, 450, { targetId: goalId ?? "new", baseVersion: goal?.version, enabled: Boolean(goalId) });
   const goalForm = goalDraft.value;
   const setGoalForm = goalDraft.setValue;
   const [actionMenuId, setActionMenuId] = useState<string>();
@@ -94,11 +95,10 @@ export function GoalDetailPage() {
   const progressContentRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (progressDraft.restored) setProgressOpen(true); }, [progressDraft.restored]);
   useEffect(() => { const id = searchParams.get("action"); if (id) requestAnimationFrame(() => { const target = document.querySelector<HTMLElement>(`[data-action-id="${CSS.escape(id)}"]`); target?.scrollIntoView?.({ block: "center", behavior: "auto" }); target?.focus(); }); }, [searchParams, state.actions]);
-  if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono grupy" detail="Grupa nie istnieje albo nie jest dostępny w tej przestrzeni pracy." action={<Button onClick={() => navigate("/goals")}>Wróć do grup działań</Button>} /></AppShell>;
+  if (!goal) return <AppShell><EmptyState icon={<Flag />} title="Nie znaleziono grupy" detail="Grupa nie istnieje albo nie jest dostępna w tej przestrzeni pracy." action={<Button onClick={() => navigate("/goals")}>Wróć do grup działań</Button>} /></AppShell>;
   const isCategory = actionGroupType(goal) === "category";
   const conversionBlocker = isCategory ? undefined : categoryConversionBlocker(state, goal);
   const actions = state.actions.filter((item) => item.goalId === goal.id).sort((a, b) => a.position - b.position);
-  const criteria = state.goalCriteria.filter((item) => item.goalId === goal.id);
   const updates = mergePagedItems(state.progressEntries.filter((item) => item.goalId === goal.id), progressPage.data?.items ?? []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const links = state.knowledgeLinks.filter((item) => item.goalId === goal.id);
   const linkedKnowledge = links.map((link) => ({ link, item: state.knowledge.find((item) => item.id === link.knowledgeItemId) })).filter((value) => value.item);
@@ -117,7 +117,6 @@ export function GoalDetailPage() {
   const openGoalEditor = () => {
     setDialogError("");
     setGoalConflict(false);
-    if (!goalDraft.dirty && !goalDraft.restored) setGoalForm({ groupType: actionGroupType(goal), title: goal.title, outcome: goal.outcome, areaId: goal.areaId ?? "", priority: goal.priority, targetDate: goal.targetDate ?? "", criteria: criteria.map((item) => item.title).join("\n") });
     setEditGoal(true);
   };
   const closeGoalMenu = (target: HTMLElement) => target.closest("details")?.removeAttribute("open");
@@ -135,13 +134,33 @@ export function GoalDetailPage() {
     onAddResult: () => setResultActionId(action.id),
   }));
   const openActionEditor = (action: typeof actions[number]) => setEditActionId(action.id);
-  const saveActionEdit = (action: GoalAction, value: ActionEditValue, expectedVersion?: number) => actionMutation.run(`goal-action-edit:${action.id}`, () => updateAction(action.id, { ...actionGroupAssignment(state, action, value.goalId), title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion));
+  const saveActionEdit = (action: GoalAction, value: ActionEditValue, expectedVersion?: number) => actionMutation.run(`goal-action-edit:${action.id}`, () => updateAction(action.id, { ...actionGroupAssignment(state, action, value.areaId, value.goalId), title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion));
   const runDialog = async (operation: () => Promise<void>, close: () => void) => {
     if (dialogSaving) return;
     setDialogSaving(true); setDialogError("");
     try { await operation(); close(); }
     catch (caught) { if (isDraftVersionConflict(caught)) setGoalConflict(true); setDialogError(caught instanceof Error ? caught.message : "Nie udało się zapisać zmiany."); }
     finally { setDialogSaving(false); }
+  };
+  const editedGroupType = actionGroupType(goalForm);
+  const editedGroupIsTask = editedGroupType === "task";
+  const saveGoal = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const previousByTitle = new Map(criteria.map((item) => [item.title, item]));
+    const nextCriteria = goalForm.criteria.split("\n").map((title) => title.trim()).filter(Boolean)
+      .map((title) => previousByTitle.get(title) ?? { id: crypto.randomUUID(), title, completed: false });
+    void runDialog(() => updateGoal(goal.id, {
+      groupType: editedGroupType,
+      title: goalForm.title,
+      outcome: goalForm.outcome,
+      areaId: goalForm.areaId || null,
+      priority: goalForm.priority,
+      targetDate: editedGroupIsTask ? goalForm.targetDate || null : null,
+      criteria: editedGroupIsTask ? nextCriteria : []
+    }, typeof goalDraft.baseVersion === "number" ? goalDraft.baseVersion : undefined), () => {
+      goalDraft.clear();
+      setEditGoal(false);
+    });
   };
   const move = async (actionId: string, direction: -1 | 1) => {
     const index = actions.findIndex((action) => action.id === actionId);
@@ -197,7 +216,7 @@ export function GoalDetailPage() {
       indicator={featured || action.isNext ? <span className="action-next-badge">Następne</span> : null}
       description={action.detail || undefined}
       tools={<ActionOverflowButton action={action} busy={actionMutation.isBusy(actionKey)} onClick={() => setActionMenuId(action.id)} />}>
-      {!featured && action.checklist.length ? <ActionChecklist action={action} busy={actionMutation.isBusy(actionKey)} onToggle={(entryId) => void actionMutation.run(actionKey, () => updateAction(action.id, { checklist: action.checklist.map((candidate) => candidate.id === entryId ? { ...candidate, completed: !candidate.completed } : candidate) }))} /> : null}
+      {!featured && action.checklist.length ? <ActionChecklist action={action} busy={actionMutation.isBusy(actionKey) || actionMutation.isBusy(statusKey) || actionMutation.isBusy(`goal-action-edit:${action.id}`)} collapsible /> : null}
       {error ? <p className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void (actionMutation.retry(actionKey) ?? actionMutation.retry(statusKey))?.()}>Spróbuj ponownie</button></p> : null}
       {!featured ? <>
         <div className="action-menu">
@@ -284,9 +303,55 @@ export function GoalDetailPage() {
     </div>
     <Modal open={Boolean(actionMenuId)} closeDisabled={Boolean(actionMenuId && actionMutation.isBusy(`goal-action:${actionMenuId}`))} title="Działanie — więcej opcji" onClose={() => setActionMenuId(undefined)}>{(() => { const action = actions.find((candidate) => candidate.id === actionMenuId); if (!action) return null; const key = `goal-action:${action.id}`; return <div className="mobile-action-sheet"><Button disabled={actionMutation.isBusy(key)} onClick={() => { setActionMenuId(undefined); openActionEditor(action); }}><Pencil />Edytuj</Button>{action.id !== actions[0]?.id ? <Button disabled={actionMutation.isBusy(key)} onClick={() => void actionMutation.run(key, async () => { await move(action.id, -1); setActionMenuId(undefined); })}><ArrowUp />Przesuń wyżej</Button> : null}{action.id !== actions.at(-1)?.id ? <Button disabled={actionMutation.isBusy(key)} onClick={() => void actionMutation.run(key, async () => { await move(action.id, 1); setActionMenuId(undefined); })}><ArrowDown />Przesuń niżej</Button> : null}{["ready", "in_progress"].includes(action.status) && !action.isNext ? <Button disabled={actionMutation.isBusy(key)} onClick={() => void actionMutation.run(key, async () => { await setNextAction(goal.id, action.id); setActionMenuId(undefined); })}>Ustaw jako następne</Button> : null}<Button loading={actionMutation.isBusy(key)} onClick={() => void actionMutation.run(key, async () => { await updateAction(action.id, { pinnedToToday: !action.pinnedToToday }); setActionMenuId(undefined); })}>{action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu"}</Button>{["ready", "in_progress", "testing"].includes(action.status) ? <Button disabled={actionMutation.isBusy(key)} onClick={() => { setActionMenuId(undefined); setDialogError(""); setBlockActionId(action.id); }}><LockKeyhole />Zablokuj</Button> : null}{action.status === "blocked" ? <Button disabled={actionMutation.isBusy(key)} onClick={() => void actionMutation.run(key, async () => { await setActionStatus(action.id, "ready"); setActionMenuId(undefined); })}><RotateCcw />Odblokuj</Button> : null}{action.recurringTemplateId ? <Button loading={actionMutation.isBusy(key)} onClick={() => { const previous = action.status; void actionMutation.run(key, async () => { await setActionStatus(action.id, "skipped"); setActionMenuId(undefined); notifyUndo({ message: "Działanie pominięte.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><SkipForward />Pomiń</Button> : null}{!["completed", "cancelled"].includes(action.status) ? <Button variant="danger" loading={actionMutation.isBusy(key)} onClick={() => { const previous = action.status; void actionMutation.run(key, async () => { await setActionStatus(action.id, "cancelled"); setActionMenuId(undefined); notifyUndo({ message: "Działanie anulowane.", undo: () => setActionStatus(action.id, previous, action.blocker) }); }); }}><Ban />Anuluj Działanie</Button> : null}{actionMutation.error(key) ? <p className="inline-mutation-error" role="alert">{actionMutation.error(key)} <button type="button" onClick={() => void actionMutation.retry(key)?.()}>Spróbuj ponownie</button></p> : null}</div>; })()}</Modal>
     {(() => { const action = actions.find((candidate) => candidate.id === statusTarget?.action.id); const statusKey = action ? `goal-action-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} menu={statusTarget?.menu} compact busy={Boolean(statusKey && actionMutation.isBusy(statusKey))} error={statusKey ? actionMutation.error(statusKey) : undefined} onClose={() => setStatusTarget(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
-    <Modal open={editGoal} closeDisabled={dialogSaving} title="Edytuj grupę działań" onClose={() => setEditGoal(false)}><form onSubmit={(event) => { event.preventDefault(); const previousByTitle = new Map(criteria.map((item) => [item.title, item])); const nextCriteria = goalForm.criteria.split("\n").map((title) => title.trim()).filter(Boolean).map((title) => previousByTitle.get(title) ?? { id: crypto.randomUUID(), title, completed: false }); void runDialog(() => updateGoal(goal.id, { groupType: actionGroupType(goalForm), title: goalForm.title, outcome: goalForm.outcome, areaId: goalForm.areaId || null, priority: goalForm.priority, targetDate: actionGroupType(goalForm) === "category" ? null : goalForm.targetDate || null, criteria: actionGroupType(goalForm) === "category" ? [] : nextCriteria }, typeof goalDraft.baseVersion === "number" ? goalDraft.baseVersion : undefined), () => { goalDraft.clear(); setEditGoal(false); }); }}><label className="field-label" htmlFor="edit-goal-title">Nazwa</label><input id="edit-goal-title" value={goalForm.title} onChange={(event) => setGoalForm((current) => ({ ...current, title: event.target.value }))} required /><label className="field-label" htmlFor="edit-goal-outcome">{actionGroupType(goalForm) === "category" ? "Opis" : "Opis i rezultat"}</label><textarea id="edit-goal-outcome" rows={3} value={goalForm.outcome} onChange={(event) => setGoalForm((current) => ({ ...current, outcome: event.target.value }))} /><ActionGroupTypePicker value={actionGroupType(goalForm)} disabled={dialogSaving} conversionBlocker={conversionBlocker} onChange={(groupType) => setGoalForm((current) => ({ ...current, groupType }))} />{actionGroupType(goalForm) !== actionGroupType(goal) ? <p className="muted-copy">Zmiana typu zachowuje opis, Działania, Wiedzę i historię. Kategoria służy stałemu porządkowaniu pracy.</p> : null}{actionGroupType(goalForm) === "task" ? <><label className="field-label" htmlFor="edit-goal-criteria">Kryteria sukcesu <span className="optional-label">jedno w linii</span></label><textarea id="edit-goal-criteria" rows={4} value={goalForm.criteria} onChange={(event) => setGoalForm((current) => ({ ...current, criteria: event.target.value }))} /></> : null}<div className="form-grid"><div><label className="field-label" htmlFor="edit-goal-project">Projekt</label><select id="edit-goal-project" value={goalForm.areaId} onChange={(event) => setGoalForm((current) => ({ ...current, areaId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div><div><label className="field-label" htmlFor="edit-goal-priority">Ważność</label><select id="edit-goal-priority" value={goalForm.priority} onChange={(event) => setGoalForm((current) => ({ ...current, priority: event.target.value as typeof current.priority }))}><option value="low">Niska</option><option value="normal">Normalna</option><option value="high">Wysoka</option></select></div></div>{actionGroupType(goalForm) === "task" ? <><label className="field-label" htmlFor="edit-goal-date">Data docelowa</label><input id="edit-goal-date" type="date" value={goalForm.targetDate} onChange={(event) => setGoalForm((current) => ({ ...current, targetDate: event.target.value }))} /></> : null}{dialogError ? <p className="auth-message error" role="alert">{dialogError}</p> : null}{goalConflict ? <DraftConflictNotice onCopy={() => void navigator.clipboard?.writeText(`${goalForm.title}\n${goalForm.outcome}\n${goalForm.criteria}`)} onOpenCurrent={() => { goalDraft.clear(); setGoalConflict(false); setEditGoal(false); }} /> : null}<div className="modal-actions"><DraftStatus status={goalDraft.status} errorMessage={goalDraft.errorMessage} onRetry={() => void goalDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${goalForm.title}\n${goalForm.outcome}\n${goalForm.criteria}`)} />{goalDraft.dirty ? <Button type="button" variant="ghost" onClick={goalDraft.discard}>Odrzuć szkic</Button> : null}<Button type="button" disabled={dialogSaving} onClick={() => setEditGoal(false)}>Anuluj</Button><Button type="submit" variant="primary" loading={dialogSaving} disabled={!goalForm.title.trim()}>Zapisz grupę</Button></div></form></Modal>
+    <Modal open={editGoal} closeDisabled={dialogSaving} className="action-form-dialog goal-edit-dialog" title="Edytuj grupę działań" onClose={() => setEditGoal(false)}>
+      <form className="action-edit-form" onSubmit={saveGoal}>
+        <div className="action-form-body" data-modal-scroll-body>
+          <label className="field-label" htmlFor="edit-goal-title">Nazwa</label>
+          <input id="edit-goal-title" disabled={dialogSaving} value={goalForm.title} onChange={(event) => setGoalForm((current) => ({ ...current, title: event.target.value }))} required />
+          <label className="field-label" htmlFor="edit-goal-outcome">{editedGroupIsTask ? "Opis i rezultat" : "Opis"}</label>
+          <textarea id="edit-goal-outcome" disabled={dialogSaving} rows={3} value={goalForm.outcome} onChange={(event) => setGoalForm((current) => ({ ...current, outcome: event.target.value }))} />
+          <ActionGroupTypePicker value={editedGroupType} disabled={dialogSaving} conversionBlocker={conversionBlocker} onChange={(groupType) => setGoalForm((current) => ({ ...current, groupType }))} />
+          {editedGroupType !== actionGroupType(goal) ? <p className="muted-copy">Zmiana typu zachowuje opis, Działania, Wiedzę i historię. Kategoria służy stałemu porządkowaniu pracy.</p> : null}
+          {editedGroupIsTask ? <>
+            <label className="field-label" htmlFor="edit-goal-criteria">Kryteria sukcesu <span className="optional-label">jedno w linii</span></label>
+            <textarea id="edit-goal-criteria" disabled={dialogSaving} rows={4} value={goalForm.criteria} onChange={(event) => setGoalForm((current) => ({ ...current, criteria: event.target.value }))} />
+          </> : null}
+          <div className="form-grid">
+            <div>
+              <label className="field-label" htmlFor="edit-goal-project">Projekt</label>
+              <select id="edit-goal-project" disabled={dialogSaving} value={goalForm.areaId} onChange={(event) => setGoalForm((current) => ({ ...current, areaId: event.target.value }))}>
+                <option value="">Bez Projektu</option>
+                {state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="edit-goal-priority">Ważność</label>
+              <select id="edit-goal-priority" disabled={dialogSaving} value={goalForm.priority} onChange={(event) => setGoalForm((current) => ({ ...current, priority: event.target.value as typeof current.priority }))}>
+                <option value="low">Niska</option><option value="normal">Normalna</option><option value="high">Wysoka</option>
+              </select>
+            </div>
+          </div>
+          {editedGroupIsTask ? <>
+            <label className="field-label" htmlFor="edit-goal-date">Data docelowa</label>
+            <input id="edit-goal-date" disabled={dialogSaving} type="date" value={goalForm.targetDate} onChange={(event) => setGoalForm((current) => ({ ...current, targetDate: event.target.value }))} />
+          </> : null}
+          {dialogError ? <p className="auth-message error" role="alert">{dialogError}</p> : null}
+          {goalConflict ? <DraftConflictNotice onCopy={() => void navigator.clipboard?.writeText(`${goalForm.title}\n${goalForm.outcome}\n${goalForm.criteria}`)} onOpenCurrent={() => { goalDraft.clear(); setGoalConflict(false); setEditGoal(false); }} /> : null}
+        </div>
+        <div className="goal-edit-footer">
+          {goalDraft.status !== "idle" || goalDraft.dirty ? <div className="goal-edit-draft">
+            <DraftStatus status={goalDraft.status} errorMessage={goalDraft.errorMessage} onRetry={() => void goalDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${goalForm.title}\n${goalForm.outcome}\n${goalForm.criteria}`)} />
+            {goalDraft.dirty ? <Button type="button" variant="ghost" disabled={dialogSaving} onClick={() => goalDraft.clear(initialGoalForm)}>Odrzuć szkic</Button> : null}
+          </div> : null}
+          <div className="modal-actions">
+            <Button type="button" disabled={dialogSaving} onClick={() => setEditGoal(false)}>Anuluj</Button>
+            <Button type="submit" variant="primary" loading={dialogSaving} disabled={!goalForm.title.trim()}>Zapisz grupę</Button>
+          </div>
+        </div>
+      </form>
+    </Modal>
     <Modal open={Boolean(blockActionId)} closeDisabled={dialogSaving} title="Co blokuje Działanie?" onClose={() => setBlockActionId(undefined)}><textarea aria-label="Powód blokady" rows={3} value={blocker} onChange={(event) => blockerDraft.setValue((current) => ({ ...current, content: event.target.value }))} /><label className="field-label" htmlFor="goal-blocker-review-on">Sprawdź ponownie <span className="optional-label">opcjonalnie</span></label><input id="goal-blocker-review-on" type="date" value={blockerReviewOn} onChange={(event) => blockerDraft.setValue((current) => ({ ...current, reviewOn: event.target.value }))} /><p className="muted-copy">Data powrotu do blokady nie zmienia terminu wykonania Działania.</p>{dialogError ? <p className="auth-message error" role="alert">{dialogError}</p> : null}<div className="modal-actions"><DraftStatus status={blockerDraft.status} errorMessage={blockerDraft.errorMessage} onRetry={() => void blockerDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(blocker)} />{blockerDraft.dirty ? <Button type="button" variant="ghost" onClick={blockerDraft.discard}>Odrzuć szkic</Button> : null}<Button disabled={dialogSaving} onClick={() => setBlockActionId(undefined)}>Anuluj</Button><Button variant="primary" loading={dialogSaving} disabled={!blocker.trim()} onClick={() => blockActionId && void runDialog(() => setActionStatus(blockActionId, "blocked", blocker, actions.find((action) => action.id === blockActionId)?.version, blockerReviewOn || null), () => { blockerDraft.clear(); setBlockActionId(undefined); })}>Zapisz blokadę</Button></div></Modal>
-    {(() => { const action = actions.find((candidate) => candidate.id === editActionId); const key = action ? `goal-action-edit:${action.id}` : ""; return <ActionEditDialog action={action} open={Boolean(action)} busy={Boolean(key && actionMutation.isBusy(key))} error={key ? actionMutation.error(key) : undefined} onClose={() => setEditActionId(undefined)} onSave={(value, expectedVersion) => action ? saveActionEdit(action, value, expectedVersion) : false} />; })()}
+    {(() => { const action = state.actions.find((candidate) => candidate.id === editActionId); const key = action ? `goal-action-edit:${action.id}` : ""; return <ActionEditDialog action={action} open={Boolean(action)} busy={Boolean(key && actionMutation.isBusy(key))} error={key ? actionMutation.error(key) : undefined} onClose={() => setEditActionId(undefined)} onSave={(value, expectedVersion) => action ? saveActionEdit(action, value, expectedVersion) : false} />; })()}
     <Modal open={Boolean(pendingGoalStatus)} closeDisabled={goalStatusSaving} title={pendingGoalStatus === "achieved" ? "Potwierdź ukończenie grupy" : "Porzuć zadanie"} onClose={() => setPendingGoalStatus(undefined)}>{pendingGoalStatus === "achieved" ? <><p>Kryteria: {criteria.filter((item) => item.completed).length}/{criteria.length}. Otwarte Działania: {actions.filter((action) => !["completed", "cancelled", "skipped"].includes(action.status)).length}.</p><p className="muted-copy">Potwierdź tylko wtedy, gdy rezultat jest faktycznie osiągnięty.</p></> : <><label className="field-label" htmlFor="goal-abandon-reason">Powód porzucenia</label><textarea id="goal-abandon-reason" rows={3} value={statusReason} onChange={(event) => statusReasonDraft.setValue({ content: event.target.value })} required /></>}{goalStatusError ? <p className="auth-message error" role="alert">{goalStatusError}</p> : null}<div className="modal-actions"><DraftStatus status={statusReasonDraft.status} errorMessage={statusReasonDraft.errorMessage} onRetry={() => void statusReasonDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(statusReason)} />{statusReasonDraft.dirty ? <Button type="button" variant="ghost" onClick={statusReasonDraft.discard}>Odrzuć szkic</Button> : null}<Button disabled={goalStatusSaving} onClick={() => setPendingGoalStatus(undefined)}>Anuluj</Button><Button variant={pendingGoalStatus === "abandoned" ? "danger" : "primary"} loading={goalStatusSaving} disabled={pendingGoalStatus === "abandoned" && !statusReason.trim()} onClick={() => { if (!pendingGoalStatus) return; void changeGoalStatus(pendingGoalStatus, statusReason); }}>{pendingGoalStatus === "achieved" ? "Potwierdź ukończenie" : "Porzuć zadanie"}</Button></div></Modal>
     <AlertDialog open={trashOpen} title="Przenieść grupę do Kosza?" objectName={goal.title} consequence="Grupa działań zniknie z aktywnych widoków i trafi do sekcji odzyskiwania." preserved="Działania, kryteria, Wiedza i historia postępu pozostaną zachowane." recovery="Grupę można przywrócić z Kosza albo natychmiast użyć akcji Cofnij." confirmLabel="Przenieś do Kosza" loading={visibilitySaving} error={visibilityError} onCancel={() => setTrashOpen(false)} onConfirm={() => changeGoalVisibility("trashed")} />
     <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />

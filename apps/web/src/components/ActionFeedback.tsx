@@ -7,6 +7,10 @@ import "./action-feedback.css";
 
 const EXIT_DURATION_MS = 240;
 
+function retainActionableNotices(notices: UndoNotice[]) {
+  return notices.filter((notice) => notice.working || notice.undo || notice.action || notice.error || notice.event === "error");
+}
+
 const noticePresentation = {
   saved: { label: "Zapisano", Icon: Check, tone: "success" },
   changed: { label: "Zmieniono", Icon: Info, tone: "info" },
@@ -59,14 +63,14 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ActionFeedbackValue>(() => ({
     notifyUndo(input) {
       const durationMs = input.durationMs ?? 8_000;
-      setNotices((current) => [...current, { ...input, durationMs, event: input.event ?? "changed", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
+      setNotices((current) => [...retainActionableNotices(current), { ...input, durationMs, event: input.event ?? "changed", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
     },
     notifySuccess(message, action) {
       const durationMs = action ? 12_000 : 5_000;
-      setNotices((current) => [...current, { message, action, durationMs, event: "saved", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
+      setNotices((current) => [...retainActionableNotices(current), { message, action, durationMs, event: "saved", id: crypto.randomUUID(), expiresAt: Date.now() + durationMs, working: false }]);
     },
     notifyError(message) {
-      setNotices((current) => [...current, { message, durationMs: 0, event: "error", id: crypto.randomUUID(), expiresAt: Number.POSITIVE_INFINITY, working: false }]);
+      setNotices((current) => [...retainActionableNotices(current).filter((notice) => notice.event !== "error" || notice.message !== message), { message, durationMs: 0, event: "error", id: crypto.randomUUID(), expiresAt: Number.POSITIVE_INFINITY, working: false }]);
     }
   }), []);
 
@@ -82,7 +86,11 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       interacting.current.delete(notice.id);
       const id = crypto.randomUUID();
       const durationMs = 5_000;
-      setNotices((current) => current.map((item) => item.id === notice.id && item.dismissedAt === undefined ? { id, event: "undone", message: "Przywrócono stan sprzed zmiany.", durationMs, expiresAt: Date.now() + durationMs, working: false } : item));
+      setNotices((current) => {
+        const remaining = retainActionableNotices(current);
+        if (!remaining.some((item) => item.id === notice.id && item.dismissedAt === undefined)) return current;
+        return [...remaining.filter((item) => item.id !== notice.id), { id, event: "undone", message: "Przywrócono stan sprzed zmiany.", durationMs, expiresAt: Date.now() + durationMs, working: false }];
+      });
     } catch (caught) {
       const message = describeMutationError(caught, "Nie udało się cofnąć operacji.");
       setNotices((current) => current.map((item) => item.id === notice.id ? { ...item, working: false, error: message, expiresAt: Number.POSITIVE_INFINITY } : item));

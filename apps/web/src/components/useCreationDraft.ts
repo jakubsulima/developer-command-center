@@ -8,7 +8,9 @@ import { emptyDraft, forkCreationDraft, isQuickAddDraft, migrateQuickAddDraft, t
 
 export function creationScope(request?: QuickAddRequest) {
   const mode = normalizeQuickAddMode(request?.mode ?? "action");
-  return `creation:${request?.actionId ? `action-${request.actionId}` : request?.sourceBookId ? `book-${request.sourceBookId}` : request?.materialKnowledgeIds?.length ? `materials-${[...request.materialKnowledgeIds].sort().join(",")}-${request.areaId ?? "global"}` : request?.goalId ? `goal-${request.goalId}` : request?.areaId ? `project-${request.areaId}` : request?.draftKey === "start" ? "start" : "global"}:${mode}`;
+  const context = request?.actionId ? `action-${request.actionId}` : request?.sourceBookId ? `book-${request.sourceBookId}` : request?.materialKnowledgeIds?.length ? `materials-${[...request.materialKnowledgeIds].sort().join(",")}-${request.areaId ?? "global"}` : request?.goalId ? `goal-${request.goalId}` : request?.areaId ? `project-${request.areaId}` : request?.draftKey === "start" ? "start" : "global";
+  const type = mode === "library" && request?.directLibraryEntry ? `${mode}:${request.libraryKind ?? "note"}` : mode;
+  return `creation:${context}:${type}`;
 }
 
 export function useCreationDraft(request?: QuickAddRequest) {
@@ -23,14 +25,14 @@ export function useCreationDraft(request?: QuickAddRequest) {
   }, [currentDate, signature, state.projectCategories]);
   const scope = creationScope(request);
   const mode = normalizeQuickAddMode(request?.mode ?? "action");
-  const migrateFrom = useMemo(() => [
+  const migrateFrom = useMemo(() => mode === "library" && request?.directLibraryEntry ? [] : [
     { kind: request?.draftKey ? `quick-add:${request.draftKey}` : "global-quick-add", targetId: "new" },
     ...(!request?.draftKey ? [{ kind: "global-quick-add" }] : []),
     ...(request?.goalId && mode === "action" ? [{ kind: "goal-action", targetId: request.goalId }, { kind: `quick-add:goal-${request.goalId}`, targetId: "new" }] : []),
     ...(request?.draftKey === "start" ? [{ kind: "start-action", targetId: "new" }] : []),
     ...(mode === "routine" ? [{ kind: "routine-new", targetId: "new" }] : []),
     ...(mode === "library" ? request?.sourceBookId ? [{ kind: "book-knowledge-note", targetId: request.sourceBookId }] : request?.areaId ? [{ kind: "project-knowledge-note", targetId: request.areaId }] : [{ kind: "knowledge-create", targetId: "global" }] : [])
-  ], [mode, request?.areaId, request?.draftKey, request?.goalId, request?.sourceBookId]);
+  ], [mode, request?.areaId, request?.directLibraryEntry, request?.draftKey, request?.goalId, request?.sourceBookId]);
   const migrate = useCallback((value: unknown) => migrateQuickAddDraft(value, initial), [initial]);
   const redirect = useCallback((value: QuickAddDraft) => {
     if (normalizeQuickAddMode(value.mode) === mode || value.attempted || value.receipt) return undefined;

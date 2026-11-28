@@ -46,7 +46,11 @@ describe("automatyczne podsumowanie tygodnia", () => {
       ...emptyState,
       actions: [{ id: "blocked", version: 1, title: "Blokada", detail: "", status: "blocked", position: 0, isNext: false, pinnedToToday: false, checklist: [] }]
     };
-    expect(deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z")).suggestions[0]).toMatchObject({ id: "blocked", to: "/actions?view=blocked&highlight=blocked" });
+    expect(deriveWeeklyReview(state, new Date("2026-08-08T12:00:00.000Z")).suggestions[0]).toMatchObject({
+      id: "blocked",
+      to: "/actions?view=blocked&highlight=blocked",
+      primaryAction: { title: "Odblokuj: Blokada", to: "/actions/blocked" }
+    });
   });
 
   it("udostępnia wszystkie kategorie i wszystkie Grupy działań bez następnego kroku", () => {

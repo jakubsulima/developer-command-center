@@ -34,7 +34,7 @@ describe("ekran ładowania widoku", () => {
     expect(screen.getByRole("button", { name: /Szybki zapis/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu Więcej" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Otwórz menu profilu" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Szukaj w projektach, grupach, działaniach, bibliotece i skrzynce" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Dodaj nowe Działanie" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Otwórz wyszukiwanie" })).not.toBeInTheDocument();
 

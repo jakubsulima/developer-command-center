@@ -44,8 +44,9 @@ function start(path: string) {
 it("czyści wyszukiwanie bez przywracania starego q po debounce", async () => {
   const user = userEvent.setup();
   start("/knowledge?q=missing");
+  expect(screen.getByRole("heading", { name: "Brak pasujących wpisów" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Wyczyść filtry" }));
-  await waitFor(() => expect(screen.queryByText("Brak pasujących obiektów")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Brak pasujących wpisów")).not.toBeInTheDocument());
   expect(screen.getByTestId("url")).toHaveTextContent(/^$/);
   expect(screen.getByRole("searchbox")).toHaveValue("");
 });
@@ -59,6 +60,60 @@ it("respektuje zmianę URL i historię także podczas oczekującego wyszukiwania
   await user.click(screen.getByText("Wstecz test"));
   expect(screen.getByRole("searchbox")).toHaveValue("originalx");
   await waitFor(() => expect(mocks.page).toHaveBeenCalledWith("knowledge", 50, expect.objectContaining({ searchText: "originalx" })));
+});
+
+it("pokazuje Kurs JS po wyszukaniu nazwy powiązanego projektu", () => {
+  const today = "2026-11-28";
+  state.areas = [{ id: "project", name: "Nauka JavaScript - teoria", visibility: "active", createdAt: today, updatedAt: today }];
+  state.knowledgeLinks = [{ id: "link", knowledgeItemId: "course", areaId: "project", meaning: "reference", createdAt: today }];
+  pageItems = [{ id: "course", title: "Kurs JS", type: "resource", detail: "" }];
+  start("/knowledge?q=JavaScript");
+
+  expect(screen.getByRole("link", { name: "Kurs JS" })).toBeInTheDocument();
+  expect(screen.getByText("Nauka JavaScript - teoria")).toBeInTheDocument();
+});
+
+it("pokazuje treść jednakowo nazwanych rezultatów i otwiera podgląd z menu wiersza", async () => {
+  const user = userEvent.setup();
+  const today = "2026-11-28";
+  state.areas = [{ id: "project", name: "Projekt", visibility: "active", createdAt: today, updatedAt: today }];
+  state.knowledgeLinks = ["first", "second", "other"].map((id) => ({
+    id, knowledgeItemId: id, areaId: "project", meaning: "reference", createdAt: today
+  }));
+  pageItems = [
+    { id: "first", title: "Wynik", type: "artifact", detail: "Pierwsza wersja rezultatu" },
+    { id: "second", title: "Wynik", type: "artifact", detail: "Druga wersja rezultatu" },
+    { id: "other", title: "Inny wynik", type: "artifact", detail: "Treść unikalnego rezultatu" }
+  ];
+  start("/knowledge");
+
+  expect(screen.getByText("Pierwsza wersja rezultatu")).toHaveClass("knowledge-result-excerpt");
+  expect(screen.getByText("Druga wersja rezultatu")).toHaveClass("knowledge-result-excerpt");
+  expect(screen.queryByText("Treść unikalnego rezultatu")).not.toBeInTheDocument();
+  expect(screen.queryByText("Podgląd")).not.toBeInTheDocument();
+  const [menu] = screen.getAllByRole("button", { name: "Więcej opcji: Wynik" });
+  await user.click(menu!);
+  await user.click(screen.getByRole("button", { name: "Podgląd" }));
+  expect(await screen.findByRole("dialog", { name: "Wynik" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Zamknij okno" }));
+  await waitFor(() => expect(menu).toHaveFocus());
+});
+
+it("stosuje filtry dopiero po zatwierdzeniu i usuwa nieaktualny status czytania", async () => {
+  const user = userEvent.setup();
+  start("/knowledge?format=book&readingStatus=reading");
+
+  expect(screen.getByRole("button", { name: "Usuń filtr: Książki" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^Filtry Biblioteki/ }));
+  const kind = screen.getByRole("combobox", { name: "Rodzaj Wiedzy" });
+  expect(kind).toHaveValue("book");
+
+  await user.selectOptions(kind, "note");
+  expect(screen.getByTestId("url")).toHaveTextContent(/^\?format=book&readingStatus=reading$/);
+  expect(screen.queryByRole("combobox", { name: "Filtr statusu czytania" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Pokaż wyniki" }));
+  expect(screen.queryByRole("button", { name: "Usuń filtr: Książki" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("url")).toHaveTextContent(/^\?kind=note$/);
 });
 
 it("pokazuje nową notatkę poza pierwszą stroną, deduplikuje ją i respektuje archiwizację", async () => {
@@ -84,7 +139,7 @@ it("wybiera źródłową książkę spoza początkowo załadowanej Wiedzy", asyn
   start("/knowledge");
   await user.click(screen.getByText("Dodaj test"));
   await user.type(await screen.findByLabelText("Treść notatki"), "Notatka do źródła");
-  await user.click(screen.getByText("Więcej", { exact: true }));
+  await user.click(screen.getByText("Szczegóły", { exact: true }));
   await user.selectOptions(screen.getByLabelText(/Źródłowa książka/), "off-page-book");
   await user.click(screen.getByRole("button", { name: "Zapisz notatkę" }));
   await waitFor(() => expect(createdInputs).toHaveLength(1));

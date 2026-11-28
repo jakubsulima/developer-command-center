@@ -21,7 +21,7 @@ beforeEach(() => {
 async function openProposal() {
   const user = userEvent.setup();
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><KnowledgeInbox /></MemoryRouter></QueryClientProvider>);
-  await user.click(screen.getByRole("button", { name: "Uporządkuj" }));
+  await user.click(screen.getByRole("link", { name: "Surowa treść" }));
   await user.click(screen.getByText("Więcej możliwości"));
   await user.click(screen.getByRole("button", { name: "Zaproponuj przez AI" }));
   await user.click(await screen.findByRole("button", { name: "Edytuj" }));

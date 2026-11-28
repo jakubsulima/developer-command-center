@@ -40,6 +40,19 @@
 .start-today-empty { padding: var(--space-2) 0 var(--space-4); border-bottom: 1px solid var(--border); }
 .start-today-empty p { margin: 0; color: var(--muted-foreground); font-size: 14px; }
 .start-today-empty .button { min-height: 44px; margin-top: var(--space-2); }
+.start-pick-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.start-pick-action label { grid-column: 1 / -1; font-weight: 600; }
+.start-pick-action select { min-width: 0; width: 100%; min-height: 44px; }
+.start-today-empty .start-pick-action .button { margin: 0; }
+@media (max-width: 480px) {
+  .start-pick-action { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+}
 .start-layout .section-link { min-height: 44px; margin-top: var(--space-2); }
 .start-workspace .start-context { display: grid; align-content: start; gap: 0; }
 .start-context > .start-context-link, .start-context > .return-to-work, .start-ai-help > summary {

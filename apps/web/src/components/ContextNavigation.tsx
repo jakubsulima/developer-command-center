@@ -9,12 +9,13 @@ import {
   type NavigationState
 } from "../domain/navigation";
 
-export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturnTo, fallbackReturnLabel, showBack = false }: {
+export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturnTo, fallbackReturnLabel, showBack = false, includeCurrent = false }: {
   current: NavigationBreadcrumb;
   fallbackBreadcrumbs: NavigationBreadcrumb[];
   fallbackReturnTo: string;
   fallbackReturnLabel: string;
-  showBack?: boolean;
+  showBack?: boolean | "outside-trail";
+  includeCurrent?: boolean;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,22 +26,26 @@ export function ContextNavigation({ current, fallbackBreadcrumbs, fallbackReturn
   // on its ancestors so the same title is not shown twice.
   const lastBreadcrumb = breadcrumbs.at(-1);
   const ancestors = lastBreadcrumb?.to === current.to && lastBreadcrumb?.label === current.label ? breadcrumbs.slice(0, -1) : breadcrumbs;
-  const visible = ancestors.length > 3 ? [{ label: "…" }, ...ancestors.slice(-3)] : ancestors;
+  const trail = includeCurrent ? breadcrumbs : ancestors;
+  const firstVisible = Math.max(0, trail.length - 3);
+  const visible = trail.slice(firstVisible);
   const nestedParent = parentBreadcrumbs && parentBreadcrumbs.length > 1 ? parentBreadcrumbs.at(-2) : undefined;
   const returnTo = navigation?.returnTo ?? nestedParent?.to ?? fallbackReturnTo;
   const returnLabel = navigation?.returnLabel ?? nestedParent?.label ?? fallbackReturnLabel;
+  const showReturn = showBack === "outside-trail" ? !visible.some((breadcrumb) => breadcrumb.to === returnTo) : showBack;
 
   const goBack = () => navigate(returnTo, navigation ? { state: { navigationRestore: { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY }, breadcrumbs: navigation.breadcrumbs } } : undefined);
 
-  return <nav className={`context-navigation${showBack ? " context-navigation-with-back" : ""}`} aria-label="Ścieżka kontekstu">
-    {showBack ? <button className="back-link context-navigation-back" type="button" onClick={goBack} aria-label={returnLabel}><ArrowLeft /><span>{returnLabel}</span></button> : null}
+  return <nav className={`context-navigation${showReturn ? " context-navigation-with-back" : ""}`} aria-label="Ścieżka kontekstu">
+    {showReturn ? <button className="back-link context-navigation-back" type="button" onClick={goBack} aria-label={returnLabel}><ArrowLeft /><span>{returnLabel}</span></button> : null}
     <ol className="context-breadcrumbs">
+      {firstVisible > 0 ? <li><span className="context-breadcrumb-ellipsis" aria-label="Pominięte poziomy">…</span></li> : null}
       {visible.map((breadcrumb, index) => {
+        const trailIndex = firstVisible + index;
         const isCurrent = breadcrumb.to === current.to && breadcrumb.label === current.label;
-        const isEllipsis = breadcrumb.label === "…";
-        return <li key={`${breadcrumb.label}-${index}`}>
-          {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
-              {isEllipsis ? <span className="context-breadcrumb-ellipsis" aria-label="Pominięte poziomy">…</span> : isCurrent || !breadcrumb.to ? <span aria-current={isCurrent ? "page" : undefined}>{breadcrumb.label}</span> : <Link to={breadcrumb.to} state={{ breadcrumbs: breadcrumbs.slice(0, index + 1), navigationRestore: navigation ? { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY } : undefined }}>{breadcrumb.label}</Link>}
+        return <li key={`${breadcrumb.label}-${trailIndex}`}>
+          {trailIndex > 0 ? <ChevronRight aria-hidden="true" /> : null}
+          {isCurrent || !breadcrumb.to ? <span aria-current={isCurrent ? "page" : undefined}>{breadcrumb.label}</span> : <Link to={breadcrumb.to} state={{ breadcrumbs: trail.slice(0, trailIndex + 1), navigationRestore: navigation ? { sourceCardId: navigation.sourceCardId, scrollY: navigation.scrollY } : undefined }}>{breadcrumb.label}</Link>}
         </li>;
       })}
     </ol>

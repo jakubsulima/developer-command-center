@@ -9,10 +9,13 @@ import type { AppState, InboxItem } from "../domain/types";
 import { draftStorageKey } from "../hooks/usePersistentDraft";
 import { KnowledgeInbox } from "./InboxPage";
 
-const mocks = vi.hoisted(() => ({ store: vi.fn(), triage: vi.fn(), status: vi.fn(), release: vi.fn(), proposal: vi.fn(), notifyUndo: vi.fn() }));
+const mocks = vi.hoisted(() => ({ store: vi.fn(), page: vi.fn(), triage: vi.fn(), status: vi.fn(), release: vi.fn(), proposal: vi.fn(), notifyUndo: vi.fn() }));
 vi.mock("../app/useStore", () => ({ useStore: mocks.store }));
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ user: { id: "user" }, mode: "demo" }) }));
-vi.mock("../hooks/useWorkspaceInfinitePage", () => ({ useWorkspaceInfinitePage: () => ({ data: { items: [] }, isPending: false, isError: false, hasNextPage: false }), mergePagedItems: (items: InboxItem[]) => items }));
+vi.mock("../hooks/useWorkspaceInfinitePage", async (original) => ({
+  ...await original<typeof import("../hooks/useWorkspaceInfinitePage")>(),
+  useWorkspaceInfinitePage: mocks.page
+}));
 vi.mock("../components/action-feedback-context", async (original) => ({ ...await original<typeof import("../components/action-feedback-context")>(), useActionFeedback: () => ({ notifyUndo: mocks.notifyUndo }) }));
 
 configure({ asyncUtilTimeout: 5000 });
@@ -32,6 +35,7 @@ beforeEach(() => {
   mocks.status.mockReset().mockResolvedValue(undefined);
   mocks.release.mockReset();
   mocks.notifyUndo.mockReset();
+  mocks.page.mockReset().mockReturnValue({ data: { items: [] }, isPending: false, isError: false, hasNextPage: false });
   fixture = { ...structuredClone(emptyState), workspaceId: "workspace", inbox: [
     { id: "a", content: "Pierwsza myśl", kind: "text", status: "unprocessed", createdAt: "2026-11-13T10:00:00Z" },
     { id: "b", content: "Druga myśl", kind: "text", status: "unprocessed", createdAt: "2026-11-13T09:00:00Z" },
@@ -56,15 +60,49 @@ function Harness() {
   return <><KnowledgeInbox /><output data-testid="address">{location.pathname}{location.search}</output></>;
 }
 function start(path = "/knowledge?section=inbox&other=keep") {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[path]}><Harness /></MemoryRouter></QueryClientProvider>);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const tree = () => <QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><Harness /></MemoryRouter></QueryClientProvider>;
+  const { rerender } = render(tree());
+  return () => rerender(tree());
 }
 const panel = () => screen.getByRole("complementary", { name: "Przetwarzanie wpisu" });
 const row = (id: string) => document.querySelector<HTMLElement>(`[data-inbox-id="${id}"]`)!;
 async function openNote(user: ReturnType<typeof userEvent.setup>, id = "a") {
-  await user.click(within(row(id)).getByRole("button", { name: "Uporządkuj" }));
+  await user.click(within(row(id)).getByRole("link"));
   await user.click(within(panel()).getByRole("button", { name: "Zapisz notatkę" }));
   return within(panel()).getByLabelText("Treść notatki");
 }
+
+it("pokazuje zastępniki do pierwszego wyniku, a przy odświeżaniu zachowuje pierwszą pozycję", () => {
+  const items = fixture.inbox;
+  fixture = { ...fixture, inbox: [] };
+  mocks.page.mockReturnValue({ isPending: true, isFetching: true });
+  const refresh = start();
+  expect(screen.getByRole("status", { name: "Ładowanie Skrzynki" })).toBeInTheDocument();
+  expect(screen.queryByRole("list", { name: "Wpisy Skrzynki" })).not.toBeInTheDocument();
+
+  mocks.page.mockReturnValue({ data: { items }, isPending: false, isFetching: false });
+  refresh();
+  const first = row("a");
+  expect(first).toBeInTheDocument();
+  expect(first.parentElement?.firstElementChild).toBe(first);
+  expect(screen.queryByRole("status", { name: "Ładowanie Skrzynki" })).not.toBeInTheDocument();
+
+  mocks.page.mockReturnValue({ data: { items }, isPending: false, isFetching: true });
+  refresh();
+  expect(screen.getByText("Odświeżanie Skrzynki…")).toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "Ładowanie Skrzynki" })).not.toBeInTheDocument();
+  expect(row("a")).toBe(first);
+  expect(first.parentElement?.firstElementChild).toBe(first);
+});
+
+it("pokazuje wpisy z pamięci podczas pierwszego pobierania strony", () => {
+  mocks.page.mockReturnValue({ isPending: true, isFetching: true });
+  start();
+  expect(screen.getByRole("link", { name: "Pierwsza myśl" })).toBeInTheDocument();
+  expect(screen.getByText("Odświeżanie Skrzynki…")).toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "Ładowanie Skrzynki" })).not.toBeInTheDocument();
+});
 
 it("pozostawia listę obok edytora i zachowuje parametry widoku", async () => {
   const user = userEvent.setup();
@@ -137,7 +175,7 @@ it("blokuje zmianę wpisu podczas zapisu, a po sukcesie proponuje następny wpis
   await openNote(user);
   await user.click(within(panel()).getByRole("button", { name: "Zapisz notatkę" }));
   expect(mocks.triage).toHaveBeenCalledTimes(1);
-  expect(within(row("b")).getByRole("button", { name: "Uporządkuj" })).toBeDisabled();
+  expect(within(row("b")).getByRole("link")).toHaveAttribute("aria-disabled", "true");
   expect(within(panel()).getByRole("button", { name: "Zamknij przetwarzanie wpisu" })).toBeDisabled();
   await user.click(screen.getByRole("link", { name: "Druga myśl" }));
   expect(screen.getByTestId("address")).toHaveTextContent("item=a");
@@ -171,7 +209,7 @@ it("bezpiecznie zmienia widoki, pokazuje historię i przywraca jej wpis", async 
   await user.clear(content); await user.type(content, "Szkic przed filtrowaniem");
   await user.click(screen.getByRole("tab", { name: "Przetworzone" }));
   await user.click(screen.getByRole("link", { name: "Historyczny wpis" }));
-  expect(within(panel()).getByText("Wpis jest w widoku: Przetworzone.")).toBeInTheDocument();
+  expect(within(panel()).getByText("Status: Przetworzone")).toBeInTheDocument();
   expect(within(panel()).queryByRole("button", { name: "Zapisz notatkę" })).not.toBeInTheDocument();
   await user.click(within(row("old")).getByRole("button", { name: "Przywróć teraz" }));
   await user.click(screen.getByRole("tab", { name: "Nowe" }));
@@ -186,6 +224,7 @@ it("ponawia odłożenie wpisu bez zamykania szkicu innego wpisu", async () => {
     .mockImplementationOnce(() => new Promise<void>((resolve) => { finishStatus = resolve; }));
   const user = userEvent.setup();
   start();
+  await user.click(within(row("a")).getByLabelText("Więcej opcji wpisu"));
   await user.click(within(row("a")).getByRole("button", { name: "Odłóż do jutra" }));
   await within(row("a")).findByRole("alert");
   const content = await openNote(user, "b");
@@ -214,14 +253,14 @@ it("zachowuje formularz po zmianie szerokości z desktopu na mobile i z powrotem
   expect(within(panel()).getByLabelText("Treść notatki")).toHaveValue("Treść na obu ekranach");
 });
 
-it("na mobile pozostawia dotychczasowy dialog bez zmiany adresu przy otwieraniu", async () => {
+it("na telefonie otwiera dialog porządkowania z linkiem do wpisu w adresie", async () => {
   desktop = false;
   const user = userEvent.setup();
   start();
-  await user.click(within(row("a")).getByRole("button", { name: "Uporządkuj" }));
+  await user.click(within(row("a")).getByRole("link"));
   expect(screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" })).toBeInTheDocument();
   expect(screen.queryByRole("complementary", { name: "Przetwarzanie wpisu" })).not.toBeInTheDocument();
-  expect(screen.getByTestId("address")).toHaveTextContent("/knowledge?section=inbox&other=keep");
+  expect(screen.getByTestId("address")).toHaveTextContent("/knowledge?section=inbox&other=keep&status=unprocessed&item=a&organize=true");
 });
 
 it("otwiera wskazany wpis z adresu bez resetowania wybranej intencji", async () => {
@@ -230,6 +269,6 @@ it("otwiera wskazany wpis z adresu bez resetowania wybranej intencji", async () 
   await user.click(await within(panel()).findByRole("button", { name: "Zapisz notatkę" }));
   const content = within(panel()).getByLabelText("Treść notatki");
   await user.clear(content); await user.type(content, "Kontynuowana treść");
-  await user.click(within(row("a")).getByRole("button", { name: "Uporządkuj" }));
+  await user.click(within(row("a")).getByRole("link"));
   expect(within(panel()).getByLabelText("Treść notatki")).toHaveValue("Kontynuowana treść");
 });

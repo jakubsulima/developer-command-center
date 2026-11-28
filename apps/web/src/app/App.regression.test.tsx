@@ -5,7 +5,9 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { demoState } from "../data/demo";
+import * as localWorkspace from "../data/localWorkspaceRepository";
 import type { ReviewRecord, WeeklyReviewSnapshot } from "../domain/types";
+import { currentWorkspaceWeek, nextWorkspaceWeek } from "../domain/weeklyPlan";
 import { App } from "./App";
 import { StoreProvider } from "./store";
 
@@ -17,7 +19,7 @@ function renderApp(path = "/") {
 function RouterTestControls() {
   const location = useLocation();
   const navigate = useNavigate();
-  return <><output data-testid="router-location">{location.pathname}{location.search}</output><button type="button" onClick={() => navigate(-1)}>Back test</button><button type="button" onClick={() => navigate(1)}>Forward test</button></>;
+  return <><output data-testid="router-location">{location.pathname}{location.search}{location.hash}</output><button type="button" onClick={() => navigate(-1)}>Back test</button><button type="button" onClick={() => navigate(1)}>Forward test</button></>;
 }
 
 function renderAppWithRouterControls(path: string) {
@@ -54,10 +56,16 @@ describe("regresje nowego modelu grup działań", () => {
   it.each([
     ["/", "Start"], ["/routines", "Rutyny"], ["/goals", "Grupy działań"], ["/inbox", "Wiedza"], ["/knowledge", "Wiedza"],
     ["/focus", "Start"], ["/projects", "Projekty"], ["/projects/fintrack-api", "FinTrack API"],
-    ["/learning", "Grupy działań"], ["/actions?view=unknown", "Działania"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Start"]
+    ["/learning", "Grupy działań"], ["/actions?view=unknown", "Działania"], ["/review", "Podsumowanie tygodnia"], ["/nieznana-trasa", "Nie znaleziono strony"]
   ])("renderuje lub przekierowuje trasę %s", async (path, heading) => {
     renderApp(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it("kończy odczyt brakującego Działania w demo linkiem do jego listy", async () => {
+    renderApp("/actions/brak-rekordu");
+    expect(await screen.findByText("Działanie jest niedostępne")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Wróć do Działań" })).toHaveAttribute("href", "/actions");
   });
 
   it.each(["/review?tab=unexpected&keep=1", "/review?tab=suggestions&keep=1"])("otwiera Tydzień dla zakładki spoza aktualnego zestawu: %s", async (path) => {
@@ -67,21 +75,27 @@ describe("regresje nowego modelu grup działań", () => {
 
   it("adresuje zakładki, zachowuje query i odtwarza Back/Forward oraz fokus klawiatury", async () => {
     const user = userEvent.setup();
-    renderAppWithRouterControls("/review?tab=ai&keep=1");
-    expect(await screen.findByRole("tab", { name: "AI" })).toHaveAttribute("aria-selected", "true");
+    renderAppWithRouterControls("/review?tab=summary&keep=1");
+    expect(await screen.findByRole("tab", { name: "Tydzień" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("tab", { name: "Plan" }));
     expect(screen.getByTestId("router-location")).toHaveTextContent("/review?tab=plan&keep=1");
     expect(screen.getByRole("tab", { name: "Plan" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Back test" }));
-    expect(screen.getByRole("tab", { name: "AI" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Tydzień" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Forward test" }));
     expect(screen.getByRole("tab", { name: "Plan" })).toHaveAttribute("aria-selected", "true");
 
     const planTab = screen.getByRole("tab", { name: "Plan" });
     planTab.focus();
     await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "AI" })).toHaveAttribute("aria-selected", "true");
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "AI" }));
+    expect(screen.getByRole("tab", { name: "Historia" })).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Historia" }));
+  });
+
+  it("przekierowuje stary adres karty AI, zachowując pozostałe parametry i fragment", async () => {
+    renderAppWithRouterControls("/review?tab=ai&keep=1#analiza");
+    expect(await screen.findByRole("heading", { name: "Przegląd AI", level: 1 })).toBeInTheDocument();
+    expect(screen.getByTestId("router-location")).toHaveTextContent("/ai?keep=1#analiza");
   });
 
   it.each([
@@ -90,7 +104,7 @@ describe("regresje nowego modelu grup działań", () => {
     ["/goals", "Grupy działań", "Dodaj nową grupę działań", "Nowa grupa działań"],
     ["/projects", "Projekty", "Dodaj nowy Projekt", "Nowy Projekt"],
     ["/routines", "Rutyny", "Dodaj nową Rutynę", "Nowa Rutyna"],
-    ["/knowledge", "Wiedza", "Dodaj nowy element Wiedzy", "Dodaj do Biblioteki"],
+    ["/knowledge", "Wiedza", "Dodaj nowy element Wiedzy", "Dodaj notatkę"],
     ["/knowledge?section=inbox", "Wiedza", "Dodaj do Skrzynki", "Szybki zapis"],
     ["/goals/fintrack-api", "FinTrack API", "Dodaj Działanie do grupy FinTrack API", "Nowe Działanie"],
     ["/projects/fintrack-api", "FinTrack API", "Dodaj w Projekcie FinTrack API", "Nowe Działanie"],
@@ -108,6 +122,7 @@ describe("regresje nowego modelu grup działań", () => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
         await user.click(screen.getByRole("menuitem", { name: path.includes("view=goals") ? "Grupa działań" : path.includes("view=knowledge") ? "Notatka" : "Działanie" }));
       }
+      if (path === "/knowledge") await user.click(screen.getByRole("menuitem", { name: "Dodaj notatkę" }));
       const dialog = await screen.findByRole("dialog", { name: title });
       if (path.includes("/projects/fintrack-api")) expect(dialog).toHaveTextContent("Projekt: FinTrack API");
       await user.keyboard("{Control>}j{/Control}");
@@ -132,16 +147,42 @@ describe("regresje nowego modelu grup działań", () => {
     expect(within(mobileNavigation).getByRole("link", { name: /Start/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("link", { name: /Projekty/ })).toBeInTheDocument();
     expect(within(mobileNavigation).getByRole("link", { name: /Działania/ })).toBeInTheDocument();
+    expect(within(mobileNavigation).getByRole("link", { name: "Wiedza" })).toHaveAttribute("href", "/knowledge");
     expect(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" })).toHaveAttribute("aria-current", "page");
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
     const more = screen.getByRole("dialog", { name: "Więcej" });
-    for (const label of ["Grupy działań", "Wiedza", "Rutyny", "Skrzynka", "Podsumowanie", "Ustawienia"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    for (const label of ["Grupy działań", "Przegląd AI", "Rutyny", "Podsumowanie", "Ustawienia"]) expect(within(more).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    expect(within(more).queryByRole("link", { name: /^Skrzynka/ })).not.toBeInTheDocument();
     await user.click(within(more).getByRole("button", { name: /Wyszukaj/ }));
     expect(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog", { name: "Wyszukiwanie globalne" })).getByRole("button", { name: "Zamknij okno" }));
     await user.click(within(mobileNavigation).getByRole("button", { name: "Otwórz menu Więcej" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("button", { name: /Dodaj dowolne/ }));
+    await user.click(within(screen.getByRole("dialog", { name: "Więcej" })).getByRole("button", { name: "Dodaj" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("podświetla Wiedzę, gdy Skrzynka jest otwarta z mobilnej nawigacji", async () => {
+    const user = userEvent.setup();
+    renderApp("/knowledge?section=inbox");
+    await screen.findByRole("tab", { name: /^Skrzynka/, selected: true });
+    const trigger = screen.getByRole("button", { name: "Otwórz menu Więcej" });
+    const nav = screen.getByRole("navigation", { name: "Nawigacja mobilna" });
+    const knowledge = within(nav).getByRole("link", { name: "Wiedza" });
+    expect(trigger).not.toHaveAttribute("aria-current");
+    expect(knowledge).toHaveAttribute("aria-current", "page");
+    expect(nav.querySelector(".bottom-nav-indicator")).toHaveStyle({ transform: "translateX(200%)" });
+    await user.click(trigger);
+    const more = within(screen.getByRole("dialog", { name: "Więcej" }));
+    expect(more.queryByRole("link", { name: /^Skrzynka/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+
+    await user.click(knowledge);
+    expect(await screen.findByRole("tab", { name: "Biblioteka", selected: true })).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: /^Skrzynka/ }));
+    expect(await screen.findByRole("tab", { name: /^Skrzynka/, selected: true })).toBeVisible();
+    expect(knowledge).toHaveAttribute("aria-current", "page");
   });
 
   it("otwiera działające menu profilu i zamyka je klawiszem Escape", async () => {
@@ -199,7 +240,7 @@ describe("regresje nowego modelu grup działań", () => {
     expect(within(createCenter).getByLabelText("Co chcesz zrobić?")).toHaveFocus();
     expect(within(createCenter).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(createCenter).getByRole("button", { name: "Rutyna" })).toBeInTheDocument();
-    await user.click(within(createCenter).getByText("Powiązania i opcje"));
+    await user.click(within(createCenter).getByText("Projekt, grupa i przypięcie"));
     const dateChoices = within(createCenter).getByRole("radiogroup", { name: "Kiedy?" });
     await user.click(within(dateChoices).getByRole("radio", { name: "Dzisiaj" }));
     expect(within(dateChoices).getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
@@ -245,20 +286,30 @@ describe("regresje nowego modelu grup działań", () => {
     const routine = screen.getByRole("heading", { name: "Przegląd budżetu" }).closest("section") as HTMLElement;
     expect(within(routine).getByText("Co tydzień · Wt")).toBeInTheDocument();
     expect(within(routine).getByRole("link", { name: "Zbudować spokojny budżet domowy" })).toBeInTheDocument();
-    expect(within(routine).getByText("Najbliższe wykonania")).toBeInTheDocument();
-    await user.click(within(routine).getByRole("link", { name: "Edytuj ustawienia" }));
-    expect(await screen.findByRole("dialog", { name: "Edytuj serię cykliczną" })).toBeInTheDocument();
+    expect(within(routine).getByText("Najbliższy termin")).toBeInTheDocument();
+    await user.click(within(routine).getByText("Szczegóły"));
+    expect(within(routine).getByText("Po przerwie")).toBeVisible();
+    await user.click(within(routine).getByRole("button", { name: "Wstrzymaj" }));
+    expect(await within(routine).findByRole("button", { name: "Wznów" })).toBeVisible();
+    expect(within(routine).getByText("Wstrzymana")).toBeVisible();
+    expect(within(routine).queryByText("Najbliższy termin")).not.toBeInTheDocument();
+    await user.click(within(routine).getByRole("button", { name: "Wznów" }));
+    expect(await within(routine).findByRole("button", { name: "Wstrzymaj" })).toBeVisible();
+    await user.click(within(routine).getByRole("link", { name: "Edytuj ustawienia rutyny: Przegląd budżetu" }));
+    expect(await screen.findByRole("dialog", { name: "Edytuj Rutynę" })).toBeInTheDocument();
   });
 
   it("wyszukuje Grupa działań, otwiera wynik i obsługuje Escape", async () => {
     const user = userEvent.setup();
     renderApp();
-    const search = await screen.findByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
+    const search = await screen.findByRole("combobox", { name: "Szukaj w projektach, grupach, działaniach, bibliotece i skrzynce" });
     await user.type(search, "Portfolio");
     expect((await screen.findAllByRole("option", { name: /Portfolio v2/ }))[0]).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    await user.type(search, "Portfolio");
+    expect(search).toHaveValue("Portfolio");
+    expect(search).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
     await user.click((await screen.findAllByRole("option", { name: /Portfolio v2/ }))[0]!);
     expect(await screen.findByRole("heading", { name: "Portfolio v2" })).toBeInTheDocument();
   });
@@ -273,17 +324,20 @@ describe("regresje nowego modelu grup działań", () => {
       return screen.findByRole("dialog", { name: "Wyszukiwanie globalne" });
     };
     let dialog = await openSearch();
-    let search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
+    let search = within(dialog).getByRole("combobox", { name: "Szukaj w projektach, grupach, działaniach, bibliotece i skrzynce" });
     await waitFor(() => expect(search).toHaveFocus());
     expect(within(dialog).queryByRole("listbox", { name: "Wyniki wyszukiwania" })).not.toBeInTheDocument();
     await user.type(search, "x");
     expect(within(dialog).getByRole("status")).toHaveTextContent("Wpisz co najmniej 2 znaki");
     await user.keyboard("{Escape}");
+    expect(search).toHaveFocus();
+    await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Wyszukiwanie globalne" })).not.toBeInTheDocument());
 
     dialog = await openSearch();
-    search = within(dialog).getByRole("combobox", { name: "Szukaj w Projektach, grupach, Działaniach i Wiedzy" });
+    search = within(dialog).getByRole("combobox", { name: "Szukaj w projektach, grupach, działaniach, bibliotece i skrzynce" });
     await waitFor(() => expect(search).toHaveFocus());
+    await user.clear(search);
     await user.type(search, "Portfolio");
     expect(await within(dialog).findByRole("listbox", { name: "Wyniki wyszukiwania" })).toBeInTheDocument();
     const goalResult = (await within(dialog).findAllByRole("option")).find((option) => within(option).queryByText("Portfolio v2"));
@@ -320,15 +374,17 @@ describe("regresje nowego modelu grup działań", () => {
     const user = userEvent.setup();
     renderApp("/knowledge?section=inbox");
     const source = await screen.findByText("https://www.postgresql.org/docs/current/erd.html");
-    const item = source.closest("section") as HTMLElement;
-    await user.click(within(item).getByRole("button", { name: "Uporządkuj" }));
+    const item = source.closest("li") as HTMLElement;
+    await user.click(within(item).getByRole("link", { name: "https://www.postgresql.org/docs/current/erd.html" }));
     const decision = screen.getByRole("dialog", { name: "Co chcesz z tym zrobić?" });
     await user.click(within(decision).getByText("Zapisz materiał").closest("button")!);
     await user.clear(screen.getByLabelText("Nazwa materiału"));
     await user.type(screen.getByLabelText("Nazwa materiału"), "Dokumentacja PostgreSQL ERD");
     const knowledgeDialog = screen.getByRole("dialog", { name: "Zapisz w Bibliotece" });
     await user.click(within(knowledgeDialog).getByRole("button", { name: "Zapisz materiał" }));
-    await user.click(screen.getAllByRole("link", { name: /Wiedza/ })[0]!);
+    const receipt = await screen.findByText("Zapisano. Materiał · Dokumentacja PostgreSQL ERD");
+    expect(within(receipt.closest(".inbox-finished") as HTMLElement).getByRole("link", { name: "Otwórz wynik" })).toHaveAttribute("href", expect.stringMatching(/^\/knowledge\//));
+    await user.click(within(screen.getByRole("navigation", { name: "Nawigacja mobilna" })).getByRole("link", { name: "Wiedza" }));
     expect(await screen.findByText("Dokumentacja PostgreSQL ERD")).toBeInTheDocument();
     expect(screen.getByText(/Źródło: Skrzynka/)).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Dokumentacja PostgreSQL ERD" }));
@@ -341,7 +397,7 @@ describe("regresje nowego modelu grup działań", () => {
     renderApp("/knowledge");
     const search = await screen.findByRole("searchbox", { name: "Szukaj w wiedzy" });
     await user.type(search, "nieistniejący-obiekt");
-    expect(await screen.findByRole("heading", { name: "Brak pasujących obiektów" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Brak pasujących wpisów" })).toBeInTheDocument();
   });
 
   it("otwiera mobilny arkusz filtrów grup działań i ujawnia ich stan programowo", async () => {
@@ -349,9 +405,12 @@ describe("regresje nowego modelu grup działań", () => {
     renderApp("/goals");
     await user.click(await screen.findByRole("button", { name: "Filtry (0)" }));
     const dialog = screen.getByRole("dialog", { name: "Filtry grup działań (0)" });
-    expect(within(dialog).getByRole("button", { name: "Aktywny" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(dialog).getByRole("button", { name: "Wstrzymany" }));
-    expect(screen.queryByRole("dialog", { name: "Filtry grup działań (0)" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Aktywne" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(dialog).getByRole("button", { name: "Wstrzymane" }));
+    expect(dialog).toHaveAccessibleName("Filtry grup działań (1)");
+    expect(within(dialog).getByRole("button", { name: "Wstrzymane" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(dialog).getByRole("button", { name: /^Pokaż/ }));
+    expect(screen.queryByRole("dialog", { name: "Filtry grup działań (1)" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filtry (1)" })).toBeInTheDocument();
   });
 
@@ -371,9 +430,10 @@ describe("regresje nowego modelu grup działań", () => {
     renderApp("/knowledge");
     await screen.findByRole("heading", { name: "Wiedza" });
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Dodaj nowy element Wiedzy" }));
-    const dialog = screen.getByRole("dialog", { name: "Dodaj do Biblioteki" });
+    await user.click(screen.getByRole("menuitem", { name: "Dodaj notatkę" }));
+    const dialog = await screen.findByRole("dialog", { name: "Dodaj notatkę" });
     await user.type(within(dialog).getByLabelText("Treść notatki"), "Uzgodniony kierunek modelu danych.");
-    await user.click(within(dialog).getByText("Więcej", { exact: true }));
+    await user.click(within(dialog).getByText("Szczegóły", { exact: true }));
     await user.type(within(dialog).getByLabelText("Tytuł opcjonalnie"), "Decyzja o modelu danych");
     const goals = within(dialog).getByRole("combobox", { name: "Powiązane Grupy działań" });
     await user.click(goals);
@@ -382,9 +442,12 @@ describe("regresje nowego modelu grup działań", () => {
     await user.click(within(within(dialog).getByRole("listbox", { name: "Powiązane Grupy działań" })).getAllByRole("option")[0]!);
     expect(within(dialog).getAllByRole("button", { name: /Usuń powiązanie/ })).toHaveLength(2);
     await user.click(within(dialog).getByRole("button", { name: "Zapisz notatkę" }));
-    const created = screen.getByText("Decyzja o modelu danych").closest("section") as HTMLElement;
-    expect(within(created).getByText("2 powiązania")).toBeInTheDocument();
-    expect(within(created).queryByText("FinTrack API")).not.toBeInTheDocument();
+    const created = await screen.findByRole("link", { name: "Decyzja o modelu danych" });
+    const stored = JSON.parse(localStorage.getItem("command-center-local-workspace-v2")!).state;
+    const itemId = created.getAttribute("href")!.split("/").at(-1);
+    const relations = stored.knowledgeLinks.filter((link: { knowledgeItemId: string }) => link.knowledgeItemId === itemId);
+    expect(relations).toHaveLength(2);
+    expect(relations.every((link: { goalId?: string; areaId?: string }) => link.goalId && !link.areaId)).toBe(true);
   });
 
   it("edytuje treść i różnicę relacji Wiedzy w jednym zapisie", async () => {
@@ -429,7 +492,7 @@ describe("regresje nowego modelu grup działań", () => {
     const user = userEvent.setup();
     renderApp("/knowledge");
     const title = await screen.findByText("Wzorce modelowania transakcji");
-    const item = title.closest("section") as HTMLElement;
+    const item = title.closest("li") as HTMLElement;
     await user.click(within(item).getByRole("button", { name: "Więcej opcji: Wzorce modelowania transakcji" }));
     await user.click(within(screen.getByRole("dialog", { name: "Wiedza — więcej opcji" })).getByRole("button", { name: "Archiwizuj" }));
     const notice = await screen.findByText("„Wzorce modelowania transakcji” przeniesiono do Archiwum.");
@@ -454,6 +517,25 @@ describe("regresje nowego modelu grup działań", () => {
     renderApp("/history/focus/session-001");
     expect(await screen.findByRole("heading", { name: "Nie znaleziono historycznego wpisu" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start|wznów|pauza|checkpoint/i })).not.toBeInTheDocument();
+  });
+
+  it("po błędzie pobrania historii pozwala ponowić odczyt tej samej sesji", async () => {
+    const repository = localWorkspace.createLocalWorkspaceRepository();
+    const factory = vi.spyOn(localWorkspace, "createLocalWorkspaceRepository").mockReturnValue(repository);
+    const read = vi.spyOn(repository, "loadLegacyFocusSession")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ id: "session-001", projectId: "old", workItemId: "old-step", startedAt: "2026-06-01T10:00:00Z", scratchpad: "Notatka z sesji" });
+    try {
+      const user = userEvent.setup();
+      renderApp("/history/focus/session-001");
+      await screen.findByRole("heading", { name: "Nie udało się wczytać historii" });
+      expect(screen.queryByText("Nie znaleziono historycznego wpisu")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Spróbuj ponownie" }));
+      expect(await screen.findByText("Notatka z sesji")).toBeInTheDocument();
+      expect(read).toHaveBeenLastCalledWith("session-001");
+    } finally {
+      factory.mockRestore();
+    }
   });
 
   it("otwiera szybki zapis skrótem bez utraty kontekstu", async () => {
@@ -504,14 +586,14 @@ describe("regresje nowego modelu grup działań", () => {
     expect(await screen.findByRole("heading", { name: "Podsumowanie tygodnia" })).toBeInTheDocument();
     expect(screen.getAllByText("Podsumowanie systemowe").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "Wymaga decyzji" })).toBeInTheDocument();
-    expect(screen.getByText(/Zobacz wszystkie sprawy/)).toBeInTheDocument();
+    await user.click(screen.getByText("Pozostałe sprawy"));
+    expect(screen.getByRole("link", { name: /Zaległe działania/i })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Sugestie" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Zapisz podsumowanie" })).toBeEnabled();
     await user.click(screen.getByText("Podgląd zapisu"));
     expect(screen.getByText(/Treść analizy AI nie jest dopisywana do historii zamknięć/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "AI" }));
-    expect(screen.queryByRole("button", { name: "Zapisz podsumowanie" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "AI" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Historia" }));
     expect(screen.getByRole("heading", { name: "Historia tygodni" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Stan na teraz" })).not.toBeInTheDocument();
@@ -573,12 +655,18 @@ describe("regresje nowego modelu grup działań", () => {
     const user = userEvent.setup();
     renderApp("/review");
     await screen.findByRole("heading", { name: "Podsumowanie tygodnia" });
-    expect(screen.getByText("Brak zapisanego Planu na ten tydzień — nie ma podstaw do porównania.")).toBeInTheDocument();
-    const completedMetric = screen.getByRole("group", { name: /ukończonych Działań/ });
-    const displayedCount = Number(completedMetric.getAttribute("aria-label")?.match(/^\d+/)?.[0] ?? 0);
-    await user.click(within(completedMetric).getByRole("button"));
-    expect(await screen.findByRole("region", { name: "Szczegóły: ukończone Działania" })).toBeInTheDocument();
-    expect((await screen.findByRole("region", { name: "Szczegóły: ukończone Działania" })).textContent).toContain(`Wyświetlono ${displayedCount} z ${displayedCount} wpisów`);
+    expect(screen.getByText("Brak planu na ten tydzień.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Otwórz Plan" })).toHaveAttribute("href", "/review?tab=plan&week=current");
+    const completedMetric = screen.getByRole("button", { name: /^Ukończone działania: \d+$/ });
+    const displayedCount = Number(completedMetric.getAttribute("aria-label")?.match(/\d+$/)?.[0]);
+    await user.click(completedMetric);
+    const activity = await screen.findByRole("region", { name: "Ukończone działania" });
+    expect(activity).toHaveTextContent(`Wyświetlono ${displayedCount} z ${displayedCount} wpisów`);
+    await user.click(within(activity).getByRole("button", { name: "Zamknij" }));
+    expect(completedMetric).toHaveFocus();
+    expect(completedMetric).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Przejdź do zapisu" }));
+    expect(screen.getByRole("heading", { name: "Zamknięcie tygodnia" })).toHaveFocus();
   });
 
   it("zachowuje notatkę i wybór grup działań, gdy użytkownik przechodzi z Planu do zamknięcia", async () => {
@@ -596,9 +684,35 @@ describe("regresje nowego modelu grup działań", () => {
     await user.click(screen.getByRole("link", { name: "Przejdź do zamknięcia tygodnia" }));
     expect(screen.getByLabelText(/Najważniejsza decyzja/)).toHaveValue("Najpierw zamknę najważniejszy krok.");
     await user.click(screen.getByText("Podgląd zapisu"));
-    const preview = screen.getByRole("region", { name: "Co zapisze zamknięcie" });
+    const preview = screen.getByRole("region", { name: "Zamknięcie tygodnia" });
     expect(preview).toHaveTextContent(goal!.title);
     expect(preview).toHaveTextContent("Najpierw zamknę najważniejszy krok.");
+  });
+
+  it("zachowuje decyzję w formularzu, gdy przygotowanie zapisu się nie uda", async () => {
+    const user = userEvent.setup();
+    renderApp("/review");
+    const note = await screen.findByLabelText(/Najważniejsza decyzja/);
+    await user.type(note, "Zachowaj tę decyzję.");
+    const save = screen.getByRole("button", { name: "Zapisz podsumowanie" });
+    const setItem = Storage.prototype.setItem;
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.includes(":weekly-review-note:")) throw new Error("Zapis szkicu niedostępny");
+      setItem.call(this, key, value);
+    });
+
+    try {
+      await user.click(save);
+      expect(screen.getByText("Nie udało się przygotować zapisu na tym urządzeniu. Spróbuj ponownie.")).toBeVisible();
+      expect(note).toHaveValue("Zachowaj tę decyzję.");
+      expect(save).toBeEnabled();
+    } finally {
+      storage.mockRestore();
+    }
+
+    await user.click(save);
+    expect(await screen.findByText("Zapisano · rew. 1")).toBeVisible();
+    expect(note).toHaveValue("");
   });
 
   it("układa krok na kolejny tydzień i zapisuje wybrana grupa w Podsumowaniu", async () => {
@@ -619,6 +733,8 @@ describe("regresje nowego modelu grup działań", () => {
     await user.selectOptions(day, nextDate!);
     await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Zapisz terminy" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Zapisz podsumowanie" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Przejdź do zamknięcia tygodnia" }));
     await user.click(screen.getByRole("button", { name: "Zapisz podsumowanie" }));
     await user.click(screen.getByRole("tab", { name: "Historia" }));
     expect(await screen.findByText(`Kierunek: ${goal!.title}`)).toBeInTheDocument();
@@ -643,6 +759,65 @@ describe("regresje nowego modelu grup działań", () => {
     await user.click(screen.getByRole("checkbox", { name: goal!.title }));
     expect(screen.getByText(new RegExp(action!.title))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Zapisz terminy" })).toBeEnabled();
+    await user.click(screen.getByRole("tab", { name: "Tydzień" }));
+    expect(screen.getByRole("button", { name: "Zapisz podsumowanie" })).toBeDisabled();
+    expect(screen.getByText("Aby zapisać podsumowanie, zapisz lub cofnij zmiany terminów w Planie.")).toBeVisible();
+  });
+
+  it("przeplanowuje otwarte Działanie w bieżącym tygodniu i zachowuje pierwotny Plan", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const now = new Date();
+    const current = currentWorkspaceWeek(now, state.workspaceTimezone);
+    const next = nextWorkspaceWeek(now, state.workspaceTimezone);
+    const base = state.actions.find((action) => action.status === "ready")!;
+    const action = { ...base, id: "current-planner-action", title: "Pierwotny krok tygodnia", scheduledFor: current.startDate };
+    const nextAction = { ...base, id: "next-planner-action", title: "Krok następnego tygodnia", scheduledFor: next.startDate };
+    const undated = { ...base, id: "undated-planner-action", title: "Dodatkowy krok bez terminu", scheduledFor: undefined };
+    const closed = { ...base, id: "closed-planner-action", title: "Zamknięty krok tygodnia", status: "cancelled" as const, scheduledFor: current.startDate };
+    state.actions.push(action, nextAction, undated, closed);
+    const originalReview: ReviewRecord = {
+      id: "current-planner-baseline", type: "weekly", templateVersion: 3, answers: {}, summary: "Poprzedni tydzień",
+      completedAt: now.toISOString(), workspaceTimezone: state.workspaceTimezone, revision: 1,
+      snapshot: {
+        version: 1,
+        period: { startDate: "2026-01-05", endDateExclusive: current.startDate, timeZone: state.workspaceTimezone },
+        metrics: { completedActions: 0, knowledgeAdded: 0, progressUpdates: 0 },
+        summary: "Poprzedni tydzień", note: "",
+        plan: { startDate: current.startDate, endDateExclusive: current.endDateExclusive, selectedGoals: [], includeStandalone: false, actions: [action] }
+      }
+    };
+    state.reviews = [originalReview];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp("/review?tab=plan");
+    const nextDay = await screen.findByRole("combobox", { name: `Dzień dla Działania: ${nextAction.title}` });
+    await user.selectOptions(nextDay, next.endDate);
+    await user.click(screen.getByRole("button", { name: "Ten tydzień" }));
+    expect(screen.queryByRole("button", { name: "Zapisz terminy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: `Dzień dla Działania: ${closed.title}` })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: `Dzień dla Działania: ${undated.title}` })).not.toBeInTheDocument();
+    const currentDay = screen.getByRole("combobox", { name: `Dzień dla Działania: ${action.title}` });
+    expect(within(currentDay).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual(["keep", ...current.dates, "none"]);
+    await user.selectOptions(currentDay, current.endDate);
+    await user.click(screen.getByRole("button", { name: /^Bez terminu/ }));
+    await user.selectOptions(screen.getByRole("combobox", { name: `Dzień dla Działania: ${undated.title}` }), current.endDate);
+    await user.click(screen.getByRole("button", { name: "Następny" }));
+    expect(nextDay).toHaveValue(next.endDate);
+    await user.click(screen.getByRole("button", { name: "Ten tydzień" }));
+    await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Zapisz terminy" })).not.toBeInTheDocument());
+    const currentAgenda = screen.getByRole("region", { name: "Działania na ten tydzień" });
+    const lastDay = within(within(currentAgenda).getByRole("navigation", { name: "Wybór dnia agendy" })).getAllByRole("button").at(-2)!;
+    await user.click(lastDay);
+    expect(within(currentAgenda).getByRole("link", { name: action.title })).toBeInTheDocument();
+    expect(within(currentAgenda).getByRole("link", { name: undated.title })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Tydzień" }));
+    expect(await screen.findByText("0 z 1")).toBeInTheDocument();
+    await user.click(screen.getByText("Nierozstrzygnięte kroki (1)"));
+    expect(screen.getByText(`termin zmieniono na ${current.endDate}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Zaplanuj kolejny tydzień" }));
+    expect(screen.getByRole("button", { name: "Następny" })).toHaveAttribute("aria-pressed", "true");
+    expect(nextDay).toHaveValue(next.endDate);
   });
 
   it("edytuje Działanie, zmienia stan grupy i wiąże materiał z Działaniem", async () => {

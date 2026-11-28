@@ -139,3 +139,14 @@
   .action-signals { grid-template-columns:auto minmax(0,1fr); gap:var(--space-2); }
   .action-signals .action-status-trigger { min-height:36px; }
 }
+
+.action-status-icon { position: relative; }
+.action-complete-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: currentColor;
+  pointer-events: none;
+}

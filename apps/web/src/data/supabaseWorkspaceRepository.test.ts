@@ -38,6 +38,22 @@ describe("adapter listy Działań Supabase", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "get_action_item", { target_action_id: "action-1" });
   });
 
+  it("pobiera szczegół wyjątkowo po potwierdzeniu przynależności do wskazanego Workspace", async () => {
+    const maybeSingle = vi.fn().mockResolvedValueOnce({ data: null, error: null }).mockResolvedValueOnce({ data: { id: "action-1" }, error: null });
+    const eqId = vi.fn(() => ({ maybeSingle }));
+    const eqWorkspace = vi.fn(() => ({ eq: eqId }));
+    const rpc = vi.fn().mockResolvedValue({ data: { id: "action-1", status: "completed" }, error: null });
+    getClient.mockReturnValue({ rpc, from: vi.fn(() => ({ select: () => ({ eq: eqWorkspace }) })) });
+    const repository = createSupabaseWorkspaceRepository();
+
+    await expect(repository.loadAction("action-1", "other-workspace")).resolves.toBeUndefined();
+    expect(rpc).not.toHaveBeenCalled();
+    await expect(repository.loadAction("action-1", "workspace-1")).resolves.toMatchObject({ id: "action-1" });
+    expect(eqWorkspace).toHaveBeenLastCalledWith("workspace_id", "workspace-1");
+    expect(eqId).toHaveBeenLastCalledWith("id", "action-1");
+    expect(rpc).toHaveBeenCalledWith("get_action_item", { target_action_id: "action-1" });
+  });
+
   it("przekazuje jawny okres, strefę i filtry do stronicowanych szczegółów tygodnia", async () => {
     const rpc = vi.fn(async () => ({ data: { items: [{ id: "entry-1", kind: "actions", title: "Krok", detail: "", occurredAt: "2026-09-30T12:00:00Z" }], totalCount: 3, nextCursor: null }, error: null }));
     getClient.mockReturnValue({ rpc });

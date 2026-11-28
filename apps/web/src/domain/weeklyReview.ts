@@ -9,6 +9,7 @@ export interface WeeklyReviewSuggestion {
   title: string;
   detail: string;
   to: string;
+  primaryAction?: { title: string; to: string; reason?: string };
   count?: number;
   items?: Array<{ id: string; title: string; to: string }>;
 }
@@ -69,18 +70,21 @@ export function deriveWeeklyReview(state: AppState, now = new Date(), source: "d
   const unprocessedInbox = knowledgeQueue(state);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: state.workspaceTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const overdue = overdueActions(state, today);
+  const singleBlocked = blocked.length === 1 ? blocked[0] : undefined;
+  const singleOverdue = overdue.length === 1 ? overdue[0] : undefined;
 
   const suggestions: WeeklyReviewSuggestion[] = [];
   if (blocked.length) suggestions.push({
     id: "blocked",
     title: `Odblokuj ${blocked.length === 1 ? "jedno Działanie" : polishCount(blocked.length, "Działanie", "Działania", "Działań")}`,
     detail: "Najpierw podejmij decyzję albo nazwij osobę, od której zależy dalszy ruch.",
-    to: actionQueueRoute("blocked", blocked.length === 1 ? blocked[0]!.id : undefined),
+    to: actionQueueRoute("blocked", singleBlocked?.id),
+    primaryAction: singleBlocked ? { title: `Odblokuj: ${singleBlocked.title}`, to: `/actions/${singleBlocked.id}`, reason: singleBlocked.blocker } : undefined,
     count: blocked.length
   });
   if (goalsWithoutNextAction.length) suggestions.push({
     id: "next-actions",
-    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednego grupy" : polishCount(goalsWithoutNextAction.length, "grupy", "grup działań", "grup działań")}`,
+    title: `Ustal następny krok dla ${goalsWithoutNextAction.length === 1 ? "jednej grupy" : polishCount(goalsWithoutNextAction.length, "grupy", "grup działań", "grup działań")}`,
     detail: "Wybierz zadanie nadrzędne z pełnej listy i dodaj do niego konkretny następny krok.",
     to: `/goals/${goalsWithoutNextAction[0]!.id}`,
     count: goalsWithoutNextAction.length,
@@ -90,7 +94,8 @@ export function deriveWeeklyReview(state: AppState, now = new Date(), source: "d
     id: "overdue",
     title: `Zdecyduj o ${overdue.length === 1 ? "jednym zaległym Działaniu" : polishCount(overdue.length, "zaległym Działaniu", "zaległych Działaniach", "zaległych Działaniach")}`,
     detail: "Przełóż, ukończ lub anuluj je, zamiast przenosić cały ciężar na kolejny tydzień.",
-    to: actionQueueRoute("overdue", overdue.length === 1 ? overdue[0]!.id : undefined),
+    to: actionQueueRoute("overdue", singleOverdue?.id),
+    primaryAction: singleOverdue ? { title: `Zdecyduj o zaległym działaniu: ${singleOverdue.title}`, to: `/actions/${singleOverdue.id}` } : undefined,
     count: overdue.length
   });
   if (unprocessedInbox.length) suggestions.push({

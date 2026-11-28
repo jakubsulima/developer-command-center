@@ -18,6 +18,6 @@ export function ProjectPresetPicker({ value, categories, categoryIds, onChange, 
     <small id="project-preset-description">{projectPresets[value].description}</small>
     <small role={suggestion.conflict ? "status" : undefined}>{suggestion.conflict
       ? "Wybrane kategorie proponują różne szablony. Domyślnie wybrano Standardowy."
-      : `Propozycja kategorii: ${suggestedLabel}. Możesz wybrać inny szablon.`}</small>
+      : `Sugerowany szablon: ${suggestedLabel}. Możesz wybrać inny szablon.`}</small>
   </div>;
 }

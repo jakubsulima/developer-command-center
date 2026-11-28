@@ -2,7 +2,7 @@ import { useAuth } from "../auth/useAuth";
 import { ActionFilterControl } from "../components/ActionFilterControl";
 import { SavedActionViews } from "../components/SavedActionViews";
 import { useWorkspaceClock } from "../hooks/useWorkspaceClock";
-import { Check, Filter, ListTodo, RefreshCw, X } from "lucide-react";
+import { CalendarDays, Check, Filter, ListTodo, Pin, PinOff, RefreshCw, SkipForward, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -12,7 +12,9 @@ import { ActionStatusDialog, type ActionStatusTarget, type ProjectActionStatus }
 import { ActionListRow } from "../components/ActionListRow";
 import { completeActionWithUndo } from "../components/completeActionWithUndo";
 import { ActionResultDialog } from "../components/ActionResultDialog";
+import { Modal } from "../components/Modal";
 import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
+import { setStartPinWithUndo } from "../components/setStartPinWithUndo";
 import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
 import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
@@ -21,9 +23,11 @@ import { actionStatusLabels, polishCount } from "../domain/labels";
 import { resolveActionContext } from "../domain/actionContext";
 import { locationAddress } from "../domain/navigation";
 import { localDateForTimeZone } from "../domain/activity";
+import { isOpenAction } from "../domain/weeklyReview";
+import { describeMutationError } from "../lib/mutationError";
 import type { GoalAction } from "../domain/types";
 import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepository";
-import { resolveCompactRoutineTitle } from "../domain/actionPresentation";
+import { describeActionOccurrence, resolveCompactRoutineTitle } from "../domain/actionPresentation";
 import { ActionPreview } from "../components/ActionPreview";
 import { savedActionFilters, savedActionParams } from "../domain/savedActionViews";
 import "./actions-workspace.css";
@@ -36,7 +40,7 @@ type ActionScheduleView = typeof actionScheduleViews[number];
 
 const actionScheduleViewLabels: Record<ActionScheduleView, string> = {
   open: "Wszystkie",
-  today: "Na dziś",
+  today: "Na dziś lub przypięte",
   overdue: "Zaległe",
   unscheduled: "Bez terminu",
 };
@@ -101,12 +105,20 @@ function resultCountLabel(count: number, view: ActionListView) {
 }
 
 type ActionsGroup = { key: string; label?: string; items: GoalAction[] };
+type OverdueOperation = "reschedule" | "skip";
+type OverdueSelection = { scope: string; ids: Set<string> };
+type OverdueDialog = { operation: OverdueOperation; count: number; date: string; failures?: { succeeded: number; items: string[] } };
+
+function canSkipOverdueOccurrence(action: GoalAction, today: string) {
+  return Boolean(action.recurringTemplateId && action.occurrenceDate && action.occurrenceDate < today);
+}
 
 function groupOpenActions(items: GoalAction[], view: ActionListView, today: string): ActionsGroup[] {
   if (view !== "open") return [{ key: view, items }];
   const groups = [
     { key: "overdue", label: "Zaległe", items: items.filter((action) => Boolean(action.scheduledFor && action.scheduledFor < today)) },
-    { key: "today", label: "Dzisiaj", items: items.filter((action) => action.scheduledFor === today || (!action.scheduledFor && action.pinnedToToday)) },
+    { key: "today", label: "Dzisiaj", items: items.filter((action) => action.scheduledFor === today) },
+    { key: "pinned", label: "Przypięte do Startu", items: items.filter((action) => !action.scheduledFor && action.pinnedToToday) },
     { key: "upcoming", label: "Nadchodzące", items: items.filter((action) => Boolean(action.scheduledFor && action.scheduledFor > today)) },
     { key: "unscheduled", label: "Bez terminu", items: items.filter((action) => !action.scheduledFor && !action.pinnedToToday) },
   ];
@@ -115,7 +127,7 @@ function groupOpenActions(items: GoalAction[], view: ActionListView, today: stri
 
 export function ActionsPage() {
   const { user } = useAuth();
-  const { state, mode, loading, setActionStatus, undoActionCompletion } = useStore();
+  const { state, mode, loading, updateAction, setActionStatus, undoActionCompletion } = useStore();
   const [createdItems, setCreatedItems] = useState<{ workspaceId: string | undefined; ids: string[] }>({ workspaceId: state.workspaceId, ids: [] });
   useEffect(() => {
     const receive = (event: Event) => {
@@ -137,12 +149,17 @@ export function ActionsPage() {
     if (restoreFilters) setParams(params, { replace: true, state: { ...location.state, actionsFiltersResolved: true } });
   }, [location.state, params, restoreFilters, setParams]);
   const queryClient = useQueryClient();
-  const { notifyUndo } = useActionFeedback();
+  const { notifyUndo, notifySuccess } = useActionFeedback();
   const mutation = useKeyedMutation();
   const [statusTarget, setStatusTarget] = useState<ActionStatusTarget>();
   const [resultActionId, setResultActionId] = useState<string>();
   const [focusRequestId, setFocusRequestId] = useState<string>();
   const [focusEmpty, setFocusEmpty] = useState(false);
+  const [selection, setSelection] = useState<OverdueSelection>();
+  const [overdueDialog, setOverdueDialog] = useState<OverdueDialog>();
+  const [savingOverdue, setSavingOverdue] = useState(false);
+  const savingOverdueRef = useRef(false);
+  const selectionToggleRef = useRef<HTMLButtonElement>(null);
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const previewTriggerRef = useRef<HTMLElement | null>(null);
   const focusAfterMutation = useRef<{ actionId: string; index: number } | undefined>(undefined);
@@ -153,6 +170,7 @@ export function ActionsPage() {
   const draftSelection = readActionSelection(draft ?? params);
   const now = useWorkspaceClock();
   const today = localDateForTimeZone(now, state.workspaceTimezone);
+  const selectionScope = JSON.stringify([user?.id, state.workspaceId, view, scheduleView, projectId, goalId, today]);
   const actionFilter = useMemo<ActionListFilter>(() => ({ view, schedule: scheduleView === "open" ? undefined : scheduleView, projectId, goalId, today }), [goalId, projectId, today, view, scheduleView]);
   const actionsPage = useWorkspaceInfinitePage<GoalAction>("actions", 30, { actionFilter });
   const highlightId = params.get("highlight") || undefined;
@@ -170,7 +188,14 @@ export function ActionsPage() {
     .map((item) => state.actions.find((current) => current.id === item.id) ?? item)
     .filter((item) => matchesActionListFilter(state, item, actionFilter));
   const hasFilters = filterCount > 0;
-  const groupedItems = groupOpenActions(items, view, today);
+  const listView = view === "open" ? scheduleView : view;
+  const groupedItems = groupOpenActions(items, scheduleView === "today" ? listView : view, today);
+  const overdueItems = scheduleView === "overdue" ? items.filter(isOpenAction) : [];
+  const activeSelection = selection?.scope === selectionScope ? selection : undefined;
+  const selectedItems = overdueItems.filter((action) => action.status !== "blocked" && activeSelection?.ids.has(action.id));
+  const selectedOccurrences = selectedItems.filter((action) => canSkipOverdueOccurrence(action, today));
+  const selectedItemsBusy = selectedItems.some((action) => mutation.isBusy(`actions-status:${action.id}`) || mutation.isBusy(`actions-pin:${action.id}`));
+  const dialog = activeSelection ? overdueDialog : undefined;
   const previewAction = items.find((action) => action.id === params.get("preview"));
   const openPreview = (action: GoalAction, trigger: HTMLElement) => {
     previewTriggerRef.current = trigger;
@@ -191,6 +216,11 @@ export function ActionsPage() {
     setFocusRequestId(highlightId);
     setFocusEmpty(false);
   }, [highlightId]);
+
+  useEffect(() => {
+    setSelection((current) => current?.scope === selectionScope ? current : undefined);
+    setOverdueDialog(undefined);
+  }, [selectionScope]);
 
   useEffect(() => {
     const pending = focusAfterMutation.current;
@@ -294,6 +324,87 @@ export function ActionsPage() {
     }));
   };
 
+  const changePin = async (action: GoalAction, trigger: HTMLButtonElement) => {
+    const restoreFocus = document.activeElement === trigger;
+    const pinned = !action.pinnedToToday;
+    const staysInList = matchesActionListFilter(state, { ...action, pinnedToToday: pinned }, actionFilter);
+    await mutation.run(`actions-pin:${action.id}`, async () => {
+      if (!staysInList) rememberFocus(action);
+      await setStartPinWithUndo(action, pinned, async (...args) => {
+        try {
+          await updateAction(...args);
+        } finally {
+          await refreshActions();
+        }
+      }, notifyUndo);
+    });
+    if (restoreFocus && staysInList) requestAnimationFrame(() => {
+      if (document.activeElement !== document.body && document.activeElement !== trigger) return;
+      rowRefs.current.get(action.id)?.querySelector<HTMLButtonElement>(".actions-row-pin")?.focus();
+    });
+  };
+
+  const toggleSelection = () => {
+    setSelection(activeSelection ? undefined : { scope: selectionScope, ids: new Set() });
+  };
+
+  const toggleSelectedAction = (actionId: string) => {
+    setSelection((current) => {
+      if (!current || current.scope !== selectionScope) return current;
+      const ids = new Set(current.ids);
+      if (ids.has(actionId)) ids.delete(actionId); else ids.add(actionId);
+      return { ...current, ids };
+    });
+  };
+
+  const openOverdueDialog = (operation: OverdueOperation) => {
+    setOverdueDialog({ operation, count: operation === "skip" ? selectedOccurrences.length : selectedItems.length, date: today });
+  };
+
+  const saveOverdue = async () => {
+    if (!dialog || savingOverdueRef.current || selectedItemsBusy) return;
+    const { operation, date } = dialog;
+    const targets = operation === "skip" ? selectedOccurrences : selectedItems;
+    if (!targets.length || (operation === "reschedule" && (!date || date < today))) return;
+
+    savingOverdueRef.current = true;
+    setSavingOverdue(true);
+    const succeeded = new Set<string>();
+    const failures: string[] = [];
+    try {
+      for (const action of targets) {
+        try {
+          if (operation === "skip") await setActionStatus(action.id, "skipped", undefined, action.version);
+          else await updateAction(action.id, { scheduledFor: date }, action.version);
+          succeeded.add(action.id);
+        } catch (error) {
+          failures.push(`${action.title} — ${describeMutationError(error)}`);
+        }
+      }
+      await refreshActions();
+      setSelection((current) => current?.scope === selectionScope
+        ? { ...current, ids: new Set([...current.ids].filter((id) => !succeeded.has(id))) }
+        : current);
+      if (failures.length) {
+        setOverdueDialog((current) => current === dialog
+          ? { ...dialog, count: failures.length, failures: { succeeded: succeeded.size, items: failures } }
+          : current);
+      } else {
+        notifySuccess(operation === "skip"
+          ? `Pominięto ${polishCount(succeeded.size, "wystąpienie rutyny", "wystąpienia rutyn", "wystąpień rutyn")}.`
+          : `Zmieniono termin dla ${polishCount(succeeded.size, "działania", "działań", "działań")}.`);
+        setOverdueDialog((current) => current === dialog ? undefined : current);
+        requestAnimationFrame(() => {
+          const target = selectionToggleRef.current ?? document.querySelector<HTMLElement>("[data-actions-empty]");
+          target?.focus({ preventScroll: true });
+        });
+      }
+    } finally {
+      savingOverdueRef.current = false;
+      setSavingOverdue(false);
+    }
+  };
+
   const retry = () => void actionsPage.refetch();
   const listAddress = locationAddress(location);
   const rowNavigation = { breadcrumbs: [{ label: "Działania", to: listAddress }], returnTo: listAddress, returnLabel: "Wszystkie Działania" };
@@ -311,7 +422,7 @@ export function ActionsPage() {
             ))}
           </div>
           <SavedActionViews params={params} onApply={applyFilters} />
-          <ActionFilterControl label="Filtry" ariaLabel={hasFilters ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} active={hasFilters} open={Boolean(draft)}
+          <ActionFilterControl inline label="Filtry" ariaLabel={hasFilters ? `Filtry Działań, aktywne: ${filterCount}` : "Filtry Działań"} active={hasFilters} count={filterCount} open={Boolean(draft)}
             onOpenChange={(open) => setFilterDraft(open ? { baseQuery: query, params } : undefined)}
             footer={<>
               <Button variant="ghost" disabled={!draftSelection.count} onClick={() => updateDraft(clearFilterParams)}>Wyczyść filtry</Button>
@@ -324,7 +435,7 @@ export function ActionsPage() {
               </select>
             </label>
             <div className="action-filter-group" role="group" aria-label="Termin Działań">
-              <h3>Termin</h3>
+              <h3>Termin i przypięcie do Startu</h3>
               <div className="action-filter-options">
                 {actionScheduleViews.map((option) => <button key={option} className="action-filter-option" type="button" aria-pressed={draftSelection.date === option} onClick={() => updateDraft((next) => setScheduleParam(next, option))}>
                   <span className="action-filter-option-icon" aria-hidden="true">{draftSelection.date === option ? <Check /> : null}</span>
@@ -343,34 +454,58 @@ export function ActionsPage() {
           </ActionFilterControl>
         </div>
         {hasFilters ? <div className="actions-active-filters" aria-label="Aktywne filtry"><Filter />{view !== "open" ? <Badge>{actionListViewLabels[view]}</Badge> : null}{scheduleView !== "open" && scheduleView !== view ? <Badge>{actionScheduleViewLabels[scheduleView]}</Badge> : null}{projectId ? <Badge>{filterLabel(projectId, "project", state)}</Badge> : null}{goalId ? <Badge>{filterLabel(goalId, "goal", state)}</Badge> : null}<Button variant="ghost" onClick={clearFilters}><X />Wyczyść filtry</Button></div> : null}
-        <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, view)}</span>{projectId && goalId ? <small>Projekt i grupa muszą pasować jednocześnie.</small> : null}</div>
+        <div className="actions-results-summary" aria-live="polite"><span>{resultCountLabel(items.length, listView)}</span>{projectId && goalId ? <small>Projekt i grupa muszą pasować jednocześnie.</small> : null}</div>
       </section>
 
-      <div className={`actions-workspace${previewAction ? " has-preview" : ""}`} onKeyDown={(event) => {
+      <div className={`actions-workspace${previewAction ? " has-preview" : ""}${activeSelection ? " actions-selecting" : ""}`} onKeyDown={(event) => {
         if (event.key === "Escape" && previewAction && !document.querySelector('[aria-modal="true"]')) {
           event.preventDefault();
           closePreview();
         }
       }}>
       <div className="actions-collection">
+      {overdueItems.length || savingOverdue ? <div className="actions-overdue-toolbar" role="group" aria-label="Operacje na zaległych działaniach">
+        <button className="button button-ghost" ref={selectionToggleRef} type="button" aria-pressed={Boolean(activeSelection)} disabled={savingOverdue} onClick={toggleSelection}>Zaznacz działania</button>
+        {activeSelection ? <>
+          <span className="actions-selection-count" aria-live="polite">Zaznaczono {selectedItems.length}</span>
+          <Button type="button" disabled={savingOverdue || !selectedItems.length || selectedItemsBusy} onClick={() => openOverdueDialog("reschedule")}><CalendarDays aria-hidden="true" />Zmień termin</Button>
+          {selectedOccurrences.length ? <Button type="button" disabled={savingOverdue || selectedItemsBusy} onClick={() => openOverdueDialog("skip")}><SkipForward aria-hidden="true" />Pomiń wystąpienia</Button> : null}
+          {overdueItems.some((action) => action.status === "blocked") ? <small className="actions-selection-help">Działania z blokadą można zaznaczyć po odblokowaniu.</small> : null}
+        </> : null}
+      </div> : null}
       {items.length ? <div className="actions-list-columns" aria-hidden="true"><span /><span>Działanie</span><span>Projekt / Grupa działań</span><span>Termin</span></div> : null}
       {loading || actionsPage.isPending ? <ListSkeleton rows={5} label="Ładowanie Działań" /> : null}
       {actionsPage.isError ? <Panel className="actions-error" role="alert"><RefreshCw /><div><strong>Nie udało się pobrać Działań.</strong><p>Spróbuj ponownie; bieżące filtry pozostaną zachowane.</p></div><Button onClick={retry}>Spróbuj ponownie</Button></Panel> : null}
-      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : view === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, Projekt lub Grupa działań albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
-      {items.length ? <div className="actions-groups" aria-label={`Lista: ${actionListViewLabels[view]}`}>
+      {!actionsPage.isPending && !actionsPage.isError && items.length === 0 ? <div data-actions-empty tabIndex={-1}><EmptyState icon={<ListTodo />} title={view === "waiting" ? "Nic nie wymaga dziś sprawdzenia" : listView === "overdue" ? "Brak zaległych Działań" : statusView !== "open" ? `Brak Działań: ${actionListViewLabels[statusView]}` : hasFilters ? "Brak Działań dla tych filtrów" : "Brak otwartych Działań"} detail={view === "waiting" ? "Zablokowane Działania bez daty nadal znajdziesz w widoku Zablokowane." : hasFilters ? "Zmień termin, projekt lub grupę działań albo wyczyść filtry." : statusView === "open" ? "Dodaj pierwszy konkretny krok, aby pojawił się na tej liście." : "Wybierz inny status Działań."} action={statusView !== "open" ? <Button onClick={showOpenActions}>Przejdź do otwartych</Button> : hasFilters ? <Button onClick={clearFilters}><X />Wyczyść filtry</Button> : undefined} /></div> : null}
+      {items.length ? <div className="actions-groups" aria-label={`Lista: ${actionListViewLabels[listView]}`}>
         {groupedItems.map((group) => <section className="actions-group" key={group.key} data-schedule-group={group.label ? group.key : undefined} aria-label={group.label}>{group.label ? <h2><span>{group.label}</span><small>{group.items.length}</small></h2> : null}<div className="actions-list workspace-list" role="list">
         {group.items.map((action) => {
           const context = resolveActionContext(action, state);
           const statusKey = `actions-status:${action.id}`;
-          const mutationKey = `actions-list:${action.id}`;
-          const error = mutation.error(mutationKey) ?? mutation.error(statusKey);
+          const pinKey = `actions-pin:${action.id}`;
+          const pinError = mutation.error(pinKey);
+          const error = pinError ?? mutation.error(statusKey);
+          const busy = savingOverdue || mutation.isBusy(statusKey) || mutation.isBusy(pinKey);
+          const pinnable = (isOpenAction(action) && action.status !== "blocked") || action.pinnedToToday;
+          const selectable = Boolean(activeSelection && isOpenAction(action));
+          const occurrence = selectable ? describeActionOccurrence(action) : undefined;
+          const selectionLabel = `Zaznacz: ${action.title}${occurrence ? `, ${occurrence}` : ""}`;
+          const pinLabel = action.pinnedToToday ? "Odepnij od Startu" : "Przypnij do Startu";
           return <ActionListRow as="section" role="listitem" key={action.id} action={action} navigation={rowNavigation}
             ref={(node) => { if (node) rowRefs.current.set(action.id, node); else rowRefs.current.delete(action.id); }}
             className={`actions-list-row${highlightId === action.id ? " navigation-card-highlight" : ""}`}
             data-highlighted={highlightId === action.id || undefined} data-preview-selected={previewAction?.id === action.id || undefined}
             timeZone={state.workspaceTimezone} today={today} routineTitle={resolveCompactRoutineTitle(action, state.recurringActionTemplates)}
-            busy={mutation.isBusy(statusKey)} onOpenStatus={() => setStatusTarget({ action, menu: true })}
+            busy={busy} onOpenStatus={() => setStatusTarget({ action, menu: true })}
             onToggleComplete={() => void (action.status === "completed" ? changeActionStatus(action, "ready") : completeAction(action))}
+            tools={selectable || pinnable ? <>
+              {selectable ? <label className="actions-row-checkbox">
+                <input type="checkbox" aria-label={selectionLabel} checked={action.status !== "blocked" && (activeSelection?.ids.has(action.id) ?? false)} disabled={busy || action.status === "blocked"} onChange={() => toggleSelectedAction(action.id)} />
+              </label> : null}
+              {pinnable ? <button className="icon-button actions-row-pin" type="button" aria-label={`${pinLabel}: ${action.title}`} title={pinLabel} data-pinned={action.pinnedToToday || undefined} disabled={busy} onClick={(event) => void changePin(action, event.currentTarget)}>
+                {action.pinnedToToday ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
+              </button> : null}
+            </> : undefined}
             context={context.kind === "standalone" ? undefined : { label: compactContextLabel(context), to: context.to === "/" ? undefined : context.to }}
             onTitleClick={(event) => {
               if (window.matchMedia("(min-width: 1440px)").matches && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -378,15 +513,33 @@ export function ActionsPage() {
                 openPreview(action, event.currentTarget);
               }
             }}>
-            {error ? <span className="inline-mutation-error" role="alert">{error} <button type="button" onClick={() => void (mutation.retry(mutationKey) ?? mutation.retry(statusKey))?.()}>Spróbuj ponownie</button></span> : null}
+            {error ? <span className="inline-mutation-error" role="alert">{error} <button type="button" disabled={busy} onClick={(event) => void (pinError ? changePin(action, event.currentTarget) : mutation.retry(statusKey)?.())}>Spróbuj ponownie</button></span> : null}
           </ActionListRow>;
         })}
       </div></section>)}</div> : null}
       {items.length && actionsPage.hasNextPage ? <div className="list-pagination"><Button loading={actionsPage.isFetchingNextPage} onClick={() => void actionsPage.fetchNextPage()}>Pokaż więcej</Button></div> : null}
       {items.length && !actionsPage.hasNextPage && !actionsPage.isFetching ? <p className="muted-copy list-end">To wszystkie Działania w tym widoku.</p> : null}
       </div>
-      {previewAction ? <ActionPreview action={previewAction} today={today} returnTo={listAddress} busy={mutation.isBusy(`actions-status:${previewAction.id}`)} error={mutation.error(`actions-status:${previewAction.id}`)} onClose={closePreview} onOpenStatus={() => setStatusTarget({ action: previewAction })} onComplete={() => void completeAction(previewAction)} onRetry={() => void mutation.retry(`actions-status:${previewAction.id}`)?.()} /> : null}
+      {previewAction ? <ActionPreview action={previewAction} today={today} returnTo={listAddress} busy={savingOverdue || mutation.isBusy(`actions-status:${previewAction.id}`) || mutation.isBusy(`actions-pin:${previewAction.id}`)} error={mutation.error(`actions-status:${previewAction.id}`)} onClose={closePreview} onOpenStatus={() => setStatusTarget({ action: previewAction })} onComplete={() => void completeAction(previewAction)} onRetry={() => void mutation.retry(`actions-status:${previewAction.id}`)?.()} /> : null}
       </div>
+      <Modal open={Boolean(dialog)} title={dialog?.operation === "skip" ? "Pomiń zaległe wystąpienia rutyn" : "Zmień termin zaległych działań"} initialFocus="input" closeDisabled={savingOverdue} onClose={() => setOverdueDialog(undefined)}>
+        {dialog ? <form className="actions-overdue-form" onSubmit={(event) => { event.preventDefault(); void saveOverdue(); }}>
+          {dialog.operation === "reschedule" ? <label className="actions-filter-field">
+            <span>Nowy termin</span>
+            <input type="date" min={today} required value={dialog.date} disabled={savingOverdue} onChange={(event) => setOverdueDialog({ ...dialog, date: event.target.value })} />
+          </label> : <p>Pominięcie obejmie wybrane zaległe wystąpienia. Przyszłe wystąpienia zachowają swoje terminy.</p>}
+          {dialog.failures ? <div className="actions-batch-error" role="alert">
+            <strong>Udało się zapisać {dialog.failures.succeeded} z {dialog.failures.succeeded + dialog.failures.items.length} zmian.</strong>
+            <ul>{dialog.failures.items.map((message, index) => <li key={index}>{message}</li>)}</ul>
+          </div> : <p>Zaznaczono {dialog.operation === "skip"
+            ? polishCount(dialog.count, "wystąpienie rutyny", "wystąpienia rutyn", "wystąpień rutyn")
+            : polishCount(dialog.count, "działanie", "działania", "działań")}.</p>}
+          <div className="modal-actions">
+            <Button type="button" disabled={savingOverdue} onClick={() => setOverdueDialog(undefined)}>{dialog.failures ? "Zamknij" : "Anuluj"}</Button>
+            <Button type="submit" variant="primary" loading={savingOverdue} disabled={selectedItemsBusy || (dialog.operation === "skip" ? !selectedOccurrences.length : !selectedItems.length || !dialog.date || dialog.date < today)}>{dialog.operation === "skip" ? "Pomiń wystąpienia" : "Zapisz termin"}</Button>
+          </div>
+        </form> : null}
+      </Modal>
       {(() => { const action = items.find((candidate) => candidate.id === statusTarget?.action.id) ?? (statusTarget?.menu ? statusTarget.action : undefined); const statusKey = action ? `actions-status:${action.id}` : ""; return <ActionStatusDialog action={action} open={Boolean(action)} menu={statusTarget?.menu} compact busy={Boolean(statusKey && mutation.isBusy(statusKey))} error={statusKey ? mutation.error(statusKey) : undefined} onClose={() => setStatusTarget(undefined)} onChange={(status, blocker, reviewOn) => action ? changeActionStatus(action, status, blocker, reviewOn) : false} />; })()}
       <ActionResultDialog action={state.actions.find((candidate) => candidate.id === resultActionId)} open={Boolean(resultActionId)} onClose={() => setResultActionId(undefined)} />
     </AppShell>

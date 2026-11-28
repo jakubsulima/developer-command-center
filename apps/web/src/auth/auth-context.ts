@@ -1,5 +1,7 @@
 import { createContext } from "react";
 
+export const passwordResetPath = "/reset-password";
+
 export type AuthMode = "demo" | "supabase";
 
 export interface CurrentUser {

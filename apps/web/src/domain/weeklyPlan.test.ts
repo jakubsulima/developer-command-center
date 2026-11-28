@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "../data/empty";
-import { nextWorkspaceWeek, selectedReviewGoalIds, weeklyPlanActions } from "./weeklyPlan";
+import { currentWorkspaceWeek, nextWorkspaceWeek, selectedReviewGoalIds, weeklyPlanActions } from "./weeklyPlan";
 
 describe("weekly plan", () => {
   it("uses workspace dates across a daylight saving boundary", () => {
     expect(nextWorkspaceWeek(new Date("2026-10-21T22:00:00Z"), "Europe/Warsaw").dates).toEqual([
       "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"
     ]);
+  });
+
+  it("starts the current week at workspace midnight after a daylight saving change", () => {
+    expect(currentWorkspaceWeek(new Date("2026-10-25T22:59:00Z"), "Europe/Warsaw").endDate).toBe("2026-10-25");
+    expect(currentWorkspaceWeek(new Date("2026-10-25T23:00:00Z"), "Europe/Warsaw")).toEqual({
+      startDate: "2026-10-26",
+      endDate: "2026-11-01",
+      endDateExclusive: "2026-11-02",
+      dates: ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]
+    });
   });
 
   it("selects only open, visible actions in chosen goals or standalone work", () => {

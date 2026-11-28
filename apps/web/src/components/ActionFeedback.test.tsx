@@ -54,11 +54,13 @@ describe("ActionFeedback", () => {
   it("zamyka tylko wskazany komunikat i zachowuje błędy do ręcznego zamknięcia", () => {
     vi.useFakeTimers();
     render(<ActionFeedbackProvider><Probe firstUndo={vi.fn()} /></ActionFeedbackProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Pierwsza" }));
     fireEvent.click(screen.getByRole("button", { name: "Sukces" }));
     fireEvent.click(screen.getByRole("button", { name: "Błąd" }));
+    expect(screen.queryByText("Zapisano.")).not.toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("status")).getByRole("button", { name: "Zamknij komunikat" }));
     act(() => vi.advanceTimersByTime(300));
-    expect(screen.queryByText("Zapisano.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pierwsza operacja zapisana.")).not.toBeInTheDocument();
     act(() => vi.advanceTimersByTime(60_000));
     expect(screen.getByRole("alert")).toHaveTextContent("Brak połączenia.");
   });

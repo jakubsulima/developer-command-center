@@ -14,30 +14,58 @@ function action(id: string, overrides: Partial<GoalAction> = {}): GoalAction {
   return { id, version: 4, title: id, detail: "", status: "ready", position: 0, isNext: false, pinnedToToday: false, checklist: [], ...overrides };
 }
 
-function renderPlan(state: AppState, overrides: Partial<WeeklyPlanDraft> = {}, props: { updateAction?: ReturnType<typeof vi.fn>; setActionStatus?: ReturnType<typeof vi.fn>; createAction?: ReturnType<typeof vi.fn> } = {}) {
+function renderPlan(state: AppState, overrides: Partial<WeeklyPlanDraft> = {}, props: { period?: "current" | "next"; updateAction?: ReturnType<typeof vi.fn>; setActionStatus?: ReturnType<typeof vi.fn>; createAction?: ReturnType<typeof vi.fn> } = {}) {
   const updateAction = (props.updateAction ?? vi.fn().mockResolvedValue(undefined)) as unknown as (actionId: string, changes: { scheduledFor: string | null }, expectedVersion: number) => Promise<void>;
   const setActionStatus = (props.setActionStatus ?? vi.fn().mockResolvedValue(undefined)) as unknown as (actionId: string, status: "cancelled" | "ready" | "in_progress" | "testing", blocker?: string, expectedVersion?: number) => Promise<void>;
   const createAction = (props.createAction ?? vi.fn().mockResolvedValue("new-action")) as unknown as (input: { title: string; goalId?: string; areaId?: string; scheduledFor?: string }, idempotencyKey?: string) => Promise<string>;
   function Harness() {
     const [value, setValue] = useState<WeeklyPlanDraft>({ selectedGoalIds: [], includeStandalone: false, changes: {}, ...overrides });
-    return <WeeklyPlanPanel state={state} week={week} value={value} onChange={(next) => setValue(next(value))} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />;
+    return <WeeklyPlanPanel state={state} week={week} period={props.period} value={value} onChange={setValue} updateAction={updateAction} setActionStatus={setActionStatus} createAction={createAction} />;
   }
   render(<MemoryRouter><ActionFeedbackProvider><Harness /></ActionFeedbackProvider></MemoryRouter>);
   return { updateAction, setActionStatus, createAction };
 }
 
 describe("WeeklyPlanPanel", () => {
+  it("odróżnia brak daty od daty spoza wybranego tygodnia", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.actions = [action("Bez daty"), action("Zaległe z datą", { scheduledFor: "2026-10-01" })];
+    renderPlan(state, { includeStandalone: true });
+    const agenda = screen.getByRole("region", { name: "Działania na następny tydzień" });
+    await user.click(within(agenda).getByRole("button", { name: "Bez terminu 1" }));
+    expect(within(agenda).getByRole("link", { name: "Bez daty" })).toBeInTheDocument();
+    expect(within(agenda).queryByRole("link", { name: "Zaległe z datą" })).not.toBeInTheDocument();
+    await user.click(within(agenda).getByRole("button", { name: "Poza tym tygodniem 1" }));
+    expect(within(agenda).getByRole("link", { name: "Zaległe z datą" })).toBeInTheDocument();
+  });
+
   it("filters the agenda by a selected day without hiding other planned actions", async () => {
     const user = userEvent.setup();
     const state = structuredClone(emptyState);
     state.actions = [action("Poniedziałek", { scheduledFor: week.dates[0] }), action("Wtorek", { scheduledFor: week.dates[1] })];
     renderPlan(state);
-    const agenda = screen.getByRole("region", { name: "Działania na ten tydzień" });
+    const agenda = screen.getByRole("region", { name: "Działania na następny tydzień" });
     expect(within(agenda).getByRole("link", { name: "Poniedziałek" })).toBeInTheDocument();
     expect(within(agenda).getByRole("link", { name: "Wtorek" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /5 paź/ }));
     expect(within(agenda).getByRole("link", { name: "Poniedziałek" })).toBeInTheDocument();
     expect(within(agenda).queryByRole("link", { name: "Wtorek" })).not.toBeInTheDocument();
+  });
+
+  it("opens undated work from an empty current week and discards a stale change for a closed action", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.actions = [action("otwarte"), action("zamknięte", { status: "completed", scheduledFor: week.startDate })];
+    const { updateAction } = renderPlan(state, { changes: { zamknięte: { date: week.endDate, version: 3 } } }, { period: "current" });
+    expect(screen.getByRole("button", { name: "Zapisz terminy" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Odrzuć tę zmianę" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^Dzień dla Działania/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Bez terminu/ }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Dzień dla Działania: otwarte" }), week.endDate);
+    await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
+    await waitFor(() => expect(updateAction).toHaveBeenCalledExactlyOnceWith("otwarte", { scheduledFor: week.endDate }, 4));
   });
 
   it("retries only failed overdue items and keeps blocked actions out of bulk decisions", async () => {
@@ -98,5 +126,25 @@ describe("WeeklyPlanPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Cofnij" }));
     await waitFor(() => expect(updateAction).toHaveBeenCalledTimes(2));
     expect(updateAction).toHaveBeenNthCalledWith(2, "zaplanowane", { scheduledFor: week.dates[0] }, 5);
+  });
+
+  it("retries only dates that failed to restore during a partial undo", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(emptyState);
+    state.actions = [action("pierwsze", { scheduledFor: week.dates[0] }), action("drugie", { scheduledFor: week.dates[1] })];
+    const updateAction = vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(undefined);
+    renderPlan(state, { changes: {
+      pierwsze: { date: week.dates[2]!, version: 4 }, drugie: { date: week.dates[3]!, version: 4 }
+    } }, { updateAction });
+    await user.click(screen.getByRole("button", { name: "Zapisz terminy" }));
+    await user.click(await screen.findByRole("button", { name: "Cofnij" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByText("Przywrócono stan sprzed zmiany.")).toBeInTheDocument();
+    expect(updateAction.mock.calls.slice(2)).toEqual([
+      ["pierwsze", { scheduledFor: week.dates[0] }, 5],
+      ["drugie", { scheduledFor: week.dates[1] }, 5],
+      ["drugie", { scheduledFor: week.dates[1] }, 5]
+    ]);
   });
 });

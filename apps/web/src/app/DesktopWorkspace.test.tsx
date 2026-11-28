@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { emptyState } from "../data/empty";
+import { createLocalWorkspaceRepository } from "../data/localWorkspaceRepository";
 import type { AppState } from "../domain/types";
 import { App } from "./App";
 import { StoreProvider } from "./store";
@@ -54,7 +55,7 @@ function renderWorkspace(path: string) {
     const location = useLocation();
     return <output data-testid="address">{location.pathname}{location.search}</output>;
   }
-  render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DemoAuthProvider><StoreProvider><App /><LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DemoAuthProvider><StoreProvider><App /><LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
 }
 
 it("łączy bieżące Działania, Grupy działań i Wiedzę w Przeglądzie właściwego Projektu", async () => {
@@ -83,9 +84,9 @@ it("zmienia status z Przeglądu przez istniejącą komendę i pozwala cofnąć z
   const dialog = screen.getByRole("dialog", { name: "Zmień status Działania" });
   await user.click(within(dialog).getByRole("button", { name: /W toku/ }));
   await waitFor(() => expect(dialog).not.toBeInTheDocument());
-  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /^Status: W toku\./ })).toBeInTheDocument();
+  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /Status: W toku\./ })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cofnij" }));
-  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /^Status: Do zrobienia\./ })).toBeInTheDocument();
+  expect(await within(actions).findByRole("button", { name: "Ukończ: Bieżący krok", description: /Status: Do zrobienia\./ })).toBeInTheDocument();
 });
 
 it("filtruje pełną listę Działań w Przeglądzie i zachowuje filtr po przejściu do sekcji", async () => {
@@ -148,6 +149,30 @@ it("wraca z pełnego widoku Wiedzy do wybranego podglądu i filtrów", async () 
   expect(screen.getByTestId("address")).toHaveTextContent("/knowledge?kind=note&area=one&preview=note");
 });
 
+it("zapisuje kroki samodzielnego Działania w podglądzie i pełnym widoku", async () => {
+  const state = JSON.parse(localStorage.getItem("command-center-state-v1")!) as AppState;
+  state.actions.push({
+    id: "standalone", version: 1, title: "Samodzielne Działanie", detail: "", status: "ready", position: 3,
+    isNext: false, pinnedToToday: false,
+    checklist: [{ id: "first", title: "Sprawdź dane", completed: false }, { id: "second", title: "Zapisz wynik", completed: false }]
+  });
+  localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+  const user = userEvent.setup();
+  renderWorkspace("/actions?preview=standalone");
+
+  const preview = await screen.findByRole("complementary", { name: "Samodzielne Działanie" });
+  await user.click(within(preview).getByRole("checkbox", { name: "Sprawdź dane" }));
+  expect(await within(preview).findByText("1 z 2 ukończonych")).toBeVisible();
+  await user.click(within(preview).getByRole("link", { name: "Otwórz pełny widok" }));
+  const detail = await screen.findByRole("region", { name: "Lista kroków" });
+  expect(within(detail).getByRole("checkbox", { name: "Sprawdź dane" })).toBeChecked();
+  await user.click(within(detail).getByRole("checkbox", { name: "Zapisz wynik" }));
+  expect(await within(detail).findByText("2 z 2 ukończonych")).toBeVisible();
+  expect(screen.getByRole("button", { name: /Zmień status: Do zrobienia/ })).toBeVisible();
+  await user.click(within(detail).getByRole("checkbox", { name: "Sprawdź dane" }));
+  expect(await within(detail).findByText("1 z 2 ukończonych")).toBeVisible();
+});
+
 it("na mobile zachowuje samodzielny ekran Wiedzy", async () => {
   setDesktop(false);
   const user = userEvent.setup();
@@ -162,7 +187,10 @@ it("zamyka podgląd wpisu wykluczonego przez filtry i pokazuje metadane książk
   const user = userEvent.setup();
   renderWorkspace("/knowledge?preview=note");
   await screen.findByRole("complementary", { name: "Notatka Projektu" });
-  await user.click(screen.getByRole("button", { name: "Książki" }));
+  await user.click(screen.getByRole("button", { name: "Filtry Biblioteki" }));
+  const filters = within(screen.getByRole("dialog", { name: "Filtry Biblioteki" }));
+  await user.selectOptions(filters.getByRole("combobox", { name: "Rodzaj Wiedzy" }), "book");
+  await user.click(filters.getByRole("button", { name: "Pokaż wyniki" }));
   await waitFor(() => expect(screen.queryByRole("complementary", { name: "Notatka Projektu" })).not.toBeInTheDocument());
   await user.click(await screen.findByRole("link", { name: "Książka źródłowa" }));
   const preview = await screen.findByRole("complementary", { name: "Książka źródłowa" });
@@ -171,17 +199,17 @@ it("zamyka podgląd wpisu wykluczonego przez filtry i pokazuje metadane książk
   expect(within(preview).getByRole("link", { name: "Otwórz źródło" })).toHaveAttribute("rel", "noopener noreferrer");
 });
 
-it("na mobile pozostawia Przegląd bez dodatkowych sekcji desktopowych", async () => {
+it("na telefonie zachowuje kontekst Projektu i skrót do Działań pod Przeglądem", async () => {
   setDesktop(false);
   renderWorkspace("/projects/one");
   await screen.findByRole("region", { name: "Co jest teraz najważniejsze" });
   expect(screen.queryByRole("region", { name: /Działania Projektu/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("complementary", { name: "Kontekst Projektu" })).not.toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Kontekst Projektu" })).toHaveTextContent("Bieżący rezultat");
 });
 
 it("przetwarza wpis w bocznym panelu, zachowuje oryginał i tworzy rzeczywiste Działanie", async () => {
   const user = userEvent.setup();
-  renderWorkspace("/knowledge?section=inbox");
+  const workspace = renderWorkspace("/knowledge?section=inbox");
   await user.click(await screen.findByRole("link", { name: "Pierwsza myśl do przetworzenia" }));
   const processing = screen.getByRole("complementary", { name: "Przetwarzanie wpisu" });
   await user.click(within(processing).getByRole("button", { name: /^Dodaj Działanie/ }));
@@ -194,7 +222,15 @@ it("przetwarza wpis w bocznym panelu, zachowuje oryginał i tworzy rzeczywiste D
   await user.click(screen.getByRole("tab", { name: "Przetworzone" }));
   expect(await screen.findByRole("link", { name: "Pierwsza myśl do przetworzenia" })).toBeInTheDocument();
   await user.click(within(screen.getByRole("navigation", { name: "Główna nawigacja" })).getByRole("link", { name: "Działania" }));
-  expect(await screen.findByRole("link", { name: "Nowy krok ze Skrzynki" })).toBeInTheDocument();
+  const action = await screen.findByRole("link", { name: "Nowy krok ze Skrzynki" });
+  const path = new URL((action as HTMLAnchorElement).href).pathname;
+  workspace.unmount();
+  renderWorkspace(path);
+  await screen.findByRole("heading", { name: "Nowy krok ze Skrzynki", level: 1 });
+  const persisted = await createLocalWorkspaceRepository().load();
+  expect(persisted?.inbox.find((item) => item.id === "capture-one")).toMatchObject({
+    status: "resolved", content: "Pierwsza myśl do przetworzenia", resolvedToIds: expect.arrayContaining([path.split("/").at(-1)])
+  });
 });
 
 it("otwiera Grupa działań klawiaturą i wraca do pełnej listy z jej filtrami", async () => {
@@ -225,7 +261,7 @@ it("przywraca Grupa działań bez Projektu z archiwum do aktywnej listy", async 
   renderWorkspace("/goals?status=archived");
   await user.click(await screen.findByRole("button", { name: "Przywróć" }));
   expect(await screen.findByText("Nie ma tu jeszcze grup działań")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Aktywny" }));
+  await user.click(screen.getByRole("button", { name: "Aktywne" }));
   const restored = await screen.findByRole("link", { name: "Otwórz grupę: Wznawiany rezultat" });
   expect(within(restored).getByText("Bez Projektu")).toBeInTheDocument();
   expect(within(restored).getByText("Brak następnego Działania")).toBeInTheDocument();

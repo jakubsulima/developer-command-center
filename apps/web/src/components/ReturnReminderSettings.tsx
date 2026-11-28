@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, ChevronDown } from "lucide-react";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { Button, Panel } from "./ui";
 import { disableReturnReminder, loadReturnReminder, pushApplicationKey, reminderDeviceId, saveReturnReminder } from "../data/returnReminders";
+
+const permissionDenied = "Odblokuj powiadomienia w ustawieniach przeglądarki lub urządzenia.";
 
 export function ReturnReminderSettings() {
   const { state, mode } = useStore();
@@ -19,7 +22,7 @@ export function ReturnReminderSettings() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
-  const publicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined;
+  const publicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY?.trim();
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
   const [permission, setPermission] = useState<NotificationPermission>(supported ? Notification.permission : "default");
   useEffect(() => {
@@ -33,8 +36,13 @@ export function ReturnReminderSettings() {
     return () => window.removeEventListener("focus", update);
   }, [supported]);
   const enabled = Boolean(query.data?.enabled);
+  const unavailable = mode === "demo" ? "Przypomnienia są wyłączone w trybie demo. Na koncie można je włączyć dla tego urządzenia."
+    : !publicKey ? "Powiadomienia nie są dostępne w tym wdrożeniu."
+    : !supported ? "Użyj przeglądarki obsługującej powiadomienia. Na iPhonie dodaj Command do ekranu początkowego i otwórz go stamtąd."
+    : permission === "denied" ? permissionDenied
+    : null;
   const save = async () => {
-    if (busy || !time || !days.length || !state.workspaceId || !user || !publicKey || !supported) return;
+    if (busy || unavailable || !time || !days.length || !state.workspaceId || !user || !publicKey) return;
     try { new Intl.DateTimeFormat("pl", { timeZone: zone }); } catch { setFailed(true); setMessage("Wpisz poprawną strefę czasową, np. Europe/Warsaw."); return; }
     setBusy(true); setMessage(""); setFailed(false);
     let created: PushSubscription | undefined;
@@ -42,7 +50,9 @@ export function ReturnReminderSettings() {
       // Must run directly from the user's click, before other asynchronous work.
       const result = await Notification.requestPermission();
       setPermission(result);
-      if (result !== "granted") throw new Error("Powiadomienia są wyłączone. Możesz zmienić zgodę w ustawieniach iPhone’a.");
+      if (result !== "granted") throw new Error(result === "denied"
+        ? permissionDenied
+        : "Aby włączyć przypomnienia, spróbuj ponownie i zezwól na powiadomienia.");
       const registration = await navigator.serviceWorker.getRegistration();
       if (!registration?.active) throw new Error("Dodaj Command do ekranu początkowego i otwórz go ponownie.");
       let subscription = await registration.pushManager.getSubscription();
@@ -61,21 +71,33 @@ export function ReturnReminderSettings() {
     catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Nie udało się wyłączyć przypomnienia."); }
     finally { setBusy(false); }
   };
-  return <Panel className="return-reminder-settings"><h2>Przypomnienie o Command</h2><p>Jedna krótka zachęta o wybranej porze. Bez nadrabiania pominiętych dni.</p>
-    <p>{query.isPending && mode !== "demo" ? "Sprawdzanie ustawień…" : supported && permission === "denied" ? "Wyłączone na tym urządzeniu" : enabled ? "Harmonogram włączony" : "Wyłączone"}{supported && permission === "denied" ? " · Powiadomienia na tym urządzeniu są zablokowane" : ""}</p>
-    {mode === "demo" ? <p>Przypomnienia są dostępne po zalogowaniu do konta.</p> : query.isError ? <p role="alert">{query.error.message} <button onClick={() => void query.refetch()}>Spróbuj ponownie</button></p> : null}
-    {!publicKey && mode !== "demo" ? <p>Powiadomienia nie są jeszcze dostępne w tym wdrożeniu.</p> : null}
-    {!supported ? <p>Na iPhonie dodaj Command do ekranu początkowego i otwórz jako aplikację.</p> : null}
-    <fieldset disabled={busy || mode === "demo" || !publicKey || query.isPending || query.isError}>
-      <legend>Twój rytm</legend>
-      <div className="reminder-days">{[[1,"Pn"],[2,"Wt"],[3,"Śr"],[4,"Cz"],[5,"Pt"],[6,"So"],[0,"Nd"]].map(([day,label]) => <label key={day}><input type="checkbox" checked={days.includes(Number(day))} onChange={(event) => { setDirty(true); setDays((current) => event.target.checked ? [...current, Number(day)] : current.filter((value) => value !== day)); }} />{label}</label>)}</div>
-      <label>Godzina<input type="time" value={time} onChange={(event) => { setDirty(true); setTime(event.target.value); }} /></label>
-      <label>Strefa czasowa<input value={zone} onChange={(event) => { setDirty(true); setZone(event.target.value); }} /></label>
-      <label>Po otwarciu<select value={destination} onChange={(event) => { setDirty(true); setDestination(event.target.value as "/" | "/capture"); }}><option value="/capture">Szybki zapis</option><option value="/">Wybierz działanie na dziś</option></select></label>
-      {dirty ? <small>Niezapisane zmiany</small> : null}
-      <Button disabled={!supported || !time || !days.length || permission === "denied"} loading={busy} onClick={() => void save()}>{enabled ? "Zapisz na tym urządzeniu" : "Włącz na tym urządzeniu"}</Button>
-    </fieldset>
-    {enabled ? <Button variant="ghost" loading={busy} onClick={() => void disable()}>Wyłącz przypomnienie</Button> : null}
-    {message ? <p role={failed ? "alert" : "status"}>{message}</p> : null}
-  </Panel>;
+  return (
+    <details className="settings-section">
+      <summary>
+        <Bell aria-hidden="true" />
+        <span><strong>Przypomnienia</strong><small>{unavailable ?? "Wybierz dni i porę powrotu do aplikacji"}</small></span>
+        <ChevronDown aria-hidden="true" />
+      </summary>
+      <div className="settings-section-content">
+        <Panel className="return-reminder-settings">
+          <h2>Przypomnienie o Command</h2>
+          <p>Jedna krótka zachęta o wybranej porze. Bez nadrabiania pominiętych dni.</p>
+          {mode !== "demo" && query.isPending ? <p>Sprawdzanie ustawień…</p> : null}
+          {query.isSuccess ? <p>{enabled ? "Harmonogram włączony" : "Harmonogram wyłączony"}</p> : null}
+          {query.isError ? <p role="alert">{query.error.message} <button onClick={() => void query.refetch()}>Spróbuj ponownie</button></p> : null}
+          <fieldset disabled={busy || Boolean(unavailable) || query.isPending || query.isError}>
+            <legend>Twój rytm</legend>
+            <div className="reminder-days">{[[1,"Pn"],[2,"Wt"],[3,"Śr"],[4,"Cz"],[5,"Pt"],[6,"So"],[0,"Nd"]].map(([day,label]) => <label key={day}><input type="checkbox" checked={days.includes(Number(day))} onChange={(event) => { setDirty(true); setDays((current) => event.target.checked ? [...current, Number(day)] : current.filter((value) => value !== day)); }} />{label}</label>)}</div>
+            <label>Godzina<input type="time" value={time} onChange={(event) => { setDirty(true); setTime(event.target.value); }} /></label>
+            <label>Strefa czasowa<input value={zone} onChange={(event) => { setDirty(true); setZone(event.target.value); }} /></label>
+            <label>Po otwarciu<select value={destination} onChange={(event) => { setDirty(true); setDestination(event.target.value as "/" | "/capture"); }}><option value="/capture">Szybki zapis</option><option value="/">Wybierz działanie na dziś</option></select></label>
+            {dirty ? <small>Niezapisane zmiany</small> : null}
+            <Button disabled={!time || !days.length} loading={busy} onClick={() => void save()}>{enabled ? "Zapisz na tym urządzeniu" : "Włącz na tym urządzeniu"}</Button>
+          </fieldset>
+          {enabled ? <Button variant="ghost" loading={busy} onClick={() => void disable()}>Wyłącz przypomnienie</Button> : null}
+          {message ? <p role={failed ? "alert" : "status"}>{message}</p> : null}
+        </Panel>
+      </div>
+    </details>
+  );
 }

@@ -81,6 +81,7 @@ describe("migracje Supabase", () => {
     const snapshots = await Promise.all(preservedTables.map((table) => scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by to_jsonb(item)::text) from public.${table} item`)));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20261114114912_action_groups.sql", import.meta.url), "utf8"));
     await database.exec(await readFile(new URL("../../../../supabase/migrations/20261120133947_study_project_preset.sql", import.meta.url), "utf8"));
+    await database.exec(await readFile(new URL("../../../../supabase/migrations/20261128085428_knowledge_project_search.sql", import.meta.url), "utf8"));
     for (const [index, table] of preservedTables.entries()) {
       expect(await scalar(`select jsonb_agg(to_jsonb(item)-'group_type' order by (to_jsonb(item)-'group_type')::text) from public.${table} item`)).toEqual(snapshots[index]);
     }
@@ -534,6 +535,9 @@ describe("migracje Supabase", () => {
     const archivePage = await scalar<{ items: { id: string }[]; totalCount: number }>(
       "select public.get_knowledge_page($1,50,null,null,null,null,null,null,null,null,'archived')", [workspace]
     );
+    const projectSearch = await scalar<{ items: { id: string }[]; totalCount: number }>(
+      "select public.get_knowledge_page($1, target_search_text => 'DUŻY PROJEKT')", [workspace]
+    );
 
     expect(first.totalCount).toBe(4);
     expect(first.nextCursor).not.toBeNull();
@@ -542,6 +546,39 @@ describe("migracje Supabase", () => {
     expect(goalPage.totalCount).toBe(2);
     expect(archivePage.items.map((item) => item.id)).toEqual([archivedNote]);
     expect(archivePage.totalCount).toBe(1);
+    expect(projectSearch.items.map((item) => item.id).sort()).toEqual([projectNote, sourceBook, goalNote, actionNote].sort());
+  });
+
+  it("znajduje Kurs JS po projekcie i rozpoznaje rezultaty o tym samym tytule na różnych stronach", async () => {
+    const user = crypto.randomUUID();
+    const project = crypto.randomUUID();
+    const course = crypto.randomUUID();
+    const firstResult = crypto.randomUUID();
+    const secondResult = crypto.randomUUID();
+    await database.query("insert into auth.users(id) values ($1)", [user]);
+    const workspace = await scalar<string>("select workspace_id from public.workspace_members where user_id = $1", [user]);
+    await database.query("insert into public.areas(id, workspace_id, name) values ($1, $2, 'Nauka JavaScript - teoria')", [project, workspace]);
+    await database.query("insert into public.entities(id, workspace_id, type, title) values ($1, $2, 'resource', 'Kurs JS'), ($3, $2, 'artifact', 'Wynik badań'), ($4, $2, 'artifact', 'Wynik badań')", [course, workspace, firstResult, secondResult]);
+    await database.query("insert into public.knowledge_items(entity_id, workspace_id, detail) values ($1, $2, ''), ($3, $2, 'Pierwsza wersja'), ($4, $2, 'Druga wersja')", [course, workspace, firstResult, secondResult]);
+    await database.query("insert into public.knowledge_links(workspace_id, knowledge_entity_id, area_id, meaning) values ($1, $2, $3, 'reference')", [workspace, course, project]);
+    await database.exec("set role authenticated");
+    await database.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+
+    const result = await scalar<{ items: { id: string }[] }>(
+      "select public.get_knowledge_page($1, target_search_text => '  JavaScript  ')", [workspace]
+    );
+    expect(result.items.map((item) => item.id)).toEqual([course]);
+
+    type ResultPage = { items: { id: string }[]; duplicateResultIds: string[]; nextCursor: { sortValue: string; id: string } };
+    const first = await scalar<ResultPage>(
+      "select public.get_knowledge_page($1, 1, target_knowledge_kind => 'artifact')", [workspace]
+    );
+    const second = await scalar<ResultPage>(
+      "select public.get_knowledge_page($1, 1, $2, $3, target_knowledge_kind => 'artifact')", [workspace, first.nextCursor.sortValue, first.nextCursor.id]
+    );
+    expect(first.duplicateResultIds).toEqual([first.items[0]?.id]);
+    expect(second.duplicateResultIds).toEqual([second.items[0]?.id]);
+    expect([...first.duplicateResultIds, ...second.duplicateResultIds].sort()).toEqual([firstResult, secondResult].sort());
   });
 
   it("ustawia domyślny preset, zapisuje metadane książki i blokuje nowe relacje do Kosza", async () => {

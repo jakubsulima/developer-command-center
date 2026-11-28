@@ -216,6 +216,9 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`WorkspacePage: ${error.message}`);
       const page = decodePage<WorkspacePageItem>(data, `WorkspacePage.${query.collection}`);
       if (query.collection === "actions") return { ...page, items: await withActionReviewDates(page.items as GoalAction[]) };
+      if (query.collection === "knowledge" && data && typeof data === "object" && "duplicateResultIds" in data && Array.isArray(data.duplicateResultIds)) {
+        return { ...page, duplicateResultIds: data.duplicateResultIds.filter((id: unknown): id is string => typeof id === "string") };
+      }
       return page;
     },
     async loadKnowledgeItem(id): Promise<KnowledgeItem | undefined> {
@@ -229,8 +232,15 @@ export function createSupabaseWorkspaceRepository(): WorkspaceRepository {
       if (error) throw new Error(`KnowledgeItems: ${error.message}`);
       return arrayPayload<KnowledgeItem>(data, "KnowledgeItems");
     },
-    async loadAction(id): Promise<GoalAction | undefined> {
-      const { data, error } = await getSupabase().rpc("get_action_item", { target_action_id: id });
+    async loadAction(id, workspaceId): Promise<GoalAction | undefined> {
+      const client = getSupabase();
+      if (workspaceId) {
+        const { data: match, error: scopeError } = await client.from("actions").select("id")
+          .eq("workspace_id", workspaceId).eq("id", id).maybeSingle();
+        if (scopeError) throw new Error(`ActionItem: ${scopeError.message}`);
+        if (!match) return undefined;
+      }
+      const { data, error } = await client.rpc("get_action_item", { target_action_id: id });
       if (error) throw new Error(`ActionItem: ${error.message}`);
       if (!data) return undefined;
       return (await withActionReviewDates([data as GoalAction]))[0];

@@ -68,7 +68,7 @@
   border-top: 1px solid var(--border);
 }
 @media (max-width: 767px) {
-  .action-filter-trigger {
+  .action-filter-trigger:not(.action-filter-trigger-inline) {
     position: fixed;
     z-index: 19;
     inset-inline-end: var(--page-inset-end);
@@ -79,9 +79,9 @@
     border-radius: 50%;
     box-shadow: 0 6px 20px #0007;
   }
-  .action-filter-trigger > svg { width: 20px; height: 20px; }
-  .action-filter-trigger-label { display: none; }
-  .action-filter-indicator {
+  .action-filter-trigger:not(.action-filter-trigger-inline) > svg { width: 20px; height: 20px; }
+  .action-filter-trigger:not(.action-filter-trigger-inline) .action-filter-trigger-label { display: none; }
+  .action-filter-trigger:not(.action-filter-trigger-inline) .action-filter-indicator {
     position: absolute;
     inset-block-start: 0;
     inset-inline-end: 0;

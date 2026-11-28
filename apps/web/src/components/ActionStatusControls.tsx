@@ -3,6 +3,7 @@ import "./action-form-dialog.css";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Beaker, ChevronDown, Circle, CircleCheck, CircleX, LoaderCircle, OctagonAlert, Repeat2, SkipForward, type LucideIcon } from "lucide-react";
 import { actionStatusLabels } from "../domain/labels";
+import { describeActionOccurrence } from "../domain/actionPresentation";
 import type { ActionStatus, GoalAction } from "../domain/types";
 import { Modal } from "./Modal";
 import { Button } from "./ui";
@@ -53,13 +54,14 @@ export function ActionStatusToggle({ action, disabled, onToggleComplete, onOpenS
 }) {
   const Icon = statusIcons[action.status];
   const label = `${action.status === "completed" ? "Przywróć" : "Ukończ"}: ${action.title}`;
-  const hint = `Status: ${actionStatusLabels[action.status]}. Przytrzymaj wiersz lub użyj Shift+Enter, aby zmienić status.`;
+  const hint = `${action.status === "completed" ? "Przywróć jako otwarte." : "Oznacz jako ukończone."} Status: ${actionStatusLabels[action.status]}. Przytrzymaj wiersz lub użyj Shift+Enter, aby zmienić status.`;
+  const occurrence = describeActionOccurrence(action);
 
   return <button
     type="button"
     className={`action-status-trigger action-status-icon ${action.status}`}
     disabled={disabled}
-    aria-label={label}
+    aria-label={occurrence ? `${label}, ${occurrence}` : label}
     aria-description={hint}
     aria-keyshortcuts="Shift+Enter"
     title={hint}
@@ -71,6 +73,7 @@ export function ActionStatusToggle({ action, disabled, onToggleComplete, onOpenS
     onClick={onToggleComplete}
   >
     <Icon className="action-status-glyph" aria-hidden="true" />
+    {action.status === "ready" && <span className="action-complete-hint" aria-hidden="true">✓</span>}
   </button>;
 }
 

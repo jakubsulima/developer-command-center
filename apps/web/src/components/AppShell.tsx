@@ -1,11 +1,12 @@
 import { CreationDialog } from "./CreationForm";
 import { AddMenu, type AddMenuItem } from "./AddMenu";
 import { lazy, Suspense, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles, TerminalSquare } from "lucide-react";
+import { Archive, CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronRight, Cloud, CloudOff, Download, Flag, FolderKanban, Inbox, LogOut, Menu, Plus, Repeat2, RotateCcw, Search, Settings, Sparkles } from "lucide-react";
 import { Link, matchPath, NavLink, useLocation } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { useAuth } from "../auth/useAuth";
 import { PageActionsContext } from "./page-actions-context";
+import { CommandBrand } from "./CommandBrand";
 import { useMobileNavIndicator } from "./mobile-nav-position";
 import { QuickCapture } from "./QuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
@@ -16,7 +17,10 @@ import { Sheet } from "./ui/sheet";
 import { AppLoading } from "../auth/AuthRoot";
 import { AppErrorReporter } from "../lib/appErrorReporter";
 import { beginPerformanceTiming } from "../lib/performanceMetrics";
+import type { InboxItem } from "../domain/types";
+import { useWorkspaceInfinitePage } from "../hooks/useWorkspaceInfinitePage";
 import { useNavigationRestoration } from "../hooks/useNavigationRestoration";
+import "./mobile-more-sheet.css";
 
 const QuickAdd = lazy(() => import("./QuickAdd").then((module) => ({ default: module.QuickAdd })));
 
@@ -28,8 +32,16 @@ const navigation = [
   { to: "/routines", label: "Rutyny", icon: Repeat2 },
   { to: "/goals", label: "Grupy działań", icon: Flag },
   { to: "/actions", label: "Działania", icon: CheckSquare },
-  { to: "/knowledge", label: "Wiedza", icon: Archive, badge: true },
+  { to: "/knowledge", label: "Wiedza", icon: Archive },
   { to: "/review", label: "Podsumowanie", icon: CalendarCheck },
+  { to: "/ai", label: "Przegląd AI", icon: Sparkles },
+];
+
+const moreWorkspaceLinks = [
+  { path: "/goals", label: "Grupy działań", description: "Powiązane działania", icon: Flag },
+  { path: "/routines", label: "Rutyny", description: "Działania cykliczne", icon: Repeat2 },
+  { path: "/ai", label: "Przegląd AI", description: "Rekomendacje dla grup działań", icon: Sparkles },
+  { path: "/review", label: "Podsumowanie", description: "Przegląd tygodnia", icon: CalendarCheck },
 ];
 
 export type AppShellAddAction = {
@@ -42,12 +54,15 @@ export type AppShellAddAction = {
   menu?: AddMenuItem[];
 };
 
-export function AppShell({ children, aside, addAction, appearance, loadingView = false }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail"; loadingView?: boolean }) {
+export function AppShell({ children, aside, addAction, appearance, loadingView = false, navigationReady = true }: { children: ReactNode; aside?: ReactNode; addAction?: AppShellAddAction; appearance?: "focus-detail"; loadingView?: boolean; navigationReady?: boolean }) {
   const { state, mode, loading, resetDemo, exportData, reload, syncState, dataFreshness } = useStore();
   const { user, signOut } = useAuth();
   const location = useLocation();
-  useNavigationRestoration();
+  useNavigationRestoration(!loading && navigationReady);
   const activeGoals = state.goals.filter((goal) => goal.visibility === "active" && goal.status === "active").length;
+  const inbox = useWorkspaceInfinitePage<InboxItem>("inbox", 50, { inboxStatus: "unprocessed" });
+  const newInboxCount = inbox.data?.totalCount ?? state.inbox.filter((item) => item.status === "unprocessed").length;
+  const isAppleKeyboard = /Mac|iPhone|iPad/.test(navigator.platform);
   const activeRoutines = state.recurringActionTemplates.filter((routine) => routine.status === "active").length;
   const syncing = syncState.status === "syncing";
   const error = Object.values(syncState.errors)[0];
@@ -71,17 +86,20 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileHeaderHidden, setMobileHeaderHidden] = useState(false);
   const [signOutError, setSignOutError] = useState("");
-  const leaveAccount = () => void signOut().catch((error) => setSignOutError(error instanceof Error ? error.message : "Nie udało się wylogować."));
+  const leaveAccount = () => {
+    setSignOutError("");
+    void signOut().catch((error) => setSignOutError(error instanceof Error ? error.message : "Nie udało się wylogować."));
+  };
   const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const addActionRef = useRef(addAction);
   addActionRef.current = addAction;
   const initials = user?.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
-  const onReviewPage = Boolean(matchPath("/review", location.pathname));
-  const aiReviewActive = onReviewPage && new URLSearchParams(location.search).get("tab") === "ai";
-  const moreActive = (onReviewPage && !aiReviewActive) || ["/goals", "/knowledge", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-  const mobileNavIndicator = useMobileNavIndicator(loading, location.pathname, aiReviewActive);
+  const aiReviewActive = Boolean(matchPath("/ai", location.pathname));
+  const knowledgeInboxActive = location.pathname === "/knowledge" && new URLSearchParams(location.search).get("section") === "inbox";
+  const moreActive = ["/review", "/goals", "/ai", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const mobileNavIndicator = useMobileNavIndicator(loading, location.pathname);
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     if (loadingView) return;
     quickAddReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -232,18 +250,23 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       addAction?.menu ? <AddMenu label={addAction.label} ariaLabel={addAction.ariaLabel} items={addAction.menu} disabled={loadingView} onSelect={openQuickAdd} /> : addAction ? <Button className={`page-add-button${addIsOpen ? " is-active" : ""}`} disabled={loadingView} aria-label={addAction.ariaLabel} title={addAction.label} aria-expanded={addIsOpen} aria-haspopup="dialog" onClick={triggerAdd}><Plus /><span>{addAction.label}</span></Button> : null
     }>
     <div className={`app-shell ${aside ? "with-aside" : ""}${appearance ? ` ${appearance}` : ""}${mobileHeaderHidden ? " mobile-header-hidden" : ""}`}>
+      <a className="workspace-skip-link" href="#workspace-main" onClick={(event) => {
+        event.preventDefault();
+        document.getElementById("workspace-main")?.focus();
+      }}>Przejdź do treści</a>
       <aside className="sidebar">
         <div className="brand"><CommandBrand /></div>
         <nav className="side-nav" aria-label="Główna nawigacja">
           {navigation.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => isActive ? "active" : ""}>
-              <Icon /><span>{label}</span>
+            <NavLink key={to} to={to} end={to === "/"} aria-label={label} title={label} className={({ isActive }) => isActive && !(to === "/knowledge" && knowledgeInboxActive) ? "active" : ""} aria-current={to === "/knowledge" && knowledgeInboxActive ? false : undefined}>
+              <Icon aria-hidden="true" /><span>{label}</span>
             </NavLink>
           ))}
+          <Link to="/knowledge?section=inbox" className={knowledgeInboxActive ? "active" : ""} aria-current={knowledgeInboxActive ? "page" : undefined} title="Skrzynka"><Inbox aria-hidden="true" /><span>Skrzynka</span>{newInboxCount > 0 && <span className="nav-badge">{newInboxCount}<span className="sr-only"> nowych wpisów</span></span>}</Link>
         </nav>
         <div className="sidebar-bottom" ref={profileMenuRef}>
           {profileMenuOpen ? <div className="profile-popover" id="profile-menu" role="menu" aria-label="Opcje profilu">
-            <div className={`profile-menu-status ${error || freshnessError ? "error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? "Synchronizacja…" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
+            <div className={`profile-menu-status ${error || freshnessError ? "error" : ""}`}>{error || freshnessError ? <CloudOff /> : <Cloud />}<span><strong>{error ? "Błąd synchronizacji" : syncing ? mode === "demo" ? "Zapisywanie…" : "Synchronizacja…" : mode === "demo" ? "Zapisano na tym urządzeniu" : "Zsynchronizowano"}</strong><small>{mode === "demo" ? "Dane tylko w tej przeglądarce" : user?.email}</small></span></div>
             {mode === "supabase" ? <div className="profile-menu-freshness" data-testid="data-freshness"><small>{dataStatus}</small>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div> : null}
             {mode === "supabase" ? <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void reload().catch(() => undefined); }}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button> : null}
             {mode === "demo" ? <button role="menuitem" onClick={() => { resetDemo(); setProfileMenuOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
@@ -259,27 +282,32 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <header className="topbar">
         <div className="desktop-global-search"><GlobalSearch disabled={loadingView} /></div>
         <div className="top-actions">
-          <Button className="desktop-capture-button" disabled={loadingView} onClick={() => setCaptureOpen(true)}><Plus />Szybki zapis<kbd>⌘J</kbd></Button>
+          <Button className="desktop-capture-button" disabled={loadingView} onClick={() => setCaptureOpen(true)}><Plus />Szybki zapis<kbd>{isAppleKeyboard ? "⌘J" : "Ctrl+J"}</kbd></Button>
         </div>
       </header>
 
-      <main className="main-content">{error || freshnessError ? <div className="shell-sync-alert" role="status"><CloudOff /><span>{error ? "Nie udało się zsynchronizować zmian." : "Nie udało się odświeżyć danych."}</span><Button variant="ghost" onClick={() => void reload().catch(() => undefined)}>Spróbuj ponownie</Button></div> : null}{signOutError ? <p role="alert">{signOutError}</p> : null}{children}</main>
+      <main className="main-content" id="workspace-main" tabIndex={-1}>
+        <header className="mobile-shell-heading"><div className="mobile-brand"><CommandBrand /></div></header>
+        {error || freshnessError ? <div className="shell-sync-alert" role="status"><CloudOff /><span>{error ? "Nie udało się zsynchronizować zmian." : "Nie udało się odświeżyć danych."}</span><Button variant="ghost" onClick={() => void reload().catch(() => undefined)}>Spróbuj ponownie</Button></div> : null}
+        {signOutError && !profileCenterOpen ? <p role="alert">{signOutError}</p> : null}
+        {children}
+      </main>
       {aside && <aside className="context-rail">{aside}</aside>}
 
-      <nav className="bottom-nav" aria-label="Nawigacja mobilna" data-compact={mobileHeaderHidden || undefined}>
+      <nav className="bottom-nav" aria-label="Nawigacja mobilna" data-compact={(!aiReviewActive && mobileHeaderHidden) || undefined}>
         <NavLink to="/" end aria-label="Start">
           <CalendarDays aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Start</span>
         </NavLink>
         <NavLink to="/projects" aria-label="Projekty">
           <FolderKanban aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Projekty</span>
         </NavLink>
-        <Link to="/review?tab=ai" aria-label="Przegląd AI" aria-current={aiReviewActive ? "page" : undefined}>
-          <Sparkles aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">AI</span>
-        </Link>
+        <NavLink to="/knowledge" aria-label="Wiedza">
+          <Archive aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Wiedza</span>
+        </NavLink>
         <NavLink to="/actions" aria-label="Działania">
           <CheckSquare aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Działania</span>
         </NavLink>
-        <button type="button" className="mobile-more-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej">
+        <button type="button" className="mobile-more-trigger" disabled={loadingView} aria-disabled={loadingView || undefined} aria-current={moreActive ? "page" : undefined} aria-haspopup="dialog" aria-expanded={profileCenterOpen} onClick={() => setProfileCenterOpen(true)} aria-label="Otwórz menu Więcej">
           <Menu aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Więcej</span>
         </button>
         <span ref={mobileNavIndicator} className="bottom-nav-indicator" aria-hidden="true" />
@@ -287,35 +315,82 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
       <CreationDialog open={captureOpen} closeDisabled={captureSaving} title="Szybki zapis" className="quick-capture-modal" onClose={() => { if (!captureCloseGuard.current || captureCloseGuard.current()) setCaptureOpen(false); }}><QuickCapture onSavingChange={setCaptureSaving} closeGuard={captureCloseGuard} onClose={() => setCaptureOpen(false)} /></CreationDialog>
       {quickAddSession ? <Suspense fallback={<CreationDialog open={quickAddOpen} title="Dodaj" initialFocus="none" onClose={closeQuickAdd}><p role="status">Otwieranie formularza…</p></CreationDialog>}><QuickAdd key={quickAddSession} open={quickAddOpen} request={quickAddRequest} onClose={closeQuickAdd} /></Suspense> : null}
       <Modal open={mobileSearchOpen} title="Wyszukiwanie globalne" className="search-modal" backdropClassName="search-backdrop" initialFocus="input" exitDurationMs={160} onClose={() => setMobileSearchOpen(false)}><div className="mobile-global-search"><GlobalSearch visible={mobileSearchOpen} id="mobile-global-search" onNavigate={() => setMobileSearchOpen(false)} /></div></Modal>
-      <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="profile-center-modal"><div className="mobile-profile-center compact-more-panel">
-        <section className="mobile-more-overview" aria-label="Profil i stan przestrzeni pracy"><section className="mobile-profile-card" aria-label="Profil użytkownika"><Avatar className="avatar profile-center-avatar"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar><span><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>{error ? <CloudOff /> : <Cloud />}</section><div className={`mobile-workspace-status ${error ? "error" : ""}`}><span>{error ? <CloudOff /> : <Cloud />}{error ? "Wymaga uwagi" : syncing ? "Synchronizowanie…" : "Przestrzeń pracy aktualna"}</span><small>{mode === "demo" ? "Dane lokalne" : "Synchronizacja aktywna"}</small></div></section>
-        <section aria-labelledby="mobile-more-tools-heading"><h3 id="mobile-more-tools-heading" className="mobile-more-section-heading">Szybkie narzędzia</h3><div className="mobile-more-tools">
-          <button type="button" onClick={() => { setProfileCenterOpen(false); setMobileSearchOpen(true); }}><span><Search /></span><strong>Wyszukaj</strong><small>W całej przestrzeni pracy</small></button>
-          <button type="button" onClick={() => { setProfileCenterOpen(false); openQuickAdd(); }}><span><Plus /></span><strong>Dodaj dowolne</strong><small>Pełny wybór typów</small></button>
-        </div></section>
-        <section aria-labelledby="mobile-more-work-heading"><h3 id="mobile-more-work-heading" className="mobile-more-section-heading">Przestrzeń pracy</h3><nav className="mobile-more-grid" aria-label="Nawigacja pracy">
-          <NavLink to="/goals" onClick={() => setProfileCenterOpen(false)}><span><Flag /></span><span><strong>Grupy działań</strong><small>Aktywne rezultaty</small></span><b>{activeGoals}</b></NavLink>
-          <NavLink to="/knowledge" onClick={() => setProfileCenterOpen(false)}><span><Archive /></span><span><strong>Wiedza</strong><small>Materiały, notatki i decyzje</small></span></NavLink>
-          <NavLink to="/routines" onClick={() => setProfileCenterOpen(false)}><span><Repeat2 /></span><span><strong>Rutyny</strong><small>Aktywne serie</small></span><b>{activeRoutines}</b></NavLink>
-          <NavLink to="/knowledge?section=inbox" onClick={() => setProfileCenterOpen(false)}><span><Inbox /></span><span><strong>Skrzynka</strong><small>Ostatnie zapisy</small></span></NavLink>
-          <NavLink to="/review" onClick={() => setProfileCenterOpen(false)}><span><CalendarCheck /></span><span><strong>Podsumowanie</strong><small>Przegląd tygodnia</small></span></NavLink>
-          <NavLink to="/settings" onClick={() => setProfileCenterOpen(false)}><span><Settings /></span><span><strong>Ustawienia</strong><small>Zapis, przypomnienia i AI</small></span></NavLink>
-        </nav></section>
-        <section aria-labelledby="mobile-more-account-heading"><h3 id="mobile-more-account-heading" className="mobile-more-section-heading">Dane i konto</h3><div className="mobile-more-actions" aria-label="Akcje konta i danych">
-          {mode === "supabase" ? <><div className={`mobile-workspace-status ${freshnessError ? "error" : ""}`} data-testid="data-freshness"><span>{dataStatus}</span>{freshnessError ? <small>{dataFreshness.error}</small> : null}</div><button type="button" onClick={() => void reload().catch(() => undefined)}><RotateCcw /><span>{freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}</span></button></> : null}
-          <button type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}><Download /><span>{exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}</span></button>
-          {exportState === "error" ? <p className="inline-mutation-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p> : null}
-          {mode === "demo" ? <button type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}><RotateCcw /><span>Przywróć dane demo</span></button> : null}
-          {mode === "supabase" ? <button className="danger" type="button" onClick={leaveAccount}><LogOut /><span>Wyloguj się</span></button> : null}
-        </div></section>
-      </div></Sheet>
+      <Sheet open={profileCenterOpen} title="Więcej" onOpenChange={setProfileCenterOpen} className="mobile-more-sheet">
+        <div className="mobile-more-content">
+          <div className="mobile-more-tools" role="group" aria-label="Szybkie narzędzia">
+            <button type="button" onClick={() => { setProfileCenterOpen(false); setMobileSearchOpen(true); }}>
+              <Search aria-hidden="true" /> Wyszukaj
+            </button>
+            <button type="button" onClick={() => { setProfileCenterOpen(false); openQuickAdd(); }}>
+              <Plus aria-hidden="true" /> Dodaj
+            </button>
+          </div>
+
+          <section>
+            <h3 id="mobile-more-work-heading">Przestrzeń pracy</h3>
+            <nav className="mobile-more-group" aria-labelledby="mobile-more-work-heading">
+              {moreWorkspaceLinks.map(({ path, label, description, icon: Icon }) => {
+                const current = matchPath({ path, end: false }, location.pathname);
+                const count = path === "/goals" ? activeGoals : path === "/routines" ? activeRoutines : undefined;
+                return (
+                  <Link key={path} className="mobile-more-row" to={path} aria-current={current ? "page" : undefined} onClick={() => setProfileCenterOpen(false)}>
+                    <span className="mobile-more-icon"><Icon aria-hidden="true" /></span>
+                    <span className="mobile-more-copy"><strong>{label}</strong><small>{description}</small></span>
+                    {count !== undefined && <span className="mobile-more-count">{count}<span className="sr-only">{path === "/goals" ? " aktywnych grup" : " aktywnych rutyn"}</span></span>}
+                    <ChevronRight className="mobile-more-chevron" aria-hidden="true" />
+                  </Link>
+                );
+              })}
+            </nav>
+          </section>
+
+          <section aria-labelledby="mobile-more-account-heading">
+            <h3 id="mobile-more-account-heading">Konto i dane</h3>
+            <div className="mobile-more-group">
+              <div className="mobile-more-profile">
+                <Avatar className="avatar" aria-hidden="true"><AvatarFallback className="bg-transparent text-inherit">{initials}</AvatarFallback></Avatar>
+                <span className="mobile-more-copy"><strong>{user?.name}</strong><small>{mode === "demo" ? "Tryb demonstracyjny" : user?.email}</small></span>
+              </div>
+              {mode === "supabase" && (
+                <div className="mobile-more-status" data-error={Boolean(error || freshnessError)} data-testid="data-freshness" role="status">
+                  {error || freshnessError ? <CloudOff aria-hidden="true" /> : <Cloud aria-hidden="true" />}
+                  <span className="mobile-more-copy">
+                    <strong>{error ? "Błąd synchronizacji" : syncing && !freshnessError ? "Synchronizowanie…" : dataStatus}</strong>
+                    {error && freshnessError && <small>{dataStatus}</small>}
+                    {freshnessError && dataFreshness.error && <small>{dataFreshness.error}</small>}
+                  </span>
+                </div>
+              )}
+              <NavLink className="mobile-more-row" to="/settings" onClick={() => setProfileCenterOpen(false)}>
+                <Settings aria-hidden="true" /> <span>Ustawienia</span><ChevronRight className="mobile-more-chevron" aria-hidden="true" />
+              </NavLink>
+              {mode === "supabase" && (
+                <button className="mobile-more-row" type="button" disabled={dataFreshness.status === "refreshing"} onClick={() => void reload().catch(() => undefined)}>
+                  <RotateCcw aria-hidden="true" /> {freshnessError || error ? "Spróbuj ponownie" : "Odśwież dane"}
+                </button>
+              )}
+              <button className="mobile-more-row" type="button" disabled={exportState === "loading"} onClick={() => void downloadExport()}>
+                <Download aria-hidden="true" /> {exportState === "loading" ? "Eksportowanie…" : "Eksport danych"}
+              </button>
+              {exportState === "error" && <p className="mobile-more-error" role="alert">Nie udało się wyeksportować danych. Spróbuj ponownie.</p>}
+              {mode === "demo" && (
+                <button className="mobile-more-row" type="button" onClick={() => { resetDemo(); setProfileCenterOpen(false); }}>
+                  <RotateCcw aria-hidden="true" /> Przywróć dane demo
+                </button>
+              )}
+              {mode === "supabase" && (
+                <button className="mobile-more-row mobile-more-sign-out" type="button" onClick={leaveAccount}>
+                  <LogOut aria-hidden="true" /> Wyloguj się
+                </button>
+              )}
+              {signOutError && <p className="mobile-more-error" role="alert">{signOutError}</p>}
+            </div>
+          </section>
+        </div>
+      </Sheet>
     </div>
     </PageActionsContext.Provider>
   );
-}
-
-function CommandBrand({ compact = false }: { compact?: boolean }) {
-  return <><span className="brand-mark"><TerminalSquare aria-hidden="true" /></span>{compact ? null : <span>Command</span>}</>;
 }
 
 export function PageActions({ children }: { children?: ReactNode }) {
@@ -323,7 +398,7 @@ export function PageActions({ children }: { children?: ReactNode }) {
   return <div className="page-actions">{children}{add}</div>;
 }
 
-export function PageHeading({ title, eyebrow, action, className = "" }: { title: string; eyebrow?: string; action?: ReactNode; className?: string }) {
+export function PageHeading({ title, eyebrow, context, action, className = "" }: { title?: string; eyebrow?: string; context?: ReactNode; action?: ReactNode; className?: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchPanelRef = useRef<HTMLDivElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
@@ -351,16 +426,16 @@ export function PageHeading({ title, eyebrow, action, className = "" }: { title:
   };
 
   return (
-    <div className={`page-heading ${className}${searchOpen ? " is-search-open" : ""}`.trim()}>
+    <div className={`page-heading ${className}${context ? " page-heading-with-context" : ""}${searchOpen ? " is-search-open" : ""}`.trim()}>
       <div className="page-heading-copy">
-        <h1>{title}</h1>
-        <div className="mobile-brand" aria-hidden="true"><CommandBrand compact={searchOpen} /></div>
+        {title && <h1>{title}</h1>}
+        <div className="mobile-brand"><CommandBrand compact={searchOpen} /></div>
         {eyebrow && !searchOpen && <span className="eyebrow">{eyebrow}</span>}
       </div>
       {searchOpen ? <div ref={searchPanelRef} id="page-inline-search-panel" className="page-inline-search" role="search" aria-label="Wyszukiwanie globalne" onBlur={(event) => {
         if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
       }} onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
+        if (event.key !== "Escape" || event.defaultPrevented) return;
         event.stopPropagation();
         closeSearch();
       }}>
@@ -370,8 +445,9 @@ export function PageHeading({ title, eyebrow, action, className = "" }: { title:
         <PageActions>
           <button ref={searchTriggerRef} id="page-inline-search-trigger" type="button" className="icon-button page-search-button" aria-label="Otwórz wyszukiwanie" onClick={() => setSearchOpen(true)}><Search aria-hidden="true" /></button>
         </PageActions>
-        {action ? <div className="page-heading-secondary">{action}</div> : null}
       </>}
+      {context ? <div className="page-heading-context">{context}</div> : null}
+      {action && !searchOpen ? <div className="page-heading-secondary">{action}</div> : null}
     </div>
   );
 }

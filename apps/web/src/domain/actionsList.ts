@@ -1,5 +1,6 @@
 import type { AppState, GoalAction } from "./types";
 import { isActionInTodayProjection, localDateForTimeZone } from "./activity";
+import { actionStatusLabels } from "./labels";
 import { isWaitingAction } from "./blockerReview";
 
 export const actionListViews = ["open", "ready", "in_progress", "testing", "blocked", "waiting", "completed", "cancelled", "skipped", "today", "overdue", "unscheduled"] as const;
@@ -15,17 +16,11 @@ export interface ActionListFilter {
 
 export const actionListViewLabels: Record<ActionListView, string> = {
   open: "Otwarte",
-  ready: "Do zrobienia",
-  in_progress: "W toku",
-  testing: "Testowanie",
+  ...actionStatusLabels,
   today: "Na dziś",
   overdue: "Zaległe",
   unscheduled: "Bez terminu",
-  blocked: "Zablokowane",
   waiting: "Oczekujące",
-  completed: "Ukończone",
-  cancelled: "Anulowane",
-  skipped: "Pominięte",
 };
 
 export const actionListViewValues = actionListViews;

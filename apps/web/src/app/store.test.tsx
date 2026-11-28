@@ -22,7 +22,7 @@ const repository = vi.hoisted(() => ({
   decideAIProposalRemote: vi.fn(), completeReviewRemote: vi.fn(), createProjectRemote: vi.fn(),
   createGoalRemote: vi.fn(), createLearningGoalRemote: vi.fn(), exportWorkspaceRemote: vi.fn(), setEntityVisibilityRemote: vi.fn(),
   setInboxStatusRemote: vi.fn(), releaseDueInboxItemsRemote: vi.fn(), setCommitmentStatusRemote: vi.fn(), setLearningGoalStatusRemote: vi.fn(),
-  recordActionResultRemote: vi.fn()
+  recordActionResultRemote: vi.fn(), updateActionRemote: vi.fn()
 }));
 vi.mock("../data/supabaseRepository", () => repository);
 const goalReviewRepository = vi.hoisted(() => ({
@@ -128,6 +128,25 @@ describe("StoreProvider", () => {
     expect(screen.getByTestId("result-progress")).toHaveTextContent("Rezultat: Rezultat działania");
     expect(screen.getByTestId("result-action-status")).toHaveTextContent("completed");
     expect(screen.getByTestId("result-outcome")).not.toHaveTextContent("action_not_found");
+  });
+
+  it("aktualizuje przypisanie historycznego Działania i jego szczegóły po zapisie", async () => {
+    const action = { ...demoState.actions[0]!, id: "historical-edit", status: "completed", version: 7 };
+    const changes = { areaId: null, goalId: null };
+    goalReviewRepository.loadAction.mockResolvedValue(action);
+    repository.updateActionRemote.mockResolvedValue(undefined);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function HistoricalEditor() {
+      const { updateAction } = useStore();
+      return <button onClick={() => void updateAction(action.id, changes, action.version)}>Zdejmij przypisanie</button>;
+    }
+    renderStore(<HistoricalEditor />, auth, client);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Zdejmij przypisanie" }));
+    await waitFor(() => expect(client.getQueryData(["workspace-action", "supabase", "workspace-1", action.id])).toMatchObject({
+      id: action.id, status: "completed", version: 8, areaId: undefined, goalId: undefined,
+    }));
+    expect(goalReviewRepository.loadAction).toHaveBeenCalledWith(action.id, "workspace-1");
+    expect(repository.updateActionRemote).toHaveBeenCalledWith(action.id, 7, changes);
   });
 
   it("utrzymuje zapis rezultatu podczas odświeżenia strony bez tego Działania", async () => {

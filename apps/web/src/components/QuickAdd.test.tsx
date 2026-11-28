@@ -450,8 +450,8 @@ describe("Dodaj — formularze i kontekst", () => {
     await switchType(user, "Projekt");
     expect(screen.getByText("Nowy samodzielny Projekt")).toBeInTheDocument();
     await switchType(user, "Działanie");
-    await user.click(screen.getByText("Powiązania i opcje"));
-    expect(screen.getByLabelText("Grupa działań lub Projekt")).toHaveValue("goal:goal");
+    await user.click(screen.getByText("Projekt, grupa i przypięcie"));
+    expect(screen.getByLabelText("Grupa działań")).toHaveValue("goal");
     expect(screen.getByRole("radio", { name: "Dzisiaj" })).toBeChecked();
     expect(screen.queryByLabelText(/Dokładna data/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Jutro" }));
@@ -462,7 +462,7 @@ describe("Dodaj — formularze i kontekst", () => {
     const user = userEvent.setup();
     const customDate = shiftActionDate(workspaceToday(), 16);
     render(<QuickAdd open request={{ mode: "action", scheduledFor: customDate, pinnedToToday: true }} onClose={vi.fn()} />);
-    await user.click(screen.getByText("Powiązania i opcje"));
+    await user.click(screen.getByText("Projekt, grupa i przypięcie"));
     expect(screen.getByRole("radio", { name: "Inna data" })).toBeChecked();
     expect(screen.getByLabelText(/Dokładna data/)).toHaveValue(customDate);
     await user.click(screen.getByRole("radio", { name: "Bez terminu" }));
@@ -527,14 +527,14 @@ describe("Dodaj — formularze i kontekst", () => {
     expect(screen.queryByText(/^Typ:/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Treść notatki"), "Zachowaj tę treść");
     await user.click(screen.getByRole("radio", { name: /^Materiał/ }));
-    await user.type(screen.getByLabelText(/Link HTTP/), "https://example.com");
+    await user.type(screen.getByLabelText("Link opcjonalnie"), "https://example.com");
     await user.click(screen.getByRole("radio", { name: /^Decyzja/ }));
     expect(screen.getByLabelText("Co zostało zdecydowane?")).toHaveValue("");
     expect(screen.getByLabelText("Uzasadnienie i konsekwencje")).toBeRequired();
     expect(screen.getByLabelText("Uzasadnienie i konsekwencje")).toHaveValue("Zachowaj tę treść");
-    expect(screen.queryByLabelText(/Link HTTP/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Link opcjonalnie")).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /^Materiał/ }));
-    expect(screen.getByLabelText(/Link HTTP/)).toHaveValue("https://example.com");
+    expect(screen.getByLabelText("Link opcjonalnie")).toHaveValue("https://example.com");
     await user.click(screen.getByRole("button", { name: "Zmień typ wpisu" }));
     await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Zmień typ wpisu" })).toHaveAttribute("aria-expanded", "false");

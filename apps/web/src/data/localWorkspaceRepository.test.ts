@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { emptyState } from "./empty";
+import { demoState } from "./demo";
+import { ensureGoalModel, migrateLegacyWorkspaceState } from "../domain/goals";
 import { createLocalWorkspaceRepository } from "./localWorkspaceRepository";
 import type { GoalAction } from "../domain/types";
 
 describe("lokalne repozytorium Workspace", () => {
+  it("zachowuje oryginalne przykłady demo przy ponownym odczycie i w wyszukiwaniu", async () => {
+    const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
+    const oldDemo = migrateLegacyWorkspaceState(ensureGoalModel(structuredClone(demoState)));
+    await repository.save(oldDemo);
+
+    const restored = await repository.load();
+    expect(restored?.areas).toHaveLength(5);
+    expect(restored?.goals).toHaveLength(5);
+    expect(restored?.actions).toHaveLength(8);
+    await expect(repository.search("FinTrack")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "fintrack-api", type: "project" }),
+      expect.objectContaining({ id: "fintrack-api", type: "goal" }),
+    ]));
+  });
+
   it("utrwala wersjonowany stan i wykonuje przez ten sam interfejs komendy domenowe", async () => {
     const repository = createLocalWorkspaceRepository({ indexedDb: undefined, storage: localStorage });
     await repository.save(structuredClone(emptyState));

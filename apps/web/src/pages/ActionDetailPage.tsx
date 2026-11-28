@@ -1,4 +1,4 @@
-import { actionGroupAssignment } from "../domain/actionGroups";
+import { actionGroupAssignment, actionProjectId } from "../domain/actionGroups";
 import { AIContextExport } from "../components/AIContextExport";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
 import "./focus-detail.css";
@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
-import { AppShell } from "../components/AppShell";
+import { AppShell, PageHeading } from "../components/AppShell";
 import { actionStatusFeedbackEvent, useActionFeedback } from "../components/action-feedback-context";
 import { Button, EmptyState } from "../components/ui";
 import { actionStatusLabels } from "../domain/labels";
@@ -22,6 +22,8 @@ import { createSupabaseWorkspaceRepository } from "../data/supabaseWorkspaceRepo
 import { ActionStatusDialog, type ProjectActionStatus } from "../components/ActionStatusControls";
 import { ActionSignals } from "../components/ActionSignals";
 import { ActionEditDialog, type ActionEditValue } from "../components/ActionEditDialog";
+import { ActionChecklist } from "../components/ActionChecklist";
+import { setStartPinWithUndo } from "../components/setStartPinWithUndo";
 import { localDateForTimeZone } from "../domain/activity";
 import { resolveRoutineTitle } from "../domain/actionPresentation";
 
@@ -36,20 +38,15 @@ export function ActionDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const actionQuery = useQuery({
     queryKey: ["workspace-action", mode, state.workspaceId, actionId],
-    enabled: mode === "supabase" && !loading && Boolean(actionId) && !state.actions.some((candidate) => candidate.id === actionId),
-    queryFn: () => createSupabaseWorkspaceRepository().loadAction(actionId!),
+    enabled: mode === "supabase" && !loading && Boolean(actionId && state.workspaceId) && !state.actions.some((candidate) => candidate.id === actionId),
+    queryFn: () => createSupabaseWorkspaceRepository().loadAction(actionId!, state.workspaceId),
   });
   const action = state.actions.find((candidate) => candidate.id === actionId) ?? actionQuery.data;
-  if (!action && actionQuery.isPending) return <AppShell><div role="status" className="app-loading">Ładowanie Działania…</div></AppShell>;
-  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Mogło zostać usunięte, przeniesione do grupy albo należy do innej przestrzeni pracy." action={<Link className="button button-primary" to="/">Wróć do Startu</Link>} /></AppShell>;
+  if (!action && (loading || actionQuery.isFetching)) return <AppShell><div role="status" className="app-loading">Ładowanie Działania…</div></AppShell>;
+  if (!action && actionQuery.isError) return <AppShell><EmptyState icon={<CalendarDays />} title="Nie udało się wczytać Działania" detail="Sprawdź połączenie i ponów odczyt." action={<Button onClick={() => void actionQuery.refetch()}>Spróbuj ponownie</Button>} /></AppShell>;
+  if (!action) return <AppShell><EmptyState icon={<CalendarDays />} title="Działanie jest niedostępne" detail="Sprawdź, czy adres jest aktualny i czy Działanie należy do tej przestrzeni pracy." action={<Link className="button button-primary" to="/actions">Wróć do Działań</Link>} /></AppShell>;
   const pinKey = `action-detail:${action.id}`;
-  const changePin = async () => {
-    const previous = action.pinnedToToday;
-    await mutation.run(pinKey, async () => {
-      await updateAction(action.id, { pinnedToToday: !previous });
-      notifyUndo({ message: previous ? "Działanie odpięte od Startu." : "Działanie przypięte do Startu.", undo: () => updateAction(action.id, { pinnedToToday: previous }) });
-    });
-  };
+  const changePin = () => mutation.run(pinKey, () => setStartPinWithUndo(action, !action.pinnedToToday, updateAction, notifyUndo));
   const statusKey = `action-detail-status:${action.id}`;
   const changeStatus = (status: ProjectActionStatus, blocker?: string, reviewOn?: string | null) => mutation.run(statusKey, async () => {
     if (status === "completed") {
@@ -69,17 +66,19 @@ export function ActionDetailPage() {
   });
   const editKey = `action-detail-edit:${action.id}`;
   const saveEdit = (value: ActionEditValue, expectedVersion?: number) => mutation.run(editKey, async () => {
-    await updateAction(action.id, { ...actionGroupAssignment(state, action, value.goalId), title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion);
+    await updateAction(action.id, { ...actionGroupAssignment(state, action, value.areaId, value.goalId), title: value.title, detail: value.detail, scheduledFor: value.scheduledFor || null, checklist: value.checklist }, expectedVersion);
     notifySuccess("Zapisano zmiany w Działaniu.");
   });
   const today = localDateForTimeZone(new Date(), state.workspaceTimezone);
 
   const context = resolveActionContext(action, state);
   const incomingNavigation = readNavigationState(location.state);
-  const project = action.areaId ? state.areas.find((candidate) => candidate.id === action.areaId) : state.areas.find((candidate) => incomingNavigation?.returnTo.startsWith(`/projects/${encodeURIComponent(candidate.id)}`));
-  const projectName = project?.name ?? (incomingNavigation?.returnLabel.startsWith("Projekt:") ? incomingNavigation.returnLabel.slice("Projekt:".length).trim() : undefined);
+  const projectId = actionProjectId(state, action);
+  const project = projectId ? state.areas.find((candidate) => candidate.id === projectId) : undefined;
+  const returnProjectPath = projectId ? `/projects/${encodeURIComponent(projectId)}` : undefined;
+  const projectName = project?.name ?? (returnProjectPath && incomingNavigation?.returnTo.split(/[?#]/, 1)[0] === returnProjectPath && incomingNavigation.returnLabel.startsWith("Projekt:") ? incomingNavigation.returnLabel.slice("Projekt:".length).trim() : undefined);
   const fallbackBreadcrumbs: NavigationBreadcrumb[] = context.kind === "goal"
-    ? [{ label: "Grupy działań", to: "/goals" }, ...(projectName ? [{ label: projectName, to: project ? `/projects/${encodeURIComponent(project.id)}` : incomingNavigation?.returnTo }] : []), { label: `Grupa: ${context.name}`, to: context.to }]
+    ? [{ label: "Grupy działań", to: "/goals" }, ...(projectName ? [{ label: projectName, to: returnProjectPath }] : []), { label: `Grupa: ${context.name}`, to: context.to }]
     : context.kind === "project" && projectName ? [{ label: "Projekty", to: "/projects" }, { label: projectName, to: context.to }]
       : [{ label: "Start", to: "/" }];
   const actionRoute = `/actions/${encodeURIComponent(action.id)}`;
@@ -88,16 +87,15 @@ export function ActionDetailPage() {
   const parentLabel = context.kind === "goal" ? "Grupa działań" : context.kind === "project" ? "Projekt" : undefined;
   const returnTo = incomingNavigation?.returnTo ?? readNavigationBreadcrumbs(location.state)?.at(-2)?.to ?? context.to;
   const returningToParent = returnTo.split(/[?#]/, 1)[0] === context.to;
-  const parentInBreadcrumbs = breadcrumbs.slice(-4, -1).some((breadcrumb) => breadcrumb.to?.split(/[?#]/, 1)[0] === context.to);
+  const parentInBreadcrumbs = breadcrumbs.slice(-3, -1).some((breadcrumb) => breadcrumb.to?.split(/[?#]/, 1)[0] === context.to);
   const blocked = action.status === "blocked";
   const openEditor = () => setEditOpen(true);
 
-  return <AppShell appearance="focus-detail">
-    <div className="action-detail-page">
-      <div className="action-detail-toolbar">
-        <ContextNavigation current={currentBreadcrumb} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={context.to} fallbackReturnLabel={parentLabel && context.name ? context.name : "Start"} showBack />
-        <div className="action-heading-tools">
-          <Button variant="ghost" onClick={openEditor}><Pencil aria-hidden="true" />Edytuj</Button>
+  return <AppShell appearance="focus-detail" addAction={{ label: "Dodaj", ariaLabel: "Dodaj" }}>
+    <PageHeading className="action-detail-toolbar"
+      context={<ContextNavigation current={{ label: action.title, to: actionRoute }} fallbackBreadcrumbs={fallbackBreadcrumbs} fallbackReturnTo={context.to} fallbackReturnLabel={parentLabel && context.name ? context.name : "Start"} showBack="outside-trail" includeCurrent />}
+      action={<div className="action-heading-tools">
+          <Button variant="ghost" className="action-heading-edit" aria-label="Edytuj" onClick={openEditor}><Pencil aria-hidden="true" /><span>Edytuj</span></Button>
           <details className="detail-tools-menu">
             <summary aria-label="Więcej opcji Działania"><MoreHorizontal aria-hidden="true" /></summary>
             <div>
@@ -115,11 +113,12 @@ export function ActionDetailPage() {
               <AIContextExport target={{ type: "action", id: action.id }} />
             </div>
           </details>
-        </div>
-      </div>
+        </div>}
+    />
+    <div className="action-detail-page">
       <header className="action-detail-header">
         <h1>{action.title}</h1>
-        {parentLabel && context.name && !(returningToParent && parentInBreadcrumbs) ? <NavigationLink aria-label={`${parentLabel}: ${context.name}`} className="action-parent-link" data-hide-mobile={returningToParent || undefined} data-hide-desktop={parentInBreadcrumbs || undefined} to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={currentBreadcrumb.label}>
+        {parentLabel && context.name && !parentInBreadcrumbs ? <NavigationLink aria-label={`${parentLabel}: ${context.name}`} className="action-parent-link" data-hide-mobile={returningToParent || undefined} to={context.to} breadcrumbs={breadcrumbs} returnTo={locationAddress(location)} returnLabel={currentBreadcrumb.label}>
           {context.kind === "goal" ? <Flag aria-hidden="true" /> : <FolderKanban aria-hidden="true" />}
           <span>{context.name}</span>
         </NavigationLink> : null}
@@ -141,15 +140,19 @@ export function ActionDetailPage() {
             <h2 id="action-description-title">Opis</h2>
             {action.detail ? <p>{action.detail}</p> : <Button variant="ghost" onClick={openEditor}>Dodaj opis</Button>}
           </section>
+          {action.checklist.length ? <section className="action-checklist-block" aria-labelledby="action-checklist-title">
+            <h2 id="action-checklist-title">Lista kroków</h2>
+            <ActionChecklist key={action.id} action={action} busy={mutation.isBusy(statusKey) || mutation.isBusy(editKey)} />
+          </section> : null}
         </div>
         <aside className="action-detail-aside">
           <ActionKnowledgeRelations action={action} variant="detail" onAddResult={() => setResultOpen(true)} navigation={{ breadcrumbs, returnTo: locationAddress(location), returnLabel: currentBreadcrumb.label }} />
-          <KnowledgeSuggestions projectId={action.areaId ?? state.goals.find((goal) => goal.id === action.goalId)?.areaId} target={{ actionId: action.id }} />
+          <KnowledgeSuggestions projectId={projectId} target={{ actionId: action.id }} />
         </aside>
       </div>
     </div>
     <ActionStatusDialog action={action} open={Boolean(statusView)} initialView={statusView} busy={mutation.isBusy(statusKey)} error={mutation.error(statusKey)} onClose={() => setStatusView(undefined)} onChange={changeStatus} />
-    <ActionEditDialog action={action} open={editOpen} busy={mutation.isBusy(editKey)} error={mutation.error(editKey)} onClose={() => setEditOpen(false)} onSave={saveEdit} />
+    {editOpen && <ActionEditDialog key={action.id} action={action} open busy={mutation.isBusy(editKey)} error={mutation.error(editKey)} onClose={() => setEditOpen(false)} onSave={saveEdit} />}
     <ActionResultDialog action={action} open={resultOpen} onClose={() => setResultOpen(false)} />
   </AppShell>;
 }

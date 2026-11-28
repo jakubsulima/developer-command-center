@@ -15,13 +15,13 @@ import { requestAppQuickAdd } from "../components/appQuickAddRequest";
 import { useQuery } from "@tanstack/react-query";
 import { getSupabase } from "../lib/supabase";
 import { KnowledgeSuggestions } from "../components/KnowledgeSuggestions";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlarmClock, Archive, Check, File, Flag, Inbox, Link2, ListPlus, Mic, RotateCcw, Sparkles, TextCursorInput, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { AlarmClock, Archive, Check, File, Flag, Inbox, Link2, ListPlus, Mic, MoreHorizontal, RotateCcw, Sparkles, TextCursorInput, Trash2 } from "lucide-react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useStore } from "../app/useStore";
 import { Modal } from "../components/Modal";
 import { useActionFeedback } from "../components/action-feedback-context";
-import { Badge, Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
+import { Button, EmptyState, ListSkeleton, Panel } from "../components/ui";
 import type { GoalKind, InboxItem, InboxKind, ReadingStatus } from "../domain/types";
 import { tomorrowAtLocalTime } from "../domain/inbox";
 import { useKeyedMutation } from "../hooks/useKeyedMutation";
@@ -35,11 +35,16 @@ import { KnowledgeNoteFields } from "../components/KnowledgeNoteFields";
 import { DraftStatus } from "../components/DraftStatus";
 import { usePersistentDraft } from "../hooks/usePersistentDraft";
 import { prepareKnowledgeNote } from "../domain/knowledgeNote";
+import { routeForEntity } from "../domain/routes";
+import { inboxStatusLabels } from "../domain/labels";
+import { safeHttpUrl } from "../domain/http-url";
+import "./knowledge-workspace.css";
 
 const modes: Array<{ id: InboxKind; label: string; icon: typeof TextCursorInput }> = [
   { id: "text", label: "Tekst", icon: TextCursorInput }, { id: "link", label: "Link", icon: Link2 }
 ];
 const legacyModes = [...modes, { id: "voice" as const, label: "Głos (historyczny)", icon: Mic }, { id: "file" as const, label: "Plik (historyczny)", icon: File }];
+const inboxViews = ["unprocessed", "snoozed", "resolved", "discarded"] as const;
 type Intent = "goal" | "action" | "knowledge";
 type InboxNoteDraft = { sourceBookId?: string; title: string; detail: string; goalId: string; projectId: string; idempotencyKey: string };
 
@@ -54,7 +59,7 @@ export function KnowledgeInbox() {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const handledRequestRef = useRef<string | null>(null);
   const [batchLeft, setBatchLeft] = useState(0);
-  const [finished, setFinished] = useState(false);
+  const [finished, setFinished] = useState<CreationReceipt>();
   const triageInitial = useMemo(() => ({ groupType: "category" as "category" | "task", title: item?.content.slice(0, 100) ?? "", outcome: "", firstAction: "", detail: item?.content ?? "", goalId: "", areaId: "", projectId: "", targetDate: "", pin: false, knowledgeKind: item?.kind === "link" ? "resource" as CreatableKnowledgeKind : "note" as CreatableKnowledgeKind, isBook: false, resourceAuthor: "", readingStatus: "to_read" as ReadingStatus, goalKind: "custom" as GoalKind, goalTemplateId: "", goalCriteria: "", intent: undefined as Intent | undefined, receipt: undefined as CreationReceipt | undefined }), [item?.content, item?.kind]);
   const formDraft = usePersistentDraft("inbox-triage", triageInitial, 250, { targetId: item?.id ?? "none", enabled: Boolean(item) });
   const form = formDraft.value;
@@ -81,7 +86,7 @@ export function KnowledgeInbox() {
   const captureOpen = searchParams.get("capture") === "true";
   useEffect(() => { if (!captureOpen) return; const next = new URLSearchParams(searchParams); next.delete("capture"); setSearchParams(next, { replace: true }); requestAppQuickAdd({ mode: "inbox", draftKey: "knowledge-inbox" }); }, [captureOpen, searchParams, setSearchParams]);
   useEffect(() => {
-    if (!["unprocessed", "snoozed", "resolved", "discarded"].includes(view)) {
+    if (!inboxViews.includes(view)) {
       const next = new URLSearchParams(searchParams); next.set("status", "unprocessed"); setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams, view]);
@@ -101,16 +106,25 @@ export function KnowledgeInbox() {
     }
   });
   const requested = state.inbox.find((entry) => entry.id === requestedId) ?? selectedQuery.data;
+  useEffect(() => {
+    if (item || finished || !requested || requested.status === view) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("status", requested.status);
+    next.delete("organize");
+    setSearchParams(next, { replace: true });
+  }, [finished, item, requested, searchParams, setSearchParams, view]);
   const dismissPreview = () => { const next = new URLSearchParams(searchParams); next.delete("item"); next.delete("organize"); setSearchParams(next, { replace: desktop }); };
   const inboxItems = mergePagedItems(state.inbox, inboxPage.data?.items ?? []);
   const visible = inboxItems.filter((candidate) => candidate.status === view).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+  const initialInboxLoad = (loading || inboxPage.isPending) && !inboxPage.data && !visible.length;
+  const refreshingInbox = !initialInboxLoad && (loading || (inboxPage.isFetching && !inboxPage.isFetchingNextPage));
   const open = useCallback((candidate: InboxItem) => {
     if (busyRef.current || aiLoading) return false;
     if (!flushForm() || !flushNote()) {
       setError("Nie udało się zapisać szkicu na tym urządzeniu. Ponów zapis albo skopiuj treść przed zmianą wpisu.");
       return false;
     }
-    setFinished(false);
+    setFinished(undefined);
     recordFirstFlowStage("triage-started");
     setNoteProposalConflict(false);
     setItem(candidate); setError(""); setAIProposal(undefined); setAIError("");
@@ -137,7 +151,7 @@ export function KnowledgeInbox() {
       return false;
     }
     setItem(undefined);
-    setFinished(false);
+    setFinished(undefined);
     if (requestedId) dismissPreview();
     if (desktop && !confirmed) {
       const selectedId = item?.id ?? requestedId;
@@ -161,6 +175,25 @@ export function KnowledgeInbox() {
     setSearchParams(next, { replace: true });
     return true;
   };
+  const completeProcessing = (result: CreationReceipt) => {
+    close(true);
+    setFinished(result);
+    setBatchLeft((count) => Math.max(0, count - 1));
+  };
+  const inboxAddress = (id: string, status: InboxItem["status"]) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("section", "inbox");
+    next.set("status", status);
+    next.set("item", id);
+    next.delete("organize");
+    next.delete("capture");
+    return `/knowledge?${next}`;
+  };
+  const resultReceipt = (source: InboxItem, message: string): CreationReceipt => ({
+    id: source.id,
+    url: inboxAddress(source.id, "resolved"),
+    message: `Zapisano. ${message}`
+  });
   const backToDecision = () => {
     if (intent === "knowledge" && form.knowledgeKind === "note" && !noteDraft.flush()) {
       setError("Nie udało się zapisać szkicu na tym urządzeniu. Skopiuj treść albo ponów zapis szkicu przed zmianą widoku.");
@@ -207,15 +240,21 @@ export function KnowledgeInbox() {
       if (suggestion.decision === "goal") await triageInboxIntent(item.id, { kind: "goal", groupType: "task", title: suggestion.title!, outcome: suggestion.detail!, areaId: projectId, targetDate: suggestion.targetDate ?? undefined });
       if (suggestion.decision === "action") await triageInboxIntent(item.id, { kind: "action", title: suggestion.title!, detail: suggestion.detail ?? undefined, goalId, areaId: projectId, targetDate: suggestion.targetDate ?? undefined });
       if (suggestion.decision === "knowledge") await triageInboxIntent(item.id, { kind: "knowledge", knowledgeKind: suggestion.knowledgeKind!, title: suggestion.title!, detail: suggestion.detail ?? "", goalId, projectId, sourceUrl: item.kind === "link" ? item.content : undefined });
-      completion.remember({ id: item.id, url: `/knowledge?section=inbox&status=resolved&item=${item.id}`, message: "Zapisano." });
+      const label = suggestion.decision === "goal" ? "Grupa działań" : suggestion.decision === "action" ? "Działanie" : knowledgeKindGuidance[suggestion.knowledgeKind!].label;
+      const result = resultReceipt(item, `${label} · ${suggestion.title}`);
+      completion.remember(result);
       if (!completion.finish(formDraft.clear)) { setError("Zapis potwierdzony. Usuń zapisany szkic."); return; }
-      close(true); setFinished(true); setBatchLeft((count) => Math.max(0, count - 1));
+      completeProcessing(result);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Nie udało się zatwierdzić propozycji."); }
     finally { busyRef.current = false; setSaving(false); }
   };
   const finish = async () => {
     if (!item || busyRef.current) return;
-    if (completion.receipt) { if (completion.finish(() => formDraft.clear() && noteDraft.clear())) { close(true); setFinished(true); setBatchLeft((count) => Math.max(0, count - 1)); } return; }
+    const receipt = completion.receipt;
+    if (receipt) {
+      if (completion.finish(() => formDraft.clear() && noteDraft.clear())) completeProcessing(receipt);
+      return;
+    }
     if (!intent) return;
     const contextGoalId = intent === "knowledge" && form.knowledgeKind === "note" ? noteDraft.value.goalId : intent === "goal" ? "" : form.goalId;
     const contextProjectId = intent === "knowledge" ? form.knowledgeKind === "note" ? noteDraft.value.projectId : form.projectId : form.areaId;
@@ -229,18 +268,19 @@ export function KnowledgeInbox() {
     setSaving(true); setError("");
     const snapshot = structuredClone(form);
     try {
+      const note = intent === "knowledge" && snapshot.knowledgeKind === "note" ? prepareKnowledgeNote(noteDraft.value.detail, noteDraft.value.title) : undefined;
       if (intent === "goal") await triageInboxIntent(item.id, { kind: "goal", title: snapshot.title, outcome: snapshot.outcome.trim(), groupType: actionGroupType(snapshot), goalKind: snapshot.goalKind, templateId: actionGroupType(snapshot) === "task" ? snapshot.goalTemplateId || undefined : undefined, criteria: actionGroupType(snapshot) === "task" ? snapshot.goalCriteria.split("\n").map((value) => value.trim()).filter(Boolean) : [], firstActionTitle: snapshot.firstAction || undefined, areaId: snapshot.areaId || undefined, targetDate: actionGroupType(snapshot) === "task" ? snapshot.targetDate || undefined : undefined });
       if (intent === "action") await triageInboxIntent(item.id, { kind: "action", title: snapshot.title, detail: snapshot.detail, goalId: snapshot.goalId || undefined, areaId: snapshot.areaId || undefined, pinnedToToday: snapshot.pin, targetDate: snapshot.targetDate || undefined });
-      if (intent === "knowledge" && snapshot.knowledgeKind === "note") {
-        const note = prepareKnowledgeNote(noteDraft.value.detail, noteDraft.value.title);
+      if (note) {
         await triageInboxIntent(item.id, { kind: "knowledge", knowledgeKind: "note", title: note.title, detail: note.detail, goalId: noteDraft.value.goalId || undefined, projectId: noteDraft.value.projectId || undefined, sourceBookId: noteDraft.value.sourceBookId });
-
       }
       if (intent === "knowledge" && snapshot.knowledgeKind !== "note") await triageInboxIntent(item.id, { kind: "knowledge", knowledgeKind: snapshot.knowledgeKind, title: snapshot.title, detail: snapshot.detail, goalId: snapshot.goalId || undefined, projectId: snapshot.projectId || undefined, sourceUrl: item.kind === "link" ? item.content : undefined, resourceFormat: snapshot.knowledgeKind === "resource" && snapshot.isBook ? "book" : undefined, resourceAuthor: snapshot.knowledgeKind === "resource" && snapshot.isBook ? snapshot.resourceAuthor : undefined, readingStatus: snapshot.knowledgeKind === "resource" && snapshot.isBook ? snapshot.readingStatus : undefined });
       if (intent === "action") recordFirstFlowStage("action-created");
-      completion.remember({ id: item.id, url: `/knowledge?section=inbox&status=resolved&item=${item.id}`, message: "Zapisano." });
+      const label = intent === "goal" ? "Grupa działań" : intent === "action" ? "Działanie" : snapshot.isBook && snapshot.knowledgeKind === "resource" ? "Książka" : knowledgeKindGuidance[snapshot.knowledgeKind].label;
+      const result = resultReceipt(item, `${label} · ${note?.title ?? snapshot.title.trim()}`);
+      completion.remember(result);
       if (!completion.finish(() => formDraft.clear() && (intent !== "knowledge" || snapshot.knowledgeKind !== "note" || noteDraft.clear()))) { setError("Zapis potwierdzony. Usuń zapisany szkic."); return; }
-      close(true); setFinished(true); setBatchLeft((count) => Math.max(0, count - 1));
+      completeProcessing(result);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Nie udało się przetworzyć przechwycenia."); }
     finally { busyRef.current = false; setSaving(false); }
   };
@@ -263,31 +303,131 @@ export function KnowledgeInbox() {
       if (succeeded && (candidate.id === item?.id || (!item && requestedId === candidate.id))) close(true);
     } finally { busyRef.current = false; setSaving(false); }
   };
+  const runMenuStatusChange = (event: MouseEvent<HTMLButtonElement>, candidate: InboxItem, status: "snoozed" | "discarded") => {
+    const menu = event.currentTarget.closest("details");
+    if (menu) {
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    }
+    void runInboxOperation(candidate, () => changeStatus(candidate, status));
+  };
+  const changeView = (target: InboxItem["status"]) => {
+    if (view === target) return true;
+    if (!close()) return false;
+    setBatchLeft(0);
+    const next = new URLSearchParams(searchParams);
+    next.set("status", target);
+    next.delete("item");
+    next.delete("organize");
+    setSearchParams(next);
+    return true;
+  };
 
   const editorTitle = aiProposal && !intent ? "Podgląd propozycji AI" : intent ? intent === "goal" ? "Utwórz grupę" : intent === "action" ? "Dodaj Działanie" : "Zapisz w Bibliotece" : "Co chcesz z tym zrobić?";
-  const sourcePreview = <>{requested ? <><p className="inbox-source-preview">{requested.content}</p>{requested.status === "unprocessed" ? <Button onClick={() => desktop ? select(requested) : open(requested)}>Uporządkuj</Button> : <p>Wpis jest w widoku: {requested.status === "resolved" ? "Przetworzone" : requested.status === "snoozed" ? "Odłożone" : "Odrzucone"}.</p>}</> : selectedQuery.isPending && mode !== "demo" ? <p role="status">Ładowanie zapisu…</p> : <p role="alert">Nie udało się otworzyć zapisu. <button onClick={() => void selectedQuery.refetch()}>Spróbuj ponownie</button></p>}</>;
-  const finishedContent = <Panel className="inbox-finished"><p role="status">Zapisano. Możesz na tym skończyć.</p>{(desktop || batchLeft > 0) && visible.length ? <Button onClick={() => desktop ? select(visible[0]!) : open(visible[0]!)}>{batchLeft > 0 ? `Następny · zostało ${batchLeft}` : "Następny wpis"}</Button> : null}<Button variant="ghost" onClick={() => { setFinished(false); setBatchLeft(0); }}>Zakończ</Button></Panel>;
+  const panelTitle = item ? editorTitle : finished ? "Wynik" : requestedId ? "Zapis ze Skrzynki" : "Wybierz wpis ze Skrzynki";
+  function resultLink(source: InboxItem | undefined) {
+    const id = source?.resolvedToIds?.at(-1);
+    if (!id) return undefined;
+    const type = state.knowledge.some((entry) => entry.id === id) ? "knowledge"
+      : state.actions.some((entry) => entry.id === id) ? "action"
+      : state.goals.some((entry) => entry.id === id) ? "goal" : undefined;
+    return type && routeForEntity({ type, id });
+  }
+  const requestedResult = resultLink(requested ?? undefined);
+  const sourcePreview = <>{requested ? <><p className="inbox-source-preview">{requested.content}</p>{requested.status === "unprocessed" ? <Button onClick={() => desktop ? select(requested) : open(requested)}>Uporządkuj</Button> : <><p>Status: {inboxStatusLabels[requested.status]}</p>{requestedResult && <Link className="button button-secondary" to={requestedResult}>Otwórz wynik</Link>}</>}</> : selectedQuery.isPending && mode !== "demo" ? <p role="status">Ładowanie zapisu…</p> : <p role="alert">Nie udało się otworzyć zapisu. <button onClick={() => void selectedQuery.refetch()}>Spróbuj ponownie</button></p>}</>;
+  const nextCandidate = visible.find((candidate) => candidate.id !== finished?.id);
+  const batchSize = Math.min(3, visible.length);
+  const resolvedResult = finished && resultLink(state.inbox.find((candidate) => candidate.id === finished.id));
+  const finishedContent = finished ? <Panel className="inbox-finished">
+    <p role="status">{finished.message}</p>
+    {nextCandidate ? <Button variant="primary" onClick={() => desktop ? select(nextCandidate) : open(nextCandidate)}>{batchLeft > 0 ? `Następny wpis · zostało ${Math.min(batchLeft, visible.filter((candidate) => candidate.id !== finished.id).length)}` : "Następny wpis"}</Button> : null}
+    {resolvedResult ? <Link className="button button-secondary" to={resolvedResult}>Otwórz wynik</Link> : null}
+    <Link className="button button-ghost" to={finished.url} onClick={() => { setFinished(undefined); setBatchLeft(0); }}>Pokaż w historii</Link>
+    <Button variant="ghost" onClick={() => { setFinished(undefined); setBatchLeft(0); }}>Zakończ</Button>
+  </Panel> : null;
 
   return <div className="inbox-workspace" onKeyDown={(event) => {
     if (desktop && event.key === "Escape" && (item || requestedId || finished) && !document.querySelector('[aria-modal="true"]')) { event.preventDefault(); close(); }
   }}><div className="inbox-collection">
-    {view === "unprocessed" && visible.length ? <div className="button-row inbox-batch"><Button variant="ghost" disabled={desktop && (saving || aiLoading)} onClick={() => { if (desktop ? select(visible[0]!) : open(visible[0]!)) setBatchLeft(3); }}>Uporządkuj 3 wpisy</Button></div> : null}
+    <div className="inbox-toolbar">
+      <div className="inbox-view-tabs" role="tablist" aria-label="Widoki Skrzynki" onKeyDown={(event) => {
+        if (saving || aiLoading || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const index = inboxViews.indexOf(view);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? inboxViews.length - 1
+          : (index + inboxViews.length + (event.key === "ArrowRight" ? 1 : -1)) % inboxViews.length;
+        const target = inboxViews[next]!;
+        if (changeView(target)) event.currentTarget.querySelector<HTMLButtonElement>(`#inbox-tab-${target}`)?.focus();
+      }}>
+        {inboxViews.map((status) => <button type="button" role="tab" id={`inbox-tab-${status}`} aria-controls="inbox-results-panel" aria-selected={view === status} tabIndex={view === status ? 0 : -1} key={status} disabled={saving || aiLoading} onClick={() => changeView(status)}>{inboxStatusLabels[status]}</button>)}
+      </div>
+      {view === "unprocessed" && batchSize > 1 && !finished ? <Button className="inbox-batch-button" variant="secondary" disabled={saving || aiLoading} onClick={() => {
+        if (desktop ? select(visible[0]!) : open(visible[0]!)) setBatchLeft(batchSize);
+      }}>Uporządkuj {batchSize} wpisy</Button> : null}
+    </div>
     {!desktop && finished ? finishedContent : null}
     <Modal open={!desktop && Boolean(requestedId) && !item} title="Zapis ze Skrzynki" onClose={dismissPreview}>{sourcePreview}</Modal>
 
-    <div className="inbox-tabs" role="tablist" aria-label="Widoki Skrzynki">{([{ id: "unprocessed", label: "Nowe" }, { id: "snoozed", label: "Odłożone" }, { id: "resolved", label: "Przetworzone" }, { id: "discarded", label: "Odrzucone" }] as const).map((tab) => <button role="tab" aria-selected={view === tab.id} key={tab.id} disabled={desktop && (saving || aiLoading)} onClick={() => { if (desktop && !close()) return; const next = new URLSearchParams(searchParams); next.set("status", tab.id); next.delete("item"); next.delete("organize"); setSearchParams(next); }}>{tab.label}</button>)}</div>
-    <div className="section-heading knowledge-inbox-heading"><h2>{view === "unprocessed" ? "Nowe" : view === "snoozed" ? "Odłożone" : view === "resolved" ? "Przetworzone" : "Odrzucone"}</h2><span>Oryginał pozostaje w historii Skrzynki</span></div>
-    {loading || inboxPage.isPending ? <ListSkeleton label="Ładowanie Skrzynki" /> : null}
-    {visible.length ? <div className="inbox-list">{visible.map((candidate) => { const mode = legacyModes.find((entry) => entry.id === candidate.kind); const Icon = mode?.icon ?? Inbox; const key = `status:${candidate.id}`; return <Panel className="inbox-item" key={candidate.id} data-inbox-id={candidate.id} data-selected={desktop && (item?.id === candidate.id || (!item && requestedId === candidate.id)) || undefined} tabIndex={-1}><span className="inbox-kind"><Icon /></span><div><Link to={`/knowledge?section=inbox&status=${candidate.status}&item=${candidate.id}`} aria-current={desktop && (item?.id === candidate.id || (!item && requestedId === candidate.id)) ? "true" : undefined} onClick={(event) => {
-      if (desktop && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); select(candidate, event.currentTarget); }
-    }}><strong className="inbox-content-preview">{candidate.content}</strong></Link>{candidate.content.length > 240 ? <details className="inbox-full-content"><summary>Cała treść</summary><p>{candidate.content}</p></details> : null}<small>{new Date(candidate.createdAt).toLocaleString("pl-PL", { timeZone: state.workspaceTimezone })}{candidate.snoozedUntil ? ` · wróci ${new Date(candidate.snoozedUntil).toLocaleString("pl-PL", { timeZone: state.workspaceTimezone })}` : ""}</small>{mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" disabled={desktop && (saving || aiLoading)} onClick={() => void runInboxOperation(candidate)}>Spróbuj ponownie</button></p> : null}</div><Badge tone="neutral">{mode?.label}</Badge><div className="inbox-actions">{view === "unprocessed" ? <><Button variant="primary" disabled={desktop && (saving || aiLoading)} aria-expanded={desktop ? item?.id === candidate.id : undefined} aria-controls={desktop ? "inbox-processing-panel" : undefined} onClick={(event) => desktop ? select(candidate, event.currentTarget) : open(candidate)}>Uporządkuj</Button><Button className="inbox-secondary-action" variant="ghost" loading={mutation.isBusy(key)} disabled={desktop && (saving || aiLoading)} aria-label="Odłóż do jutra" onClick={() => runInboxOperation(candidate, () => changeStatus(candidate, "snoozed"))}><AlarmClock /><span>Odłóż</span></Button><Button className="inbox-secondary-action" variant="ghost" loading={mutation.isBusy(key)} disabled={desktop && (saving || aiLoading)} aria-label="Odrzuć" onClick={() => runInboxOperation(candidate, () => changeStatus(candidate, "discarded"))}><Trash2 /><span>Odrzuć</span></Button></> : <Button loading={mutation.isBusy(key)} disabled={desktop && (saving || aiLoading)} onClick={() => runInboxOperation(candidate, async () => { await setInboxStatus(candidate.id, "unprocessed"); notifyUndo({ message: "Przywrócono do Skrzynki.", undo: () => setInboxStatus(candidate.id, candidate.status, candidate.snoozedUntil) }); })}><RotateCcw />Przywróć teraz</Button>}</div></Panel>; })}</div> : !loading && !inboxPage.isPending && !inboxPage.isError ? <EmptyState icon={<Inbox />} title="Brak elementów w tym widoku" detail={view === "unprocessed" ? "Dodaj link lub treść do Skrzynki. Uporządkujesz go później bez tracenia oryginału." : "Możesz wrócić do innego widoku Skrzynki."} action={view === "unprocessed" && !captureOpen ? <Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "inbox", draftKey: "knowledge-inbox" })}>Zapisz do Skrzynki</Button> : undefined} /> : null}
+    <div id="inbox-results-panel" role="tabpanel" aria-labelledby={`inbox-tab-${view}`}>
+    {initialInboxLoad ? <ListSkeleton label="Ładowanie Skrzynki" /> : null}
+    <p className={initialInboxLoad ? "sr-only" : "inbox-refresh-status"} role="status">{refreshingInbox ? "Odświeżanie Skrzynki…" : ""}</p>
+    {visible.length ? <ul className="workspace-list inbox-results" role="list" aria-label="Wpisy Skrzynki">{visible.map((candidate) => {
+      const kind = legacyModes.find((entry) => entry.id === candidate.kind);
+      const content = candidate.content.trim();
+      const source = safeHttpUrl(content.match(/^https?:\/\/\S+/i)?.[0]);
+      const description = source ? content.slice(source.length).trim() : "";
+      const Icon = source ? Link2 : kind?.icon ?? Inbox;
+      const key = `status:${candidate.id}`;
+      const selected = desktop && (item?.id === candidate.id || (!item && requestedId === candidate.id));
+      return <li className="workspace-list-row inbox-result-row" key={candidate.id} data-inbox-id={candidate.id} data-selected={selected || undefined} tabIndex={-1}>
+        <span className="inbox-kind"><Icon aria-hidden="true" /></span>
+        <div className="inbox-result-content">
+          <Link className="inbox-result-title" to={`${inboxAddress(candidate.id, candidate.status)}${candidate.status === "unprocessed" ? "&organize=true" : ""}`} aria-current={selected ? "true" : undefined} aria-disabled={saving || aiLoading || undefined} onClick={(event) => {
+            if (saving || aiLoading) { event.preventDefault(); return; }
+            if (!desktop || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            select(candidate, event.currentTarget);
+          }}><strong className="inbox-content-preview">{description || candidate.content}</strong></Link>
+          <small className="inbox-result-meta">
+            {source && description ? `${new URL(source).hostname} · ` : ""}
+            {candidate.snoozedUntil
+              ? `Wróci ${new Date(candidate.snoozedUntil).toLocaleString("pl-PL", { timeZone: state.workspaceTimezone, dateStyle: "medium", timeStyle: "short" })}`
+              : new Date(candidate.createdAt).toLocaleDateString("pl-PL", { timeZone: state.workspaceTimezone, dateStyle: "medium" })}
+          </small>
+          {mutation.error(key) ? <p className="inline-mutation-error" role="alert">{mutation.error(key)} <button type="button" disabled={saving || aiLoading} onClick={() => void runInboxOperation(candidate)}>Spróbuj ponownie</button></p> : null}
+        </div>
+        <div className="inbox-result-actions">
+          {view === "unprocessed" ? <>
+            <details className="inbox-result-menu" onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }} onKeyDown={(event) => {
+              if (event.key !== "Escape" || !event.currentTarget.open) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }}>
+              <summary aria-label="Więcej opcji wpisu" title="Więcej opcji wpisu"><MoreHorizontal aria-hidden="true" /></summary>
+              <div>
+                <Button variant="ghost" disabled={saving || aiLoading} onClick={(event) => runMenuStatusChange(event, candidate, "snoozed")}><AlarmClock aria-hidden="true" />Odłóż do jutra</Button>
+                <Button variant="ghost" disabled={saving || aiLoading} onClick={(event) => runMenuStatusChange(event, candidate, "discarded")}><Trash2 aria-hidden="true" />Odrzuć</Button>
+              </div>
+            </details>
+          </> : <Button loading={mutation.isBusy(key)} disabled={saving || aiLoading} onClick={() => void runInboxOperation(candidate, async () => {
+            await setInboxStatus(candidate.id, "unprocessed");
+            notifyUndo({ message: "Przywrócono do Skrzynki.", undo: () => setInboxStatus(candidate.id, candidate.status, candidate.snoozedUntil) });
+          })}><RotateCcw aria-hidden="true" />Przywróć teraz</Button>}
+        </div>
+      </li>;
+    })}</ul> : !initialInboxLoad && !inboxPage.isError ? <EmptyState icon={<Inbox />} title="Brak elementów w tym widoku" detail={view === "unprocessed" ? "Dodaj link lub treść do Skrzynki. Uporządkujesz go później bez tracenia oryginału." : "Możesz wrócić do innego widoku Skrzynki."} action={view === "unprocessed" && !captureOpen ? <Button variant="primary" onClick={() => requestAppQuickAdd({ mode: "inbox", draftKey: "knowledge-inbox" })}>Zapisz do Skrzynki</Button> : undefined} /> : null}
     {inboxPage.isError ? <p className="inline-mutation-error" role="alert">Nie udało się pobrać kolejnych elementów Skrzynki.</p> : null}
     {inboxPage.hasNextPage ? <div className="list-pagination"><Button loading={inboxPage.isFetchingNextPage} onClick={() => void inboxPage.fetchNextPage()}>Załaduj starsze</Button></div> : null}
-    {visible.length && !inboxPage.hasNextPage && !inboxPage.isFetching ? <p className="muted-copy list-end">To wszystkie elementy w tym widoku.</p> : null}
-
     </div>
-    <InboxProcessingSurface desktop={desktop} open={Boolean(item)} busy={saving || aiLoading} title={editorTitle} focusKey={item ? `process:${item.id}` : finished ? "finished" : requestedId ? `source:${requestedId}` : ""} onClose={() => close()} idle={finished ? finishedContent : requestedId ? <div className="inbox-readonly-source">{sourcePreview}</div> : <div className="inbox-processing-empty"><Inbox aria-hidden="true" /><h3>Wybierz wpis ze Skrzynki</h3><p>Otwórz wpis, aby dodać Działanie, zapisać Wiedzę albo ustalić Grupa działań. Lista pozostaje obok formularza.</p></div>}><div className="quick-add"><CreationBody><fieldset className="creation-fields" disabled={saving || aiLoading || Boolean(completion.receipt)}>
-      {item ? <blockquote className="inbox-source-preview">{item.content}</blockquote> : null}
+    </div>
+    <InboxProcessingSurface desktop={desktop} open={Boolean(item)} busy={saving || aiLoading} title={panelTitle} focusKey={item ? `process:${item.id}` : finished ? "finished" : requestedId ? `source:${requestedId}` : ""} onClose={() => close()} idle={finished ? finishedContent : requestedId ? <div className="inbox-readonly-source">{sourcePreview}</div> : null}><div className="quick-add"><CreationBody><fieldset className="creation-fields" disabled={saving || aiLoading || Boolean(completion.receipt)}>
+      {item && (intent === "knowledge" && form.knowledgeKind === "note"
+        ? <details className="inbox-original"><summary>Oryginalny wpis</summary><blockquote className="inbox-source-preview">{item.content}</blockquote></details>
+        : <blockquote className="inbox-source-preview">{item.content}</blockquote>)}
       {intent ? <p className="quick-add-context-summary">Miejsce zapisu: {(() => { const goalId = intent === "knowledge" && form.knowledgeKind === "note" ? noteDraft.value.goalId : intent === "goal" ? "" : form.goalId; const areaId = intent === "knowledge" ? form.knowledgeKind === "note" ? noteDraft.value.projectId : form.projectId : form.areaId; return [goalId ? `Grupa: ${state.goals.find((goal) => goal.id === goalId)?.title ?? "Niedostępna grupa działań"}` : "", areaId ? `Projekt: ${state.areas.find((area) => area.id === areaId)?.name ?? "Niedostępny Projekt"}` : ""].filter(Boolean).join(" · ") || "Bez powiązania"; })()}</p> : null}
       {!intent && aiProposal && noteProposalConflict ? <div role="alert"><p>Masz własny szkic notatki. Wybierz, którą treść chcesz edytować.</p><div className="button-row"><Button onClick={() => { setNoteProposalConflict(false); chooseIntent("knowledge"); setForm((current) => ({ ...current, knowledgeKind: "note" })); }}>Otwórz zapisany szkic</Button><Button onClick={() => applyAIProposal(true)}>Zastąp szkic propozycją AI</Button></div></div> : null}
       {!intent && aiProposal ? <AIInboxTriagePreview proposal={aiProposal} state={state} onApprove={() => void approveAIProposal()} onEdit={() => applyAIProposal()} onReject={() => { setAIProposal(undefined); setNoteProposalConflict(false); }} onFeedback={(rating) => void submitInboxTriageFeedback(aiProposal.proposalId, rating)} /> : !intent ? <div className="intent-list">
@@ -310,9 +450,9 @@ export function KnowledgeInbox() {
           if (busyRef.current) return;
           if (!formDraft.flush() || !noteDraft.flush()) throw new Error("Nie udało się zapisać szkicu. Ponów zapis przed połączeniem materiału.");
           busyRef.current = true; setSaving(true);
-          try { await triageExistingKnowledge(item.id, material.id, form.goalId || undefined, form.projectId || undefined); close(true); setFinished(true); setBatchLeft((count) => Math.max(0, count - 1)); }
+          try { await triageExistingKnowledge(item.id, material.id, form.goalId || undefined, form.projectId || undefined); completeProcessing(resultReceipt(item, `Powiązany materiał · ${material.title}`)); }
           finally { busyRef.current = false; setSaving(false); }
-        }} /> : null}<KnowledgeKindPicker value={form.knowledgeKind} onChange={(knowledgeKind) => { if (form.knowledgeKind === "note" && !noteDraft.flush()) { setError("Nie udało się zapisać szkicu na tym urządzeniu. Skopiuj treść albo ponów zapis szkicu przed zmianą rodzaju."); return; } if (knowledgeKind === "note" && !noteDraft.dirty) noteDraft.setValue((current) => ({ ...current, detail: form.detail, title: "" })); setError(""); setForm((current) => ({ ...current, knowledgeKind, isBook: knowledgeKind === "resource" ? current.isBook : false })); }} name="triage-knowledge-kind" />{form.knowledgeKind === "note" ? <KnowledgeNoteFields idPrefix={`inbox-note-${item?.id ?? "new"}`} content={noteDraft.value.detail} onContentChange={(detail) => noteDraft.setValue((current) => ({ ...current, detail }))} title={noteDraft.value.title} onTitleChange={(title) => noteDraft.setValue((current) => ({ ...current, title }))} context="Skrzynka · oryginał zostaje w historii" disabled={saving}><label className="field-label" htmlFor="triage-note-goal">Grupa działań <span className="optional-label">opcjonalnie</span></label><select id="triage-note-goal" value={noteDraft.value.goalId} onChange={(event) => noteDraft.setValue((current) => ({ ...current, goalId: event.target.value }))}><option value="">Bez grupy</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><label className="field-label" htmlFor="triage-note-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="triage-note-project" value={noteDraft.value.projectId} onChange={(event) => noteDraft.setValue((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select><KnowledgeSourceField id="triage-note-source" value={noteDraft.value.sourceBookId} onChange={(sourceBookId) => noteDraft.setValue((current) => ({ ...current, sourceBookId }))} /></KnowledgeNoteFields> : <>{form.knowledgeKind === "resource" ? <><BookCreationFields value={form} onChange={(changes) => setForm((current) => ({ ...current, ...changes }))} /></> : null}<label className="field-label" htmlFor="triage-goal">Połącz z grupą <span className="optional-label">opcjonalnie</span></label><select id="triage-goal" value={form.goalId} onChange={(event) => setForm((current) => ({ ...current, goalId: event.target.value, projectId: "" }))}><option value="">Bez powiązania</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><label className="field-label" htmlFor="triage-project">Połącz z Projektem <span className="optional-label">opcjonalnie</span></label><select id="triage-project" value={form.projectId} onChange={(event) => setForm((current) => ({ ...current, projectId: event.target.value, goalId: "" }))}><option value="">Bez powiązania</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></>}</>}
+        }} /> : null}<details className="inbox-knowledge-type"><summary>Zmień typ · {knowledgeKindGuidance[form.knowledgeKind].label}</summary><KnowledgeKindPicker value={form.knowledgeKind} onChange={(knowledgeKind) => { if (form.knowledgeKind === "note" && !noteDraft.flush()) { setError("Nie udało się zapisać szkicu na tym urządzeniu. Skopiuj treść albo ponów zapis szkicu przed zmianą rodzaju."); return; } if (knowledgeKind === "note" && !noteDraft.dirty) noteDraft.setValue((current) => ({ ...current, detail: form.detail, title: "" })); setError(""); setForm((current) => ({ ...current, knowledgeKind, isBook: knowledgeKind === "resource" ? current.isBook : false })); }} name="triage-knowledge-kind" /></details>{form.knowledgeKind === "note" ? <KnowledgeNoteFields idPrefix={`inbox-note-${item?.id ?? "new"}`} content={noteDraft.value.detail} onContentChange={(detail) => noteDraft.setValue((current) => ({ ...current, detail }))} title={noteDraft.value.title} onTitleChange={(title) => noteDraft.setValue((current) => ({ ...current, title }))} context="Skrzynka · oryginał zostaje w historii" disabled={saving}><label className="field-label" htmlFor="triage-note-goal">Grupa działań <span className="optional-label">opcjonalnie</span></label><select id="triage-note-goal" value={noteDraft.value.goalId} onChange={(event) => noteDraft.setValue((current) => ({ ...current, goalId: event.target.value }))}><option value="">Bez grupy</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><label className="field-label" htmlFor="triage-note-project">Projekt <span className="optional-label">opcjonalnie</span></label><select id="triage-note-project" value={noteDraft.value.projectId} onChange={(event) => noteDraft.setValue((current) => ({ ...current, projectId: event.target.value }))}><option value="">Bez Projektu</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select><KnowledgeSourceField id="triage-note-source" value={noteDraft.value.sourceBookId} onChange={(sourceBookId) => noteDraft.setValue((current) => ({ ...current, sourceBookId }))} /></KnowledgeNoteFields> : <>{form.knowledgeKind === "resource" ? <><BookCreationFields value={form} onChange={(changes) => setForm((current) => ({ ...current, ...changes }))} /></> : null}<label className="field-label" htmlFor="triage-goal">Połącz z grupą <span className="optional-label">opcjonalnie</span></label><select id="triage-goal" value={form.goalId} onChange={(event) => setForm((current) => ({ ...current, goalId: event.target.value, projectId: "" }))}><option value="">Bez powiązania</option>{state.goals.filter((goal) => goal.visibility === "active").map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select><label className="field-label" htmlFor="triage-project">Połącz z Projektem <span className="optional-label">opcjonalnie</span></label><select id="triage-project" value={form.projectId} onChange={(event) => setForm((current) => ({ ...current, projectId: event.target.value, goalId: "" }))}><option value="">Bez powiązania</option>{state.areas.filter((area) => area.visibility === "active").map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></>}</>}
         {noteDraft.status !== "idle" && intent === "knowledge" && form.knowledgeKind === "note" ? <DraftStatus status={noteDraft.status} restored={noteDraft.restored} errorMessage={noteDraft.errorMessage} onRetry={() => void noteDraft.retry()} onCopy={() => void navigator.clipboard?.writeText(`${noteDraft.value.title}\n${noteDraft.value.detail}`)} /> : null}
         {noteDraft.dirty && intent === "knowledge" && form.knowledgeKind === "note" ? <Button type="button" variant="ghost" onClick={() => noteDraft.discard()}>Odrzuć szkic</Button> : null}
         {intent === "knowledge" && form.knowledgeKind !== "note" && <><label className="field-label" htmlFor="triage-detail">{intent === "knowledge" ? knowledgeKindGuidance[form.knowledgeKind].detailLabel : "Treść / kontekst"}{intent === "knowledge" && !knowledgeKindGuidance[form.knowledgeKind].detailRequired ? <span className="optional-label"> opcjonalnie</span> : null}</label><textarea id="triage-detail" rows={4} required={intent === "knowledge" && knowledgeKindGuidance[form.knowledgeKind].detailRequired} placeholder={intent === "knowledge" ? knowledgeKindGuidance[form.knowledgeKind].detailPlaceholder : undefined} value={form.detail} onChange={(event) => setForm((current) => ({ ...current, detail: event.target.value }))} /></>}

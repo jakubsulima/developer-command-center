@@ -1,20 +1,28 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { configure, render, screen, waitFor, within } from "@testing-library/react";
+import { configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DemoAuthProvider from "../auth/DemoAuthProvider";
 import { demoState } from "../data/demo";
 import { App } from "./App";
 import { StoreProvider } from "./store";
+import { StoreContext, type AppStore } from "./store-context";
+import { useStore } from "./useStore";
 
 beforeEach(() => vi.stubGlobal("indexedDB", undefined));
 afterEach(() => vi.unstubAllGlobals());
 // Route imports can take longer than the default query timeout on a cold run.
 configure({ asyncUtilTimeout: 5000 });
 
-function renderApp(path = "/actions?view=open", withHistory = false) {
+function renderApp(path = "/actions?view=open", withHistory = false, interceptStore?: (store: AppStore) => AppStore) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let currentStore: AppStore;
+  function StoreProbe({ children }: { children: ReactNode }) {
+    currentStore = useStore();
+    return <StoreContext.Provider value={interceptStore?.(currentStore) ?? currentStore}>{children}</StoreContext.Provider>;
+  }
   function LocationProbe() {
     const location = useLocation();
     return <output data-testid="location-address">{location.pathname}{location.search}{location.hash}</output>;
@@ -23,8 +31,8 @@ function renderApp(path = "/actions?view=open", withHistory = false) {
     const navigate = useNavigate();
     return <><button onClick={() => navigate(-1)}>Back test</button><button onClick={() => navigate(1)}>Forward test</button></>;
   }
-  const view = render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><App />{withHistory ? <HistoryControls /> : null}<LocationProbe /></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
-  return { ...view, queryClient };
+  const view = render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><DemoAuthProvider><StoreProvider><StoreProbe><App />{withHistory ? <HistoryControls /> : null}<LocationProbe /></StoreProbe></StoreProvider></DemoAuthProvider></QueryClientProvider></MemoryRouter>);
+  return { ...view, queryClient, store: () => currentStore };
 }
 
 function enableDesktopPreview() {
@@ -36,6 +44,46 @@ function enableDesktopPreview() {
 }
 
 describe("lista wszystkich Działań", () => {
+  it("zamyka Moje widoki po wyborze filtra i przy otwarciu zapisu oraz przywraca fokus po zamknięciu", async () => {
+    vi.stubGlobal("innerWidth", 390);
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const createdAt = "2026-08-01T08:00:00.000Z";
+    state.savedActionViews = [{ id: "overdue-view", name: "Moje zaległe", filters: { view: "open", schedule: "overdue" }, filterVersion: 1, position: 0, version: 1, createdAt, updatedAt: createdAt }];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    renderApp();
+    const picker = await screen.findByText(/^Moje widoki/);
+    const details = picker.closest("details");
+    await user.click(picker);
+    await user.click(screen.getByRole("button", { name: "Zaległe" }));
+    expect(details).not.toHaveAttribute("open");
+
+    await user.click(picker);
+    await user.click(screen.getByRole("button", { name: "Moje zaległe" }));
+    expect(details).not.toHaveAttribute("open");
+    expect(picker).toHaveFocus();
+
+    await user.click(picker);
+    await user.click(screen.getByRole("button", { name: "Zapisz obecny widok" }));
+    expect(details).not.toHaveAttribute("open");
+    const dialog = screen.getByRole("dialog", { name: "Zapisz widok Działań" });
+    await waitFor(() => expect(dialog).toHaveFocus());
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(picker).toHaveFocus());
+    expect(details).not.toHaveAttribute("open");
+
+    await user.click(picker);
+    await user.click(screen.getByRole("button", { name: "Zapisz obecny widok" }));
+    await user.type(screen.getByLabelText("Nazwa widoku"), "Drugi widok");
+    await user.click(within(screen.getByRole("dialog", { name: "Zapisz widok Działań" })).getByRole("button", { name: "Zapisz" }));
+    await waitFor(() => expect(picker).toHaveFocus());
+    expect(details).not.toHaveAttribute("open");
+
+    const selection = screen.getByRole("button", { name: "Zaznacz działania" });
+    await user.click(selection);
+    expect(selection).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("pokazuje zapisane Działanie od razu, zachowując wcześniej widoczny wiersz", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -65,7 +113,7 @@ describe("lista wszystkich Działań", () => {
       expect(dialog.parentElement).toHaveClass("action-status-menu-backdrop");
       await user.click(within(dialog).getByRole("button", { name: /W toku/ }));
       await waitFor(() => expect(dialog).not.toBeInTheDocument());
-      expect(await screen.findByRole("button", { name: "Ukończ: Spisać stałe koszty", description: /^Status: W toku\./ })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Ukończ: Spisać stałe koszty", description: /Status: W toku\./ })).toBeInTheDocument();
       expect(title.isConnected).toBe(true);
       expect(screen.getByRole("link", { name: "Spisać stałe koszty" })).toBe(title);
       expect(states.length).toBeGreaterThan(0);
@@ -114,9 +162,9 @@ describe("lista wszystkich Działań", () => {
 
     const quickViews = screen.getByRole("group", { name: "Szybkie widoki Działań" });
     expect(within(quickViews).getByRole("button", { name: "Otwarte" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(quickViews).getByRole("button", { name: "Na dziś" })).toBeInTheDocument();
+    expect(within(quickViews).getByRole("button", { name: "Na dziś lub przypięte" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Filtry Działań" }));
-    for (const label of ["Do zrobienia", "W toku", "Testowanie", "Zablokowane", "Ukończone", "Anulowane", "Pominięte"]) {
+    for (const label of ["Do zrobienia", "W toku", "W trakcie testowania", "Zablokowane", "Ukończone", "Anulowane", "Pominięte"]) {
       expect(within(screen.getByLabelText("Status Działań")).getByRole("option", { name: label })).toBeInTheDocument();
     }
     await user.click(screen.getByRole("button", { name: "Bez terminu" }));
@@ -233,6 +281,138 @@ describe("lista wszystkich Działań", () => {
     expect(await screen.findByRole("link", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
   });
 
+  it("przypina istniejące działanie z wiersza bez zmiany terminu i pozwala cofnąć obie zmiany", async () => {
+    const user = userEvent.setup();
+    const { store } = renderApp("/actions?view=overdue");
+    const title = "Pobrać historię transakcji";
+    const readAction = () => store().state.actions.find((action) => action.title === title);
+    await user.click(await screen.findByRole("button", { name: `Przypnij do Startu: ${title}` }));
+    const pinNotice = await screen.findByText("Działanie przypięte do Startu.");
+    expect(readAction()).toMatchObject({ pinnedToToday: true, scheduledFor: "2026-08-01" });
+    await user.click(within(pinNotice.closest("[role=status]") as HTMLElement).getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByRole("button", { name: `Przypnij do Startu: ${title}` })).toBeInTheDocument();
+    expect(readAction()).toMatchObject({ pinnedToToday: false, scheduledFor: "2026-08-01" });
+
+    await user.click(screen.getByRole("button", { name: `Przypnij do Startu: ${title}` }));
+    await user.click(await screen.findByRole("button", { name: `Odepnij od Startu: ${title}` }));
+    const unpinNotice = await screen.findByText("Działanie odpięte od Startu.");
+    await user.click(within(unpinNotice.closest("[role=status]") as HTMLElement).getByRole("button", { name: "Cofnij" }));
+    expect(await screen.findByRole("button", { name: `Odepnij od Startu: ${title}` })).toBeInTheDocument();
+    expect(readAction()).toMatchObject({ pinnedToToday: true, scheduledFor: "2026-08-01" });
+  });
+
+  it("pokazuje przypięte działanie z przyszłym terminem w szybkim widoku Na dziś", async () => {
+    const state = structuredClone(demoState);
+    state.actions = [{ ...state.actions[1]!, title: "Przypięte na później", pinnedToToday: true, scheduledFor: "2099-01-15" }];
+    state.recurringActionTemplates = [];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "Na dziś lub przypięte" }));
+    const link = await screen.findByRole("link", { name: "Przypięte na później" });
+    const row = link.closest("[data-action-id]") as HTMLElement;
+    expect(row.closest("[data-schedule-group]")).toBeNull();
+    expect(row.querySelector(".action-schedule")).toHaveTextContent("15 sty");
+  });
+
+  it("zachowuje fokus przy przenoszeniu przypinanego działania pomiędzy grupami", async () => {
+    const state = structuredClone(demoState);
+    const title = "Działanie bez terminu";
+    state.actions = [{ ...state.actions[1]!, title, pinnedToToday: false, scheduledFor: undefined }];
+    state.recurringActionTemplates = [];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const user = userEvent.setup();
+    renderApp();
+
+    const withoutDate = await screen.findByRole("region", { name: "Bez terminu" });
+    within(withoutDate).getByRole("button", { name: `Przypnij do Startu: ${title}` }).focus();
+    await user.keyboard("{Enter}");
+    const today = await screen.findByRole("region", { name: "Przypięte do Startu" });
+    await waitFor(() => expect(within(today).getByRole("button", { name: `Odepnij od Startu: ${title}` })).toHaveFocus());
+
+    await user.keyboard("{Enter}");
+    const restored = await screen.findByRole("region", { name: "Bez terminu" });
+    await waitFor(() => expect(within(restored).getByRole("button", { name: `Przypnij do Startu: ${title}` })).toHaveFocus());
+  });
+
+  it("zmienia terminy zaznaczonych działań i ponawia wyłącznie niezapisane zmiany", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const action = state.actions[1]!;
+    state.actions = [
+      { ...action, id: "first", title: "Pierwsze zaległe", pinnedToToday: true },
+      { ...action, id: "retry", title: "Drugie zaległe" },
+      { ...action, id: "untouched", title: "Niezaznaczone" },
+      { ...action, id: "blocked", title: "Zablokowane zaległe", status: "blocked", blocker: "Czekam na odpowiedź" },
+    ];
+    state.recurringActionTemplates = [];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const update = vi.fn((store: AppStore, id: string, changes: Parameters<AppStore["updateAction"]>[1], version?: number) => store.updateAction(id, changes, version));
+    update.mockImplementationOnce((store, id, changes, version) => store.updateAction(id, changes, version))
+      .mockRejectedValueOnce(new Error("Zapis chwilowo niedostępny."));
+    const { store } = renderApp("/actions?schedule=overdue", false, (current) => ({ ...current, updateAction: (...args) => update(current, ...args) }));
+    await user.click(await screen.findByRole("button", { name: "Zaznacz działania" }));
+    expect(screen.getByRole("checkbox", { name: "Zaznacz: Zablokowane zaległe" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Zaznacz: Pierwsze zaległe" }));
+    await user.click(screen.getByRole("checkbox", { name: "Zaznacz: Drugie zaległe" }));
+    await user.click(screen.getByRole("button", { name: "Zmień termin" }));
+    const dialog = screen.getByRole("dialog", { name: "Zmień termin zaległych działań" });
+    fireEvent.change(within(dialog).getByLabelText("Nowy termin"), { target: { value: "2099-01-15" } });
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz termin" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Udało się zapisać 1 z 2 zmian.");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Drugie zaległe — Zapis chwilowo niedostępny.");
+    await user.click(within(dialog).getByRole("button", { name: "Zapisz termin" }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(update.mock.calls.map(([, id]) => id)).toEqual(["first", "retry", "retry"]);
+    expect(store().state.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "first", scheduledFor: "2099-01-15", pinnedToToday: true }),
+      expect.objectContaining({ id: "retry", scheduledFor: "2099-01-15" }),
+      expect.objectContaining({ id: "untouched", scheduledFor: action.scheduledFor }),
+      expect.objectContaining({ id: "blocked", scheduledFor: action.scheduledFor, status: "blocked" }),
+    ]));
+  });
+
+  it("pomija tylko zaznaczone zaległe wystąpienie bez zmiany innych terminów rutyny", async () => {
+    const user = userEvent.setup();
+    const state = structuredClone(demoState);
+    const action = state.actions[1]!;
+    const recurringTemplateId = state.recurringActionTemplates[0]!.id;
+    state.recurringActionTemplates[0]!.status = "paused";
+    state.actions = [
+      { ...action, id: "past", title: "Zaległe wystąpienie", recurringTemplateId, occurrenceDate: "2026-08-01" },
+      { ...action, id: "past-other", title: "Zaległe wystąpienie", recurringTemplateId, occurrenceDate: "2026-08-02" },
+      { ...action, id: "future", title: "Przyszłe wystąpienie", recurringTemplateId, occurrenceDate: "2099-01-15", scheduledFor: "2099-01-15" },
+      { ...action, id: "future-moved", title: "Przyszłe wystąpienie przeniesione", recurringTemplateId, occurrenceDate: "2099-01-22" },
+      { ...action, id: "single", title: "Jednorazowe zaległe" },
+    ];
+    localStorage.setItem("command-center-state-v1", JSON.stringify(state));
+    const { store } = renderApp("/actions?view=overdue");
+    await user.click(await screen.findByRole("button", { name: "Zaznacz działania" }));
+    expect(screen.getByRole("button", { name: "Ukończ: Zaległe wystąpienie, wystąpienie rutyny z 1 sierpnia 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ukończ: Zaległe wystąpienie, wystąpienie rutyny z 2 sierpnia 2026" })).toBeInTheDocument();
+    const firstOccurrence = screen.getByRole("checkbox", { name: "Zaznacz: Zaległe wystąpienie, wystąpienie rutyny z 1 sierpnia 2026" });
+    const otherOccurrence = screen.getByRole("checkbox", { name: "Zaznacz: Zaległe wystąpienie, wystąpienie rutyny z 2 sierpnia 2026" });
+    await user.click(firstOccurrence);
+    expect(otherOccurrence).not.toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Zaznacz: Jednorazowe zaległe" }));
+    await user.click(screen.getByRole("checkbox", { name: "Zaznacz: Przyszłe wystąpienie przeniesione, wystąpienie rutyny z 22 stycznia 2099" }));
+    await user.click(screen.getByRole("button", { name: "Pomiń wystąpienia" }));
+    const dialog = screen.getByRole("dialog", { name: "Pomiń zaległe wystąpienia rutyn" });
+    expect(within(dialog).getByText("Zaznaczono 1 wystąpienie rutyny.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Pomiń wystąpienia" }));
+    expect(await screen.findByText("Pominięto 1 wystąpienie rutyny.")).toBeInTheDocument();
+    expect(firstOccurrence).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Zaznacz: Jednorazowe zaległe" })).toBeChecked();
+    expect(store().state.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "past", status: "skipped" }),
+      expect.objectContaining({ id: "past-other", status: "ready" }),
+      expect.objectContaining({ id: "future", status: "ready", scheduledFor: "2099-01-15" }),
+      expect.objectContaining({ id: "future-moved", status: "ready", scheduledFor: action.scheduledFor }),
+      expect.objectContaining({ id: "single", status: "ready", scheduledFor: action.scheduledFor }),
+    ]));
+    expect(store().state.recurringActionTemplates).toEqual(state.recurringActionTemplates);
+  });
+
   it("otwiera menu po przytrzymaniu wiersza i zwija je po wyborze statusu", async () => {
     const state = structuredClone(demoState);
     state.actions = [{ ...state.actions[1]!, id: "late-pinned", title: "Zaległy przypięty krok", pinnedToToday: true, scheduledFor: "2026-08-01" }];
@@ -254,7 +434,7 @@ describe("lista wszystkich Działań", () => {
     expect(screen.queryByText("Działanie ukończone.")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /W trakcie testowania/ }));
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    expect(await screen.findByRole("button", { name: "Ukończ: Zaległy przypięty krok", description: /^Status: W trakcie testowania\./ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Ukończ: Zaległy przypięty krok", description: /Status: W trakcie testowania\./ })).toBeInTheDocument();
   });
 
   it("przywraca ukończone Działanie po kliknięciu ikony", async () => {
@@ -303,7 +483,7 @@ describe("lista wszystkich Działań", () => {
     expect(await screen.findByRole("heading", { name: "Pobrać historię transakcji" }, { timeout: 5000 })).toBeInTheDocument();
     const contextNavigation = document.querySelector<HTMLElement>(".context-navigation")!;
     expect(within(contextNavigation).getByRole("link", { name: "Działania" })).toHaveAttribute("href", "/actions?view=overdue");
-    await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
+    await user.click(within(contextNavigation).getByRole("link", { name: "Działania" }));
     expect(await screen.findByRole("heading", { name: "Działania" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue");
   });
@@ -335,7 +515,7 @@ describe("lista wszystkich Działań", () => {
     const preview = await screen.findByRole("complementary", { name: "Pobrać historię transakcji" });
     await user.click(within(preview).getByRole("link", { name: "Otwórz pełny widok" }));
     const contextNavigation = await screen.findByRole("navigation", { name: "Ścieżka kontekstu" });
-    await user.click(within(contextNavigation).getByRole("button", { name: "Wszystkie Działania" }));
+    await user.click(within(contextNavigation).getByRole("link", { name: "Działania" }));
     expect(await screen.findByRole("complementary", { name: "Pobrać historię transakcji" })).toBeInTheDocument();
     expect(screen.getByTestId("location-address")).toHaveTextContent("/actions?view=overdue&project=area-finanse&preview=action-budget-overdue");
   });
