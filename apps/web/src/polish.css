@@ -99,7 +99,7 @@ textarea { line-height: 1.6; }
 .knowledge-list .panel, .inbox-item { background: var(--card); }
 .knowledge-section-tabs { gap: var(--space-2); }
 .filter-pills button { border-radius: var(--radius-control); }
-.weekly-summary-card, .weekly-decision, .weekly-review-submit, .ai-review-settings-panel { border-radius: var(--radius-panel); background: var(--card); }
+.ai-review-settings-panel { border-radius: var(--radius-panel); background: var(--card); }
 .focus-detail .knowledge-detail-head { margin-bottom: 32px; }
 .focus-detail .detail-title-block h1, .focus-detail .goal-overview h1, .focus-detail .knowledge-detail-head h1 { letter-spacing: -.035em; }
 
@@ -333,11 +333,6 @@ textarea { line-height: 1.6; }
 .detail-tools-menu > div { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 12; min-width: 230px; padding: 8px; border: 1px solid var(--input); border-radius: var(--radius-panel); background: var(--popover); box-shadow: 0 12px 30px #0004; }
 .detail-tools-menu > div > .button { width: 100%; white-space: normal; }
 .goal-detail-toolbar .page-actions { margin-left: auto; }
-.weekly-summary-card .weekly-execution-summary, .weekly-summary-card .weekly-goal-results { border: 0; border-top: 1px solid var(--border); background: transparent; border-radius: 0; padding-inline: 0; }
-.weekly-metrics > * { border: 0; background: var(--secondary); }
-.weekly-summary-card .section-kicker { color: var(--muted-foreground); letter-spacing: .02em; }
-.weekly-decision { border-color: transparent; }
-.weekly-review-submit { padding: 24px; }
 
 /* Settings: scan three preferences, then open only the one being changed. */
 .settings-sections { max-width: 800px; display: grid; gap: var(--space-2); }
@@ -390,7 +385,6 @@ textarea { line-height: 1.6; }
   .inbox-actions .inbox-secondary-action { padding-inline: var(--space-2); }
   .settings-section > summary { padding: var(--space-5) var(--space-4); gap: var(--space-2); }
   .settings-section-content { margin-inline: 16px; }
-  .weekly-review-submit { padding: var(--space-5) var(--space-4); }
 }
 
 .page-heading.page-heading-with-context { align-items: center; flex-wrap: nowrap; gap: var(--space-2); min-height: 0; }

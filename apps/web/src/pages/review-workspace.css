@@ -1,0 +1,217 @@
+.weekly-overview { container: weekly-overview / inline-size; }
+
+.weekly-overview-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "heading status" "dates jump";
+  align-items: center;
+  column-gap: var(--space-2);
+}
+.weekly-overview-heading h2 { grid-area: heading; margin: 0; font-size: 18px; line-height: 1.25; }
+.weekly-overview-heading p { grid-area: dates; margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.weekly-overview-status { grid-area: status; justify-self: end; }
+.weekly-overview-heading .weekly-overview-jump {
+  grid-area: jump;
+  justify-self: end;
+  min-height: 44px;
+  padding-inline: var(--space-2) 0;
+  color: var(--ring);
+  font-size: 13px;
+}
+
+.weekly-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+.weekly-overview-layout > .panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-panel);
+  background: var(--card);
+}
+.weekly-overview :is(.weekly-overview-section, .weekly-overview-close) h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.weekly-overview .weekly-overview-close h3 {
+  scroll-margin-top: var(--space-6);
+  font-size: 18px;
+}
+.weekly-overview-results > [role="status"] p,
+.weekly-overview :is(.muted-copy, .auth-message) { margin: 0; }
+
+.weekly-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.weekly-overview-metric {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-height: 88px;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.weekly-overview-metric-value { display: flex; align-items: center; gap: var(--space-2); }
+.weekly-overview-metric-value svg { width: 16px; height: 16px; flex: none; color: var(--ring); }
+.weekly-overview-metric strong { color: var(--foreground); font-size: 20px; font-variant-numeric: tabular-nums; }
+.weekly-metric-chevron {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+.weekly-overview-metric[aria-expanded="true"] { border-color: var(--selection-border); background: var(--surface-selected); }
+.weekly-overview-metric[aria-expanded="true"] .weekly-metric-chevron,
+.weekly-overview-details[open] > summary > svg { transform: rotate(180deg); }
+.weekly-overview .weekly-activity-detail { margin: 0; background: var(--secondary); }
+
+.weekly-overview-section {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-block-start: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.weekly-overview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding-block: var(--space-2);
+  color: var(--foreground);
+  text-decoration: none;
+}
+.weekly-overview-primary { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.weekly-overview-row strong, .weekly-overview-row small { display: block; overflow-wrap: anywhere; }
+.weekly-overview-row strong { font-size: 14px; line-height: 1.4; }
+.weekly-overview-row small { color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.weekly-overview-row svg, .weekly-overview-details > summary > svg, .weekly-overview-text-link svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted-foreground);
+}
+.weekly-overview-primary > svg:first-child { color: var(--ring); }
+.weekly-overview-primary > svg:last-child, .weekly-overview-category .weekly-overview-row > svg { grid-column: -2; }
+.weekly-overview-category-count { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.weekly-overview-details { border-top: 1px solid var(--border); }
+.weekly-overview-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 44px;
+  color: var(--secondary-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.weekly-overview-details > summary::-webkit-details-marker { display: none; }
+.weekly-overview-categories { display: grid; }
+.weekly-overview-category { border-top: 1px solid var(--border); }
+.weekly-overview-category > strong { display: block; padding-block: var(--space-2); font-size: 14px; }
+.weekly-overview :is(.weekly-overview-category, .weekly-unfinished-plan, .weekly-goal-result) ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 var(--space-2) var(--space-4);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.weekly-overview :is(.weekly-overview-category, .weekly-unfinished-plan) li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ring);
+}
+
+.weekly-overview-plan-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: var(--space-2);
+}
+.weekly-overview-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  color: var(--ring);
+  font-size: 13px;
+  font-weight: 600;
+}
+.weekly-overview-comparison { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.weekly-overview-comparison strong { color: var(--foreground); font-variant-numeric: tabular-nums; }
+.weekly-overview-goals { display: grid; gap: var(--space-2); }
+.weekly-overview .weekly-goal-result { padding: var(--space-4); border-color: var(--border); }
+
+.weekly-overview-note { display: grid; gap: var(--space-2); }
+.weekly-overview-note .field-label { margin: 0; }
+.weekly-overview-note textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: var(--space-2);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-control);
+  background: var(--background);
+  resize: vertical;
+}
+.weekly-overview-draft { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.weekly-overview-draft .draft-status { margin: 0; }
+.weekly-overview-preview { border-bottom: 1px solid var(--border); }
+.weekly-overview-preview dl { display: grid; gap: var(--space-2); margin: 0; padding-block: var(--space-2) var(--space-4); font-size: 13px; }
+.weekly-overview-preview dt { font-weight: 600; }
+.weekly-overview-preview dd { margin: 0; color: var(--muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.weekly-overview-preview > .muted-copy { padding-bottom: var(--space-4); font-size: 12px; }
+.weekly-overview-close-actions { display: grid; gap: var(--space-2); }
+.weekly-overview-close-actions .button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  padding-inline: var(--space-2);
+}
+.weekly-overview-state { padding-inline: var(--space-4); }
+.weekly-overview-state .review-state-list { padding-block-end: var(--space-2); }
+
+.weekly-overview :is(button, a, summary, textarea, select, [tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .weekly-overview :is(.weekly-overview-row, .weekly-overview-details > summary):hover { background: var(--surface-hover); }
+  .weekly-overview-metric:hover { border-color: var(--selection-border); }
+}
+@container weekly-overview (min-width: 720px) {
+  .weekly-overview-layout { grid-template-columns: minmax(0, 1fr) minmax(280px, 36%); }
+  .weekly-overview-layout > .panel { padding: var(--space-5); }
+  .weekly-overview-heading { grid-template-areas: "heading status" "dates status"; row-gap: var(--space-2); }
+  .weekly-overview-heading h2 { font-size: 20px; }
+  .weekly-overview-heading .weekly-overview-jump { display: none; }
+  .weekly-overview-metric { padding: var(--space-4); }
+  .weekly-metric-chevron { inset-block-start: var(--space-4); inset-inline-end: var(--space-4); }
+}

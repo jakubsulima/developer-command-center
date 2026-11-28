@@ -41,7 +41,6 @@ const moreWorkspaceLinks = [
   { path: "/goals", label: "Grupy działań", description: "Powiązane działania", icon: Flag },
   { path: "/routines", label: "Rutyny", description: "Działania cykliczne", icon: Repeat2 },
   { path: "/ai", label: "Przegląd AI", description: "Rekomendacje dla grup działań", icon: Sparkles },
-  { path: "/knowledge", section: "inbox", label: "Skrzynka", description: "Wpisy do uporządkowania", icon: Inbox },
   { path: "/review", label: "Podsumowanie", description: "Przegląd tygodnia", icon: CalendarCheck },
 ];
 
@@ -99,8 +98,8 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
   const addIsOpen = quickAddOpen || Boolean(addAction?.active);
   const aiReviewActive = Boolean(matchPath("/ai", location.pathname));
   const knowledgeInboxActive = location.pathname === "/knowledge" && new URLSearchParams(location.search).get("section") === "inbox";
-  const moreActive = knowledgeInboxActive || ["/review", "/goals", "/ai", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-  const mobileNavIndicator = useMobileNavIndicator(loading, knowledgeInboxActive ? "/knowledge?section=inbox" : location.pathname);
+  const moreActive = ["/review", "/goals", "/ai", "/routines", "/settings"].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+  const mobileNavIndicator = useMobileNavIndicator(loading, location.pathname);
   const openQuickAdd = useCallback((request?: AppShellQuickAddRequest) => {
     if (loadingView) return;
     quickAddReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -302,7 +301,7 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
         <NavLink to="/projects" aria-label="Projekty">
           <FolderKanban aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Projekty</span>
         </NavLink>
-        <NavLink to="/knowledge" aria-label="Wiedza" aria-current={knowledgeInboxActive ? false : undefined} className={({ isActive }) => isActive && !knowledgeInboxActive ? "active" : ""}>
+        <NavLink to="/knowledge" aria-label="Wiedza">
           <Archive aria-hidden="true" /><span className="bottom-nav-label" aria-hidden="true">Wiedza</span>
         </NavLink>
         <NavLink to="/actions" aria-label="Działania">
@@ -330,15 +329,14 @@ export function AppShell({ children, aside, addAction, appearance, loadingView =
           <section>
             <h3 id="mobile-more-work-heading">Przestrzeń pracy</h3>
             <nav className="mobile-more-group" aria-labelledby="mobile-more-work-heading">
-              {moreWorkspaceLinks.map(({ path, section, label, description, icon: Icon }) => {
-                const current = section === "inbox" ? knowledgeInboxActive : matchPath({ path, end: false }, location.pathname);
-                const count = path === "/goals" ? activeGoals : path === "/routines" ? activeRoutines : section === "inbox" && newInboxCount > 0 ? newInboxCount : undefined;
-                const to = section ? `${path}?section=${section}` : path;
+              {moreWorkspaceLinks.map(({ path, label, description, icon: Icon }) => {
+                const current = matchPath({ path, end: false }, location.pathname);
+                const count = path === "/goals" ? activeGoals : path === "/routines" ? activeRoutines : undefined;
                 return (
-                  <Link key={to} className="mobile-more-row" to={to} aria-current={current ? "page" : undefined} onClick={() => setProfileCenterOpen(false)}>
+                  <Link key={path} className="mobile-more-row" to={path} aria-current={current ? "page" : undefined} onClick={() => setProfileCenterOpen(false)}>
                     <span className="mobile-more-icon"><Icon aria-hidden="true" /></span>
                     <span className="mobile-more-copy"><strong>{label}</strong><small>{description}</small></span>
-                    {count !== undefined && <span className="mobile-more-count">{count}<span className="sr-only">{path === "/goals" ? " aktywnych grup" : path === "/routines" ? " aktywnych rutyn" : " nowych wpisów"}</span></span>}
+                    {count !== undefined && <span className="mobile-more-count">{count}<span className="sr-only">{path === "/goals" ? " aktywnych grup" : " aktywnych rutyn"}</span></span>}
                     <ChevronRight className="mobile-more-chevron" aria-hidden="true" />
                   </Link>
                 );
